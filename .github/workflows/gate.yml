@@ -1,0 +1,99 @@
+name: gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # one-way-door 변경은 사람 승인 1명 필수 (라벨별 승인 수는 브랜치 보호로 못 걸어서 체크로 강제)
+  door-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # ci.yml door job 과 같은 경로 패턴. 라벨을 기다리지 않고 파일로 직접 판정한다
+          files=$(git diff --name-only "$BASE...$HEAD")
+          labels=$(gh pr view "$PR" --json labels --jq '.labels[].name')
+          if ! echo "$labels" | grep -x one-way-door >/dev/null \
+             && ! echo "$files" | grep -E 'db/migration/|^common/common-event/|^docs/specs/events.md|^services/auth/|^services/gateway/.*/security/|/reservation/' >/dev/null; then
+            echo "two-way-door: 승인 불필요"; exit 0
+          fi
+          approved=$(gh pr view "$PR" --json reviews --jq '
+            [.reviews[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")]
+            | group_by(.author.login) | map(last) | map(select(.state == "APPROVED")) | length')
+          if [ "$approved" -lt 1 ]; then
+            echo "::error::one-way-door 변경이다. 사람 승인 1명이 필요하다"; exit 1
+          fi
+          echo "one-way-door: 승인 $approved 명"
+
+  # AI 리뷰(msa, security, spec) 위반 코멘트가 이 커밋에 있으면 실패. quality 는 보지 않는다
+  ai-review-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          AI_ENABLED: ${{ vars.AI_ENABLED }}
+        run: |
+          if [ "$AI_ENABLED" != "true" ]; then
+            echo "AI 리뷰 꺼짐 (vars.AI_ENABLED != true): 통과"; exit 0
+          fi
+
+          if gh pr view "$PR" -R "$REPO" --json labels --jq '.labels[].name' | grep -x ai-review-override >/dev/null; then
+            reason=$(gh pr view "$PR" -R "$REPO" --json body --jq .body \
+              | awk '/^## AI 리뷰 무시 사유/{f=1;next} /^## /{f=0} f' | grep -vE '^\s*$|^\s*<!--|-->\s*$' || true)
+            [ -n "$reason" ] || { echo "::error::ai-review-override 라벨이 있으면 '## AI 리뷰 무시 사유'를 작성하라"; exit 1; }
+            echo "ai-review-override: AI 리뷰 결과를 무시하고 통과"; exit 0
+          fi
+
+          # ci.yml 의 check 와 review 4개가 이 커밋에서 끝날 때까지 대기 (최대 30분)
+          for i in $(seq 1 120); do
+            runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --jq '.check_runs')
+            latest() { echo "$runs" | jq -r --arg n "$1" '[.[] | select(.name == $n)] | sort_by(.started_at) | last // {} | "\(.status // "none"):\(.conclusion // "")"'; }
+            check=$(latest check)
+            case "$check" in
+              completed:success) ;;
+              completed:*) echo "check 실패: AI 리뷰 없음 (check 가 머지를 막는다)"; exit 0 ;;
+              *) echo "check 대기 ($check)"; sleep 15; continue ;;
+            esac
+            pending=0; failed=0
+            for k in msa security spec quality; do
+              r=$(latest "review ($k)")
+              case "$r" in
+                completed:success) ;;
+                completed:*) failed=1 ;;
+                *) pending=1 ;;
+              esac
+            done
+            [ "$pending" = 1 ] && { echo "review 대기"; sleep 15; continue; }
+            [ "$failed" = 1 ] && { echo "::error::AI 리뷰 실행이 실패했다. 다시 실행하거나 ai-review-override 를 사용하라"; exit 1; }
+
+            violations=$(gh api "repos/$REPO/pulls/$PR/comments" --paginate \
+              --jq '.[] | select(.body | test("^\\[(msa|security|spec)\\]")) | "\(.original_commit_id) \(.path):\(.line // .original_line) \(.body | split("\n")[0])"' \
+              | awk -v sha="$SHA" '$1 == sha { $1 = ""; print }')
+            if [ -n "$violations" ]; then
+              echo "::error::AI 리뷰 위반 $(echo "$violations" | wc -l | tr -d ' ')건. 고치거나 ai-review-override 라벨 + 사유를 남겨라"
+              echo "$violations"; exit 1
+            fi
+            echo "AI 리뷰 위반 없음"; exit 0
+          done
+          echo "::error::AI 리뷰가 30분 안에 끝나지 않았다"; exit 1

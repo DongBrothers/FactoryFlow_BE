@@ -43,13 +43,14 @@ jobs:
           fail-on-error: true
 
   # AI job 과 door 는 Repository variable AI_ENABLED=true 일 때만 실행 (시크릿, 라벨 준비 후 켠다)
+  # review 는 코멘트만 남기고 실패하지 않는다. 머지 판단은 gate.yml 의 ai-review-gate 가 한다
   review:
     needs: check
     if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        kind: [msa, security, spec]
+        kind: [msa, security, spec, quality]
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }

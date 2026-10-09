@@ -97,10 +97,10 @@ PART 2의 8번 파일 전부. 만든 뒤 YAML 문법 검사 (actionlint 없으�
 | 영상 | 핵심 | 적용 |
 |---|---|---|
 | V1 Quenneville (하네스) | 지침(미리 알려줌) + 센서(결과 검사). 말보다 기계 검사 | CLAUDE.md(지침), Stop 훅·ArchUnit·Spotless·guard 훅(센서) |
-| V2 Voss (리뷰 하네스) | PR에서 AI가 체크리스트 기반으로 나눠서 리뷰 | `.github/review/{msa,security,spec}.md`, ci.yml review 매트릭스 |
+| V2 Voss (리뷰 하네스) | PR에서 AI가 체크리스트 기반으로 나눠서 리뷰 | `.github/review/{msa,security,spec,quality}.md`, ci.yml review 매트릭스, gate.yml ai-review-gate (msa/security/spec 위반 시 머지 차단) |
 | V3 5원칙 | ② 실패에서 출발 ③ 규칙은 적게 ⑤ 계속 개선 | harness.log + 2회 규칙 harness 이슈, 대응 우선순위 |
 | V4 Pocock (PR 병목) | 사람 리뷰량 축소. 딥모듈, 다이어그램, 되돌릴 수 없는 결정 집중 | 서비스별 진입점(controller/listener → service), PR 흐름도 자동, one-way-door 라벨 |
-| V5 (사람의 개입) | 증거 기반 검증, 바깥 고리 소유, 설명 가능한 것만 배포, 주의력 집중 | PR "증거" 칸 + 테스트 결과 리포트, "왜"는 작성자가 직접 + pr-body 검사, 승인·머지는 사람 |
+| V5 (사람의 개입) | 증거 기반 검증, 바깥 고리 소유, 설명 가능한 것만 배포, 주의력 집중 | PR "증거" 칸 + 테스트 결과 리포트, "왜"는 작성자가 직접 + pr-body 검사, one-way-door 는 사람 승인 필수(door-gate) |
 
 ## 2. 프로젝트 구조
 
@@ -119,8 +119,8 @@ factoryflow/
 ├── .github/
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   ├── ISSUE_TEMPLATE/{config.yml, feature.md, bug.md, incident.md, harness.md}
-│   ├── review/{msa.md, security.md, spec.md}
-│   └── workflows/{ci.yml, pr-body.yml, cd.yml, incident.yml}
+│   ├── review/{msa.md, security.md, spec.md, quality.md}
+│   └── workflows/{ci.yml, pr-body.yml, gate.yml, cd.yml, incident.yml}
 ├── docs/
 │   ├── harness-setup.md          # 이 문서 (구축 후 삭제)
 │   ├── specs/_template.md
@@ -466,6 +466,9 @@ gh issue list -l harness --state all                            # 하네스 개�
 - API 확인 (Swagger/curl 요청과 응답):
 - 로그/스크린샷 (해당 시):
 
+## AI 리뷰 무시 사유 (ai-review-override 라벨을 붙일 때만)
+<!-- 어떤 AI 지적이 왜 틀렸거나 지금 고치지 않는지 -->
+
 ## 확인
 - [ ] 이 변경을 AI 없이 팀원에게 설명할 수 있다
 - [ ] 로컬 check 통과
@@ -589,6 +592,21 @@ labels: harness
 - 완료 조건마다 테스트가 있는가
 ```
 
+### `review/quality.md`
+```markdown
+> 코멘트만 남긴다 (머지를 막지 않음). 팀원이 배울 수 있게 "왜 문제인지"를 한 줄 덧붙인다.
+> Spotless(포맷, 안 쓰는 import), ArchUnit(구조 규칙)이 잡는 것은 보지 않는다.
+
+- 로직 오류 (조건 반대, 경계값, 누락된 분기)
+- null / Optional 처리 (Optional.get(), NPE 가능성)
+- 예외 처리 (삼키는 catch, 너무 넓은 catch, CustomException/ErrorCode 미사용)
+- 트랜잭션 범위 (@Transactional 누락, readOnly 누락, 트랜잭션 안의 외부 호출)
+- JPA 성능 (N+1, 불필요한 전체 조회)
+- 동시성 (재고 차감 등 경쟁 조건, 락 누락)
+- 테스트 품질 (동작을 실제로 검증하는가, 실패 케이스가 있는가)
+- 이름과 가독성 (의도가 드러나지 않는 이름, 매직넘버, 너무 긴 메서드)
+```
+
 ### `workflows/ci.yml`
 ```yaml
 name: ci
@@ -636,13 +654,14 @@ jobs:
           fail-on-error: true
 
   # AI job 과 door 는 Repository variable AI_ENABLED=true 일 때만 실행 (시크릿, 라벨 준비 후 켠다)
+  # review 는 코멘트만 남기고 실패하지 않는다. 머지 판단은 gate.yml 의 ai-review-gate 가 한다
   review:
     needs: check
     if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        kind: [msa, security, spec]
+        kind: [msa, security, spec, quality]
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -715,6 +734,109 @@ jobs:
           [ -n "$why" ] || { echo "'## 왜' 섹션을 직접 작성하세요"; exit 1; }
           echo "$BODY" | grep -q '\- \[x\] 이 변경을 AI 없이' \
             || { echo "'설명할 수 있다' 체크박스를 확인하세요"; exit 1; }
+```
+
+### `workflows/gate.yml`
+```yaml
+name: gate
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # one-way-door 변경은 사람 승인 1명 필수 (라벨별 승인 수는 브랜치 보호로 못 걸어서 체크로 강제)
+  door-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # ci.yml door job 과 같은 경로 패턴. 라벨을 기다리지 않고 파일로 직접 판정한다
+          files=$(git diff --name-only "$BASE...$HEAD")
+          labels=$(gh pr view "$PR" --json labels --jq '.labels[].name')
+          if ! echo "$labels" | grep -x one-way-door >/dev/null \
+             && ! echo "$files" | grep -E 'db/migration/|^common/common-event/|^docs/specs/events.md|^services/auth/|^services/gateway/.*/security/|/reservation/' >/dev/null; then
+            echo "two-way-door: 승인 불필요"; exit 0
+          fi
+          approved=$(gh pr view "$PR" --json reviews --jq '
+            [.reviews[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")]
+            | group_by(.author.login) | map(last) | map(select(.state == "APPROVED")) | length')
+          if [ "$approved" -lt 1 ]; then
+            echo "::error::one-way-door 변경이다. 사람 승인 1명이 필요하다"; exit 1
+          fi
+          echo "one-way-door: 승인 $approved 명"
+
+  # AI 리뷰(msa, security, spec) 위반 코멘트가 이 커밋에 있으면 실패. quality 는 보지 않는다
+  ai-review-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          AI_ENABLED: ${{ vars.AI_ENABLED }}
+        run: |
+          if [ "$AI_ENABLED" != "true" ]; then
+            echo "AI 리뷰 꺼짐 (vars.AI_ENABLED != true): 통과"; exit 0
+          fi
+
+          if gh pr view "$PR" -R "$REPO" --json labels --jq '.labels[].name' | grep -x ai-review-override >/dev/null; then
+            reason=$(gh pr view "$PR" -R "$REPO" --json body --jq .body \
+              | awk '/^## AI 리뷰 무시 사유/{f=1;next} /^## /{f=0} f' | grep -vE '^\s*$|^\s*<!--|-->\s*$' || true)
+            [ -n "$reason" ] || { echo "::error::ai-review-override 라벨이 있으면 '## AI 리뷰 무시 사유'를 작성하라"; exit 1; }
+            echo "ai-review-override: AI 리뷰 결과를 무시하고 통과"; exit 0
+          fi
+
+          # ci.yml 의 check 와 review 4개가 이 커밋에서 끝날 때까지 대기 (최대 30분)
+          for i in $(seq 1 120); do
+            runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --jq '.check_runs')
+            latest() { echo "$runs" | jq -r --arg n "$1" '[.[] | select(.name == $n)] | sort_by(.started_at) | last // {} | "\(.status // "none"):\(.conclusion // "")"'; }
+            check=$(latest check)
+            case "$check" in
+              completed:success) ;;
+              completed:*) echo "check 실패: AI 리뷰 없음 (check 가 머지를 막는다)"; exit 0 ;;
+              *) echo "check 대기 ($check)"; sleep 15; continue ;;
+            esac
+            pending=0; failed=0
+            for k in msa security spec quality; do
+              r=$(latest "review ($k)")
+              case "$r" in
+                completed:success) ;;
+                completed:*) failed=1 ;;
+                *) pending=1 ;;
+              esac
+            done
+            [ "$pending" = 1 ] && { echo "review 대기"; sleep 15; continue; }
+            [ "$failed" = 1 ] && { echo "::error::AI 리뷰 실행이 실패했다. 다시 실행하거나 ai-review-override 를 사용하라"; exit 1; }
+
+            violations=$(gh api "repos/$REPO/pulls/$PR/comments" --paginate \
+              --jq '.[] | select(.body | test("^\\[(msa|security|spec)\\]")) | "\(.original_commit_id) \(.path):\(.line // .original_line) \(.body | split("\n")[0])"' \
+              | awk -v sha="$SHA" '$1 == sha { $1 = ""; print }')
+            if [ -n "$violations" ]; then
+              echo "::error::AI 리뷰 위반 $(echo "$violations" | wc -l | tr -d ' ')건. 고치거나 ai-review-override 라벨 + 사유를 남겨라"
+              echo "$violations"; exit 1
+            fi
+            echo "AI 리뷰 위반 없음"; exit 0
+          done
+          echo "::error::AI 리뷰가 30분 안에 끝나지 않았다"; exit 1
 ```
 
 ### `workflows/cd.yml`
@@ -897,8 +1019,10 @@ out/
 - [ ] Repository variables: `AWS_REGION`(ap-northeast-2), `ECS_CLUSTER`(ff-cluster), `AI_ENABLED`(AI 시크릿+라벨 준비 후 true), `CD_ENABLED`(AWS 준비 후 true)
 - [ ] 라벨 생성
   ```bash
-  for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/FactoryFlow_BE; done
+  for l in feature bug incident harness one-way-door two-way-door ai-review-override; do gh label create $l -R DongBrothers/FactoryFlow_BE; done
   ```
-- [ ] main 브랜치 보호: PR 필수, Require approvals 1, status check `check`, `explain` 필수
+- [ ] main 브랜치 보호: PR 필수, Require approvals 0, status check `check`, `explain`, `door-gate`, `ai-review-gate` 필수
+  - 사람 승인은 one-way-door 변경에만 필요 (door-gate 가 강제). 나머지는 AI 리뷰(msa/security/spec)가 머지 관문
+  - AI 지적이 틀렸으면 `ai-review-override` 라벨 + PR 의 "AI 리뷰 무시 사유" 작성
 - [ ] (CD 전) AWS OIDC 역할 2개: deploy용(ECR push, ECS 배포), readonly용(CloudWatch Logs 읽기)
 - [ ] **이 문서(`docs/harness-setup.md`) 삭제**
