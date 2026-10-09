@@ -45,7 +45,7 @@
 5. 각 서비스(gateway 제외) 패키지: `api/`, `event/listener/`, `event/publisher/`, `client/` (빈 패키지는 package-info.java)
    - outbox, processed_event 테이블은 서비스별 Flyway `V1__init.sql`
 6. 각 서비스 `Dockerfile` (eclipse-temurin:17-jre, build/libs/*.jar, 8080)
-7. 루트 `docker-compose.yml`: MySQL 8.4 (order_db, inventory_db, purchase_db, production_db, auth_db), Redis, rabbitmq:3.13-management. 비밀번호는 `.env`에서 읽고 `.env.example`만 만든다
+7. 루트 `docker-compose.yml`: MySQL 8.4 (order_db, inventory_db, purchase_db, production_db, auth_db), Redis, rabbitmq:3.13-management. 비밀번호는 `.env`(커밋 제외)에서 읽는다
 8. `./gradlew check` 통과
 
 ## 3단계: CLAUDE.md + docs
@@ -93,7 +93,7 @@ PART 2의 8번 파일 전부. 만든 뒤 YAML 문법 검사 (actionlint 없으�
 factoryflow/
 ├── CLAUDE.md
 ├── settings.gradle / build.gradle
-├── docker-compose.yml / .env.example
+├── docker-compose.yml / .env (커밋 제외)
 ├── .gitignore
 ├── .claude/
 │   ├── settings.json
