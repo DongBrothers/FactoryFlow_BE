@@ -45,6 +45,14 @@ subprojects {
 
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+        // stop-check 훅은 -q 로 돌리므로, 실패한 테스트의 원인(ArchUnit 위반 내용 등)은 quiet 에서도 출력한다
+        testLogging {
+            quiet {
+                events 'failed'
+                exceptionFormat 'full'
+                showStackTraces = false
+            }
+        }
     }
 
     if (project.path.startsWith(':services:')) {

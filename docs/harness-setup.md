@@ -227,15 +227,15 @@ changed=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard
 [ -z "$changed" ] && { rm -f "$CNT"; exit 0; }
 
 # 1) 테스트 무력화 차단
-git diff --name-only --diff-filter=D HEAD | grep -q 'src/test/' \
+git diff --name-only --diff-filter=D HEAD | grep 'src/test/' >/dev/null \
   && fail TEST_DELETED "테스트 파일 삭제 금지. 테스트가 틀렸다면 이유를 말하고 멈춰라."
-git diff -U0 HEAD -- '*.java' | grep -qE '^\+.*@Disabled' \
+git diff -U0 HEAD -- '*.java' | grep -E '^\+.*@Disabled' >/dev/null \
   && fail TEST_DISABLED "@Disabled 추가 금지."
-git diff -U0 HEAD -- '*.java' | grep -qE '^\+.*assertTrue\(true\)' \
+git diff -U0 HEAD -- '*.java' | grep -E '^\+.*assertTrue\(true\)' >/dev/null \
   && fail FAKE_ASSERT "의미 없는 assert 금지."
 
 # 2) 변경된 서비스만 check (common/루트 변경 시 전체)
-if echo "$changed" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+if echo "$changed" | grep -E '^(common/|build\.gradle|settings\.gradle)' >/dev/null; then
   tasks="check"
 else
   tasks=$(echo "$changed" | grep -oE '^services/[^/]+' | sort -u \
@@ -245,8 +245,8 @@ fi
 if [ -n "$tasks" ]; then
   out=$(./gradlew $tasks -q --console=plain 2>&1) || {
     type=BUILD_FAIL
-    echo "$out" | grep -qE 'Architecture Violation' && type=ARCH_VIOLATION
-    echo "$out" | grep -qE 'tests completed, [0-9]+ failed' && type=TEST_FAIL
+    echo "$out" | grep -E 'tests completed, [0-9]+ failed' >/dev/null && type=TEST_FAIL
+    echo "$out" | grep -E 'Architecture Violation' >/dev/null && type=ARCH_VIOLATION
     fail "$type" "검사 실패. 고친 뒤 다시 끝내라.\n$(echo "$out" | tail -40)"
   }
 fi
@@ -821,7 +821,7 @@ def lambda_handler(event, context):
         },
     }).encode()
     req = urllib.request.Request(
-        "https://api.github.com/repos/DongBrothers/factoryflow/dispatches",
+        "https://api.github.com/repos/DongBrothers/FactoryFlow_BE/dispatches",
         data=body,
         headers={
             "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
@@ -861,7 +861,7 @@ out/
 - [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AI_FIX_TOKEN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`
 - [ ] 라벨 생성
   ```bash
-  for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/factoryflow; done
+  for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/FactoryFlow_BE; done
   ```
 - [ ] main 브랜치 보호: PR 필수, Code Owners 리뷰 필수, status check `check` 필수
 - [ ] (CD 전) AWS OIDC 역할 2개: deploy용(ECR push, ECS 배포), readonly용(CloudWatch Logs 읽기)

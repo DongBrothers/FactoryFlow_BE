@@ -11,7 +11,7 @@ def lambda_handler(event, context):
         },
     }).encode()
     req = urllib.request.Request(
-        "https://api.github.com/repos/DongBrothers/factoryflow/dispatches",
+        "https://api.github.com/repos/DongBrothers/FactoryFlow_BE/dispatches",
         data=body,
         headers={
             "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
