@@ -2,13 +2,16 @@ name: cd
 on:
   push:
     branches: [main]
+  workflow_dispatch:   # 수동 실행 시 서비스 전체 배포
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  # Repository variable CD_ENABLED=true 일 때만 실행 (AWS 시크릿, ECR/ECS 준비 후 켠다)
   detect:
+    if: vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.d.outputs.services }}
@@ -18,7 +21,7 @@ jobs:
       - id: d
         run: |
           files=$(git diff --name-only HEAD~1 HEAD)
-          if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
             list="gateway order inventory purchase production auth simulator"
           else
             list=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/##' | tr '\n' ' ')
@@ -48,15 +51,16 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ vars.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
       - id: img
         run: |
-          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:${{ github.sha }}
-          docker build -t $IMG services/${{ matrix.svc }}
-          docker push $IMG
-          echo "image=$IMG" >> $GITHUB_OUTPUT
+          REPO=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}
+          docker build -t $REPO:${{ github.sha }} -t $REPO:latest services/${{ matrix.svc }}
+          docker push $REPO:${{ github.sha }}
+          docker push $REPO:latest
+          echo "image=$REPO:${{ github.sha }}" >> $GITHUB_OUTPUT
       - run: |
           aws ecs describe-task-definition --task-definition ff-${{ matrix.svc }} \
             --query taskDefinition > td.json
@@ -70,5 +74,5 @@ jobs:
         with:
           task-definition: ${{ steps.td.outputs.task-definition }}
           service: ff-${{ matrix.svc }}
-          cluster: ff-cluster
+          cluster: ${{ vars.ECS_CLUSTER }}
           wait-for-service-stability: true

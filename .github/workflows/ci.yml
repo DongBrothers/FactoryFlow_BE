@@ -6,6 +6,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  checks: write
   issues: write
   id-token: write
 
@@ -32,9 +33,19 @@ jobs:
           fi
       - if: steps.m.outputs.tasks != ''
         run: ./gradlew ${{ steps.m.outputs.tasks }} --no-daemon
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always() && steps.m.outputs.tasks != ''
+        with:
+          name: JUnit Test Results
+          path: '**/build/test-results/test/*.xml'
+          reporter: java-junit
+          fail-on-error: true
 
+  # AI job 과 door 는 Repository variable AI_ENABLED=true 일 때만 실행 (시크릿, 라벨 준비 후 켠다)
   autofix:
     needs: check
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       pushed: ${{ steps.push.outputs.pushed }}
@@ -69,7 +80,7 @@ jobs:
 
   review:
     needs: autofix
-    if: needs.autofix.outputs.pushed != 'true'
+    if: vars.AI_ENABLED == 'true' && needs.autofix.outputs.pushed != 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -91,6 +102,7 @@ jobs:
 
   diagram:
     needs: check
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +118,7 @@ jobs:
             --max-turns 10
 
   door:
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

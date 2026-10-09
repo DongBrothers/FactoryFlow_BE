@@ -587,6 +587,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  checks: write
   issues: write
   id-token: write
 
@@ -613,9 +614,19 @@ jobs:
           fi
       - if: steps.m.outputs.tasks != ''
         run: ./gradlew ${{ steps.m.outputs.tasks }} --no-daemon
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always() && steps.m.outputs.tasks != ''
+        with:
+          name: JUnit Test Results
+          path: '**/build/test-results/test/*.xml'
+          reporter: java-junit
+          fail-on-error: true
 
+  # AI job 과 door 는 Repository variable AI_ENABLED=true 일 때만 실행 (시크릿, 라벨 준비 후 켠다)
   autofix:
     needs: check
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       pushed: ${{ steps.push.outputs.pushed }}
@@ -650,7 +661,7 @@ jobs:
 
   review:
     needs: autofix
-    if: needs.autofix.outputs.pushed != 'true'
+    if: vars.AI_ENABLED == 'true' && needs.autofix.outputs.pushed != 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -672,6 +683,7 @@ jobs:
 
   diagram:
     needs: check
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -687,6 +699,7 @@ jobs:
             --max-turns 10
 
   door:
+    if: vars.AI_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -708,13 +721,16 @@ name: cd
 on:
   push:
     branches: [main]
+  workflow_dispatch:   # 수동 실행 시 서비스 전체 배포
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  # Repository variable CD_ENABLED=true 일 때만 실행 (AWS 시크릿, ECR/ECS 준비 후 켠다)
   detect:
+    if: vars.CD_ENABLED == 'true'
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.d.outputs.services }}
@@ -724,7 +740,7 @@ jobs:
       - id: d
         run: |
           files=$(git diff --name-only HEAD~1 HEAD)
-          if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
             list="gateway order inventory purchase production auth simulator"
           else
             list=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/##' | tr '\n' ' ')
@@ -754,15 +770,16 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ vars.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
       - id: img
         run: |
-          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:${{ github.sha }}
-          docker build -t $IMG services/${{ matrix.svc }}
-          docker push $IMG
-          echo "image=$IMG" >> $GITHUB_OUTPUT
+          REPO=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}
+          docker build -t $REPO:${{ github.sha }} -t $REPO:latest services/${{ matrix.svc }}
+          docker push $REPO:${{ github.sha }}
+          docker push $REPO:latest
+          echo "image=$REPO:${{ github.sha }}" >> $GITHUB_OUTPUT
       - run: |
           aws ecs describe-task-definition --task-definition ff-${{ matrix.svc }} \
             --query taskDefinition > td.json
@@ -776,7 +793,7 @@ jobs:
         with:
           task-definition: ${{ steps.td.outputs.task-definition }}
           service: ff-${{ matrix.svc }}
-          cluster: ff-cluster
+          cluster: ${{ vars.ECS_CLUSTER }}
           wait-for-service-stability: true
 ```
 
@@ -874,6 +891,7 @@ out/
 - [ ] claude 재시작 후 하네스 테스트: "services/order 에 com.factoryflow.inventory 패키지 클래스를 import 하는 코드를 추가하고 작업을 끝내 봐" → Stop 훅이 잡고 스스로 되돌리는지, harness.log에 ARCH_VIOLATION 남는지 확인 → `git checkout .`
 - [ ] `claude` 안에서 `/install-github-app`
 - [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AI_FIX_TOKEN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
+- [ ] Repository variables: `AWS_REGION`(ap-northeast-2), `ECS_CLUSTER`(ff-cluster), `AI_ENABLED`(AI 시크릿+라벨 준비 후 true), `CD_ENABLED`(AWS 준비 후 true)
 - [ ] 라벨 생성
   ```bash
   for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/FactoryFlow_BE; done
