@@ -2,6 +2,7 @@
 
 > 이 문서는 Claude Code가 읽고 프로젝트를 구축하기 위한 기준 문서다.
 > 위치: `docs/harness-setup.md`
+> 구축이 끝나면 이 문서는 삭제한다 (PART 3 마지막 항목).
 
 ---
 
@@ -12,7 +13,7 @@
 - PART 2의 파일 내용은 **그대로** 만든다. 문서와 다르게 고칠 부분이 보이면 고치지 말고 목록으로 알려준다.
 - 버전 호환이 확실하지 않으면 추측하지 말고 멈추고 묻는다.
 - 테스트를 지우거나 끄는 방식으로 빌드를 통과시키지 않는다.
-- `.claude/settings.json`은 **맨 마지막(6단계)**에 만든다. 이 파일이 생기면 guard 훅이 `.claude/`, `.github/`, `common/` 수정을 막기 때문이다.
+- `.claude/settings.json`은 **맨 마지막(6단계)**에 만든다. 이 파일이 생기면 guard 훅이 `.claude/`, `.github/`, `common/`, 루트 `CLAUDE.md` 수정을 막기 때문이다.
 
 ## 1단계: Gradle 멀티모듈 뼈대
 1. 루트 `src/` 삭제 (루트는 모듈이 아님)
@@ -21,8 +22,19 @@
    - include: `services:gateway`, `order`, `inventory`, `purchase`, `production`, `auth`, `simulator`
 3. 루트 `build.gradle` (Groovy DSL)
    - Java 17 toolchain, group `com.factoryflow`, mavenCentral
-   - Spring Boot 4.0.8, io.spring.dependency-management → `plugins { ... apply false }`
-   - subprojects 공통: java, JUnit Platform, lombok
+   - Spring Boot 4.0.8, io.spring.dependency-management, com.diffplug.spotless → `plugins { ... apply false }`
+   - subprojects 공통: java, JUnit Platform, lombok, spotless
+     ```groovy
+     spotless {
+         java {
+             googleJavaFormat().aosp()
+             removeUnusedImports()
+             trimTrailingWhitespace()
+             endWithNewline()
+         }
+     }
+     ```
+     (`check`가 `spotlessCheck`에 의존하므로 포맷이 틀리면 빌드 실패)
    - `services:*`에만 Spring Boot 플러그인, `common:*`은 java-library + BOM
 4. 각 서비스: `build.gradle`, `com.factoryflow.<svc>.<Svc>Application`, `application.yml` (spring.application.name, server.port 8080, actuator health 노출)
    - gateway: Spring Cloud Gateway (Spring Cloud 2025.1.3, Boot 4.0.8 기준)
@@ -30,11 +42,11 @@
    - 의존: `testImplementation project(':common:common-test')`, `implementation project(':common:common-web')`, 이벤트 사용 서비스는 `project(':common:common-event')`
    - **서비스끼리 `project(':services:...')` 의존 금지**
 5. Gradle wrapper 버전이 Boot 4.0.8 요구사항을 만족하는지 확인
-6. `./gradlew build -x test` 통과
+6. `./gradlew spotlessApply build -x test` 통과
 
 ## 2단계: common 모듈 + 서비스 내부 구조
 1. common-test: PART 2의 5번 `FactoryFlowRules` (archunit-junit5 최신 1.x, api 의존으로 노출)
-2. 각 서비스 `src/test`에 5번 `ArchitectureTest` (gateway는 isolation, injection만)
+2. 각 서비스 `src/test`에 5번 `ArchitectureTest` (gateway는 isolation, injection, streams만)
 3. common-event (`com.factoryflow.common.event`)
    - 이벤트 베이스: eventId(UUID), traceId, version, occurredAt
    - `EventPublisher`: 같은 트랜잭션에서 outbox 테이블에 저장
@@ -46,7 +58,7 @@
    - outbox, processed_event 테이블은 서비스별 Flyway `V1__init.sql`
 6. 각 서비스 `Dockerfile` (eclipse-temurin:17-jre, build/libs/*.jar, 8080)
 7. 루트 `docker-compose.yml`: MySQL 8.4 (order_db, inventory_db, purchase_db, production_db, auth_db), Redis, rabbitmq:3.13-management. 비밀번호는 `.env`(커밋 제외)에서 읽는다
-8. `./gradlew check` 통과
+8. `./gradlew spotlessApply check` 통과
 
 ## 3단계: CLAUDE.md + docs
 1. PART 2의 3번 루트 `CLAUDE.md` (그대로)
@@ -64,11 +76,13 @@ PART 2의 8번 파일 전부. 만든 뒤 YAML 문법 검사 (actionlint 없으�
 
 ## 6단계: .claude 하네스 (마지막)
 1. `.claude/hooks/stop-check.sh`, `.claude/hooks/guard.sh` 생성 + `chmod +x`
-2. `.claude/agents/msa-reviewer.md`, `.claude/skills/add-event/SKILL.md`
+2. `.claude/skills/add-event/SKILL.md`
 3. **마지막으로** `.claude/settings.json`
 4. 훅 테스트
    ```bash
-   echo '{"tool_input":{"file_path":"'$(pwd)'/.github/CODEOWNERS"}}' | .claude/hooks/guard.sh; echo $?   # 2
+   echo '{"tool_input":{"file_path":"'$(pwd)'/.github/workflows/ci.yml"}}' | .claude/hooks/guard.sh; echo $?   # 2
+   echo '{"tool_input":{"file_path":"'$(pwd)'/CLAUDE.md"}}' | .claude/hooks/guard.sh; echo $?   # 2
+   echo '{"tool_input":{"file_path":"'$(pwd)'/services/order/CLAUDE.md"}}' | .claude/hooks/guard.sh; echo $?   # 0
    echo '{"tool_input":{"file_path":"'$(pwd)'/services/order/src/main/java/A.java"}}' | .claude/hooks/guard.sh; echo $?   # 0
    echo '{"session_id":"test"}' | .claude/hooks/stop-check.sh; echo $?   # 변경 없으면 0
    ```
@@ -82,16 +96,17 @@ PART 2의 8번 파일 전부. 만든 뒤 YAML 문법 검사 (actionlint 없으�
 
 | 영상 | 핵심 | 적용 |
 |---|---|---|
-| V1 Quenneville (하네스) | 지침(미리 알려줌) + 센서(결과 검사). 말보다 기계 검사 | CLAUDE.md(지침), Stop 훅·ArchUnit·guard 훅(센서) |
-| V2 Voss (리뷰 하네스) | PR에서 AI가 체크리스트 기반으로 나눠서 리뷰 | `.github/review/*.md`, ci.yml review 매트릭스, autofix |
+| V1 Quenneville (하네스) | 지침(미리 알려줌) + 센서(결과 검사). 말보다 기계 검사 | CLAUDE.md(지침), Stop 훅·ArchUnit·Spotless·guard 훅(센서) |
+| V2 Voss (리뷰 하네스) | PR에서 AI가 체크리스트 기반으로 나눠서 리뷰 | `.github/review/{msa,security,spec}.md`, ci.yml review 매트릭스 |
 | V3 5원칙 | ② 실패에서 출발 ③ 규칙은 적게 ⑤ 계속 개선 | harness.log + 2회 규칙 harness 이슈, 대응 우선순위 |
-| V4 Pocock (PR 병목) | 사람 리뷰량 축소. 딥모듈, 다이어그램, 되돌릴 수 없는 결정 집중 | 서비스별 진입점(controller/listener → service), PR 흐름도 자동, one-way-door 라벨 + CODEOWNERS |
+| V4 Pocock (PR 병목) | 사람 리뷰량 축소. 딥모듈, 다이어그램, 되돌릴 수 없는 결정 집중 | 서비스별 진입점(controller/listener → service), PR 흐름도 자동, one-way-door 라벨 |
+| V5 (사람의 개입) | 증거 기반 검증, 바깥 고리 소유, 설명 가능한 것만 배포, 주의력 집중 | PR "증거" 칸 + 테스트 결과 리포트, "왜"는 작성자가 직접 + pr-body 검사, 승인·머지는 사람 |
 
 ## 2. 프로젝트 구조
 
 ```
 factoryflow/
-├── CLAUDE.md
+├── CLAUDE.md                     # 사람만 수정
 ├── settings.gradle / build.gradle
 ├── docker-compose.yml / .env (커밋 제외)
 ├── .gitignore
@@ -100,16 +115,14 @@ factoryflow/
 │   ├── harness.log               # 자동 실패 로그 (gitignore)
 │   ├── hooks/stop-check.sh
 │   ├── hooks/guard.sh
-│   ├── agents/msa-reviewer.md
 │   └── skills/add-event/SKILL.md
 ├── .github/
-│   ├── CODEOWNERS
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   ├── ISSUE_TEMPLATE/{config.yml, feature.md, bug.md, incident.md, harness.md}
-│   ├── review/{standards.md, msa.md, security.md, spec.md}
-│   └── workflows/{ci.yml, cd.yml, incident.yml}
+│   ├── review/{msa.md, security.md, spec.md}
+│   └── workflows/{ci.yml, pr-body.yml, cd.yml, incident.yml}
 ├── docs/
-│   ├── harness-setup.md          # 이 문서
+│   ├── harness-setup.md          # 이 문서 (구축 후 삭제)
 │   ├── specs/_template.md
 │   ├── specs/events.md           # 사람만 수정
 │   └── runbooks/*.md
@@ -143,25 +156,27 @@ factoryflow/
 ## 명령
 - 서비스 검사: ./gradlew :services:<svc>:check
 - 전체: ./gradlew check
+- 포맷 정리: ./gradlew spotlessApply
 - 로컬 인프라: docker compose up -d
 
 ## 절대 규칙
 - 서비스 간 코드 직접 참조 금지. 비동기는 이벤트(common-event), 동기는 client/
 - 외부에서 들어오는 호출(Controller, Listener)은 service 를 거친다. Repository 직접 호출 금지
 - RabbitTemplate 직접 사용 금지. EventPublisher 사용
-- 생성자 주입만
+- 생성자 주입만. System.out 금지, 로그는 Slf4j
 - 테스트 삭제, @Disabled, 의미 없는 assert 금지. 테스트가 틀렸다고 판단되면 이유를 말하고 멈춘다
 
 ## 패키지 구조 (서비스별)
 com.factoryflow.<svc>.{controller, domain, dto, repository, service, event/listener, event/publisher, client, exception}
 
 ## 사람만 수정 (수정 필요 시 제안만)
-.claude/, .github/, common/common-event/, common/common-test/, docs/specs/events.md, 루트 build.gradle, settings.gradle
+CLAUDE.md(루트), .claude/, .github/, common/common-event/, common/common-test/, docs/specs/events.md, 루트 build.gradle, settings.gradle
 
 ## 작업 순서
 1. docs/specs/ 의 해당 명세 확인 (없으면 _template.md로 초안 작성 후 확인 요청)
 2. 테스트 먼저 → 구현
 3. 이벤트 추가는 /add-event 사용
+4. PR 생성 시 "## 왜" 섹션은 비워둔다 (작성자가 직접 씀)
 ```
 
 ### `services/order/CLAUDE.md` (서비스별 예시)
@@ -240,15 +255,18 @@ git diff -U0 HEAD -- '*.java' | grep -E '^\+.*@Disabled' >/dev/null \
 git diff -U0 HEAD -- '*.java' | grep -E '^\+.*assertTrue\(true\)' >/dev/null \
   && fail FAKE_ASSERT "의미 없는 assert 금지."
 
-# 2) 변경된 서비스만 check (common/루트 변경 시 전체)
+# 2) 변경된 서비스만 포맷 정리 + check (common/루트 변경 시 전체)
 if echo "$changed" | grep -E '^(common/|build\.gradle|settings\.gradle)' >/dev/null; then
+  apply="spotlessApply"
   tasks="check"
 else
-  tasks=$(echo "$changed" | grep -oE '^services/[^/]+' | sort -u \
-    | sed 's#services/#:services:#; s#$#:check#' | tr '\n' ' ')
+  mods=$(echo "$changed" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/#:services:#')
+  apply=$(echo "$mods" | sed '/^$/d; s#$#:spotlessApply#' | tr '\n' ' ')
+  tasks=$(echo "$mods" | sed '/^$/d; s#$#:check#' | tr '\n' ' ')
 fi
 
 if [ -n "$tasks" ]; then
+  ./gradlew $apply -q --console=plain >/dev/null 2>&1
   out=$(./gradlew $tasks -q --console=plain 2>&1) || {
     type=BUILD_FAIL
     echo "$out" | grep -E 'tests completed, [0-9]+ failed' >/dev/null && type=TEST_FAIL
@@ -275,7 +293,7 @@ deny() {
 }
 
 case "$rel" in
-  .claude/*|.github/*|common/common-test/*|common/common-event/*|docs/specs/events.md|build.gradle|settings.gradle)
+  CLAUDE.md|.claude/*|.github/*|common/common-test/*|common/common-event/*|docs/specs/events.md|build.gradle|settings.gradle)
     deny "$rel 은 사람만 수정한다. 변경 제안만 하고 멈춰라." ;;
 esac
 
@@ -292,22 +310,6 @@ exit 0
 2026-10-12 14:03:11|a1b2|ARCH_VIOLATION|try1
 2026-10-12 14:05:40|a1b2|ARCH_VIOLATION|try2
 2026-10-13 10:20:02|guard|GUARD_BLOCK|common/common-event/EventPublisher.java
-```
-
-### `agents/msa-reviewer.md`
-```markdown
----
-name: msa-reviewer
-description: 커밋 전 변경사항을 MSA 규칙 기준으로 검토. "리뷰해줘" 요청 시 사용
-tools: Read, Grep, Glob, Bash(git diff:*)
----
-git diff 기준으로 아래만 확인하고, 위반만 "파일:줄 - 문제 - 수정안" 형식으로 보고한다. 칭찬, 요약 금지.
-1. 다른 서비스 패키지/DB 직접 접근
-2. Controller/Listener가 service를 거치지 않고 Repository를 직접 사용
-3. 이벤트 발행이 트랜잭션 + Outbox를 거치지 않음
-4. Listener 멱등 처리(processed_event) 누락
-5. 실패 시 보상 이벤트 누락
-6. docs/specs/events.md 에 없는 이벤트 사용
 ```
 
 ### `skills/add-event/SKILL.md`
@@ -364,6 +366,9 @@ public final class FactoryFlowRules {
     public static final ArchRule NO_FIELD_INJECTION =
         GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
+    public static final ArchRule NO_STANDARD_STREAMS =
+        GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
+
     private FactoryFlowRules() {}
 }
 ```
@@ -376,6 +381,7 @@ class ArchitectureTest {
     @ArchTest ArchRule entry     = FactoryFlowRules.ENTRY_THROUGH_API;
     @ArchTest ArchRule publish   = FactoryFlowRules.NO_DIRECT_PUBLISH;
     @ArchTest ArchRule injection = FactoryFlowRules.NO_FIELD_INJECTION;
+    @ArchTest ArchRule streams   = FactoryFlowRules.NO_STANDARD_STREAMS;
 }
 ```
 
@@ -436,27 +442,32 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 ```bash
 cut -d'|' -f3 .claude/harness.log | sort | uniq -c | sort -rn   # 유형별 횟수
 grep GIVEUP .claude/harness.log                                 # 사람에게 넘어온 건
-git log --oneline --grep='\[ai-fix\]' | wc -l                   # autofix 커밋 수
 gh issue list -l harness --state all                            # 하네스 개선 이력
 ```
 
 ## 8. `.github/`
 
-### `CODEOWNERS`
-```
-*                                   @DongBrothers/factoryflow
-```
-
 ### `PULL_REQUEST_TEMPLATE.md`
 ```markdown
 ## 무엇을
-## 왜 (명세/이슈)
-closes #
+<!-- 한두 줄 -->
+
+## 왜 (작성자가 직접 작성, AI 생성 금지)
+<!-- 왜 이 방식인가. 다른 방법 대신 이걸 고른 이유 -->
+
+- 명세: docs/specs/
+- closes #
 
 ## 흐름도 (AI)
 <!-- ci가 자동 작성 -->
 
+## 증거
+- 테스트: CI 테스트 리포트 참고
+- API 확인 (Swagger/curl 요청과 응답):
+- 로그/스크린샷 (해당 시):
+
 ## 확인
+- [ ] 이 변경을 AI 없이 팀원에게 설명할 수 있다
 - [ ] 로컬 check 통과
 - [ ] 이벤트 변경 시 events.md 반영
 - [ ] one-way-door 라벨이면 롤백 방법 작성:
@@ -543,19 +554,13 @@ labels: harness
 대응 PR 머지 후 2주 재발 없음
 ```
 
-### `review/standards.md`
-```markdown
-- 필드 주입 → 생성자 주입
-- 사용 안 하는 import, 변수
-- System.out → log
-- 매직넘버 → 상수
-- Optional.get() → orElseThrow()
-```
-
 ### `review/msa.md`
 ```markdown
-- 다른 서비스 코드/DB 직접 접근
-- Controller/Listener → service 경유 여부
+> ArchUnit 이 이미 잡는 것(타 서비스 import, Controller/Listener 의 Repository 직접 호출,
+> RabbitTemplate 직접 사용, 필드 주입, System.out)은 보지 않는다.
+
+- 다른 서비스 DB 직접 접근 (네이티브 SQL, 다른 스키마 이름)
+- Controller/Listener 안의 비즈니스 로직 → service 로 이동
 - 이벤트 발행이 트랜잭션 + Outbox
 - Listener 멱등 처리
 - 실패 시 보상 이벤트
@@ -573,6 +578,12 @@ labels: harness
 
 ### `review/spec.md`
 ```markdown
+## 명세 찾기
+1. PR 본문 "## 왜" 아래 docs/specs/ 경로
+2. 없으면 closes #N → gh issue view N → 이슈의 명세 경로
+3. 명세가 없으면 "[spec] 연결된 명세 없음" 코멘트 1개만 남기고 종료
+
+## 검사
 - PR이 연결된 명세(docs/specs)의 완료 조건을 모두 구현했는가
 - 명세에 없는 동작 추가 여부
 - 완료 조건마다 테스트가 있는가
@@ -586,7 +597,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   checks: write
   issues: write
@@ -625,44 +636,9 @@ jobs:
           fail-on-error: true
 
   # AI job 과 door 는 Repository variable AI_ENABLED=true 일 때만 실행 (시크릿, 라벨 준비 후 켠다)
-  autofix:
+  review:
     needs: check
     if: vars.AI_ENABLED == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      pushed: ${{ steps.push.outputs.pushed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.AI_FIX_TOKEN }}
-          fetch-depth: 0
-      - id: skip
-        run: |
-          if git log -1 --pretty=%s | grep -q '\[ai-fix\]'; then echo "skip=true" >> $GITHUB_OUTPUT; fi
-      - if: steps.skip.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            .github/review/standards.md 항목만, 이 PR에서 변경된 줄에 한해 고쳐라.
-            동작이 바뀔 수 있는 수정은 하지 마라. 커밋하지 마라.
-          claude_args: |
-            --allowedTools "Read,Edit,Grep,Glob,Bash(git diff:*)"
-            --max-turns 10
-      - id: push
-        if: steps.skip.outputs.skip != 'true'
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "ff-ai"; git config user.email "ff-ai@users.noreply.github.com"
-            git commit -am "[ai-fix] standards 자동 수정"
-            git push
-            echo "pushed=true" >> $GITHUB_OUTPUT
-          fi
-
-  review:
-    needs: autofix
-    if: vars.AI_ENABLED == 'true' && needs.autofix.outputs.pushed != 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -679,7 +655,7 @@ jobs:
             위반이 있는 줄에만 인라인 코멘트를 남겨라. 형식: [${{ matrix.kind }}] 문제 - 수정안
             위반이 없으면 아무것도 남기지 마라. 요약, 칭찬 금지.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_inline_comment__create_inline_comment"
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*),mcp__github_inline_comment__create_inline_comment"
             --max-turns 15
 
   diagram:
@@ -695,6 +671,7 @@ jobs:
           prompt: |
             PR #${{ github.event.pull_request.number }} 변경을 Mermaid sequenceDiagram 하나로 그려라
             (서비스, 이벤트, DB 단위). PR 본문의 "## 흐름도 (AI)" 섹션 내용만 교체해서 gh pr edit --body 로 반영하라.
+            다른 섹션은 한 글자도 바꾸지 마라.
           claude_args: |
             --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr edit:*)"
             --max-turns 10
@@ -714,6 +691,30 @@ jobs:
           else
             gh pr edit ${{ github.event.pull_request.number }} --add-label two-way-door
           fi
+```
+
+### `workflows/pr-body.yml`
+```yaml
+name: pr-body
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  explain:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          why=$(echo "$BODY" | awk '/^## 왜/{f=1;next} /^## /{f=0} f' \
+            | grep -vE '^\s*$|^\s*<!--|-->\s*$|^- 명세: docs/specs/\s*$|^- closes #\s*$')
+          [ -n "$why" ] || { echo "'## 왜' 섹션을 직접 작성하세요"; exit 1; }
+          echo "$BODY" | grep -q '\- \[x\] 이 변경을 AI 없이' \
+            || { echo "'설명할 수 있다' 체크박스를 확인하세요"; exit 1; }
 ```
 
 ### `workflows/cd.yml`
@@ -890,12 +891,14 @@ out/
 
 ## 구축 후
 - [ ] claude 재시작 후 하네스 테스트: "services/order 에 com.factoryflow.inventory 패키지 클래스를 import 하는 코드를 추가하고 작업을 끝내 봐" → Stop 훅이 잡고 스스로 되돌리는지, harness.log에 ARCH_VIOLATION 남는지 확인 → `git checkout .`
+- [ ] main 에 push (PR/이슈 템플릿은 main 에 있어야 GitHub 화면에 나타남)
 - [ ] `claude` 안에서 `/install-github-app`
-- [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AI_FIX_TOKEN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
+- [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
 - [ ] Repository variables: `AWS_REGION`(ap-northeast-2), `ECS_CLUSTER`(ff-cluster), `AI_ENABLED`(AI 시크릿+라벨 준비 후 true), `CD_ENABLED`(AWS 준비 후 true)
 - [ ] 라벨 생성
   ```bash
   for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/FactoryFlow_BE; done
   ```
-- [ ] main 브랜치 보호: PR 필수, Code Owners 리뷰 필수, status check `check` 필수
+- [ ] main 브랜치 보호: PR 필수, Require approvals 1, status check `check`, `explain` 필수
 - [ ] (CD 전) AWS OIDC 역할 2개: deploy용(ECR push, ECS 배포), readonly용(CloudWatch Logs 읽기)
+- [ ] **이 문서(`docs/harness-setup.md`) 삭제**

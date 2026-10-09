@@ -32,15 +32,18 @@ git diff -U0 HEAD -- '*.java' | grep -E '^\+.*@Disabled' >/dev/null \
 git diff -U0 HEAD -- '*.java' | grep -E '^\+.*assertTrue\(true\)' >/dev/null \
   && fail FAKE_ASSERT "의미 없는 assert 금지."
 
-# 2) 변경된 서비스만 check (common/루트 변경 시 전체)
+# 2) 변경된 서비스만 포맷 정리 + check (common/루트 변경 시 전체)
 if echo "$changed" | grep -E '^(common/|build\.gradle|settings\.gradle)' >/dev/null; then
+  apply="spotlessApply"
   tasks="check"
 else
-  tasks=$(echo "$changed" | grep -oE '^services/[^/]+' | sort -u \
-    | sed 's#services/#:services:#; s#$#:check#' | tr '\n' ' ')
+  mods=$(echo "$changed" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/#:services:#')
+  apply=$(echo "$mods" | sed '/^$/d; s#$#:spotlessApply#' | tr '\n' ' ')
+  tasks=$(echo "$mods" | sed '/^$/d; s#$#:check#' | tr '\n' ' ')
 fi
 
 if [ -n "$tasks" ]; then
+  ./gradlew $apply -q --console=plain >/dev/null 2>&1
   out=$(./gradlew $tasks -q --console=plain 2>&1) || {
     type=BUILD_FAIL
     echo "$out" | grep -E 'tests completed, [0-9]+ failed' >/dev/null && type=TEST_FAIL

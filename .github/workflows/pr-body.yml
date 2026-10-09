@@ -1,0 +1,20 @@
+name: pr-body
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  explain:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          why=$(echo "$BODY" | awk '/^## 왜/{f=1;next} /^## /{f=0} f' \
+            | grep -vE '^\s*$|^\s*<!--|-->\s*$|^- 명세: docs/specs/\s*$|^- closes #\s*$')
+          [ -n "$why" ] || { echo "'## 왜' 섹션을 직접 작성하세요"; exit 1; }
+          echo "$BODY" | grep -q '\- \[x\] 이 변경을 AI 없이' \
+            || { echo "'설명할 수 있다' 체크박스를 확인하세요"; exit 1; }

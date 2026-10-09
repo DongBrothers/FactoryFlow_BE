@@ -11,7 +11,7 @@ deny() {
 }
 
 case "$rel" in
-  .claude/*|.github/*|common/common-test/*|common/common-event/*|docs/specs/events.md|build.gradle|settings.gradle)
+  CLAUDE.md|.claude/*|.github/*|common/common-test/*|common/common-event/*|docs/specs/events.md|build.gradle|settings.gradle)
     deny "$rel 은 사람만 수정한다. 변경 제안만 하고 멈춰라." ;;
 esac
 
