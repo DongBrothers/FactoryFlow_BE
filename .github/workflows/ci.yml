@@ -1,0 +1,121 @@
+name: ci
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17', cache: gradle }
+      - id: m
+        run: |
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD)
+          if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+            echo "tasks=check" >> $GITHUB_OUTPUT
+          else
+            t=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/#:services:#; s#$#:check#' | tr '\n' ' ')
+            echo "tasks=$t" >> $GITHUB_OUTPUT
+          fi
+      - if: steps.m.outputs.tasks != ''
+        run: ./gradlew ${{ steps.m.outputs.tasks }} --no-daemon
+
+  autofix:
+    needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.AI_FIX_TOKEN }}
+          fetch-depth: 0
+      - id: skip
+        run: |
+          if git log -1 --pretty=%s | grep -q '\[ai-fix\]'; then echo "skip=true" >> $GITHUB_OUTPUT; fi
+      - if: steps.skip.outputs.skip != 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            .github/review/standards.md 항목만, 이 PR에서 변경된 줄에 한해 고쳐라.
+            동작이 바뀔 수 있는 수정은 하지 마라. 커밋하지 마라.
+          claude_args: |
+            --allowedTools "Read,Edit,Grep,Glob,Bash(git diff:*)"
+            --max-turns 10
+      - id: push
+        if: steps.skip.outputs.skip != 'true'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "ff-ai"; git config user.email "ff-ai@users.noreply.github.com"
+            git commit -am "[ai-fix] standards 자동 수정"
+            git push
+            echo "pushed=true" >> $GITHUB_OUTPUT
+          fi
+
+  review:
+    needs: autofix
+    if: needs.autofix.outputs.pushed != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        kind: [msa, security, spec]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            PR #${{ github.event.pull_request.number }} 리뷰.
+            기준: .github/review/${{ matrix.kind }}.md 항목만.
+            위반이 있는 줄에만 인라인 코멘트를 남겨라. 형식: [${{ matrix.kind }}] 문제 - 수정안
+            위반이 없으면 아무것도 남기지 마라. 요약, 칭찬 금지.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),mcp__github_inline_comment__create_inline_comment"
+            --max-turns 15
+
+  diagram:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            PR #${{ github.event.pull_request.number }} 변경을 Mermaid sequenceDiagram 하나로 그려라
+            (서비스, 이벤트, DB 단위). PR 본문의 "## 흐름도 (AI)" 섹션 내용만 교체해서 gh pr edit --body 로 반영하라.
+          claude_args: |
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr edit:*)"
+            --max-turns 10
+
+  door:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD)
+          if echo "$files" | grep -qE 'db/migration/|^common/common-event/|^docs/specs/events.md|^services/auth/|^services/gateway/.*/security/|/reservation/'; then
+            gh pr edit ${{ github.event.pull_request.number }} --add-label one-way-door
+          else
+            gh pr edit ${{ github.event.pull_request.number }} --add-label two-way-door
+          fi

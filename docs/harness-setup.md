@@ -438,12 +438,6 @@ gh issue list -l harness --state all                            # 하네스 개�
 ### `CODEOWNERS`
 ```
 *                                   @DongBrothers/factoryflow
-/.claude/                           @DongBrothers/factoryflow
-/.github/                           @DongBrothers/factoryflow
-/common/                            @DongBrothers/factoryflow
-/docs/specs/events.md               @DongBrothers/factoryflow
-**/db/migration/                    @DongBrothers/factoryflow
-/services/auth/                     @DongBrothers/factoryflow
 ```
 
 ### `PULL_REQUEST_TEMPLATE.md`

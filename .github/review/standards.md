@@ -1,0 +1,5 @@
+- 필드 주입 → 생성자 주입
+- 사용 안 하는 import, 변수
+- System.out → log
+- 매직넘버 → 상수
+- Optional.get() → orElseThrow()
