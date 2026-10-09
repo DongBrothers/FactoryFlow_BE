@@ -1,5 +1,5 @@
 - 다른 서비스 코드/DB 직접 접근
-- Controller/Listener → api/ 경유 여부
+- Controller/Listener → service 경유 여부
 - 이벤트 발행이 트랜잭션 + Outbox
 - Listener 멱등 처리
 - 실패 시 보상 이벤트

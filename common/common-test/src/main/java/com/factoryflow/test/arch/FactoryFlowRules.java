@@ -21,7 +21,7 @@ public final class FactoryFlowRules {
         noClasses().that().haveSimpleNameEndingWith("Controller")
             .or().haveSimpleNameEndingWith("Listener")
             .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
-            .because("진입점은 api/를 거친다");
+            .because("진입점(Controller/Listener)은 service를 거친다");
 
     public static final ArchRule NO_DIRECT_PUBLISH =
         noClasses().that().resideOutsideOfPackage("com.factoryflow.common.event..")

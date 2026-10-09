@@ -42,7 +42,7 @@
    - 수신 멱등 처리: processed_event 저장/확인 컴포넌트
    - RabbitTemplate은 이 모듈 안에서만 사용
 4. common-web: 공통 응답 형식, 전역 예외 처리, traceId 필터(MDC)
-5. 각 서비스(gateway 제외) 패키지: `api/`, `event/listener/`, `event/publisher/`, `client/` (빈 패키지는 package-info.java)
+5. 각 서비스(gateway 제외) 패키지: `controller/`, `domain/`, `dto/`, `repository/`, `service/`, `event/listener/`, `event/publisher/`, `client/`, `exception/` (빈 패키지는 package-info.java)
    - outbox, processed_event 테이블은 서비스별 Flyway `V1__init.sql`
 6. 각 서비스 `Dockerfile` (eclipse-temurin:17-jre, build/libs/*.jar, 8080)
 7. 루트 `docker-compose.yml`: MySQL 8.4 (order_db, inventory_db, purchase_db, production_db, auth_db), Redis, rabbitmq:3.13-management. 비밀번호는 `.env`(커밋 제외)에서 읽는다
@@ -85,7 +85,7 @@ PART 2의 8번 파일 전부. 만든 뒤 YAML 문법 검사 (actionlint 없으�
 | V1 Quenneville (하네스) | 지침(미리 알려줌) + 센서(결과 검사). 말보다 기계 검사 | CLAUDE.md(지침), Stop 훅·ArchUnit·guard 훅(센서) |
 | V2 Voss (리뷰 하네스) | PR에서 AI가 체크리스트 기반으로 나눠서 리뷰 | `.github/review/*.md`, ci.yml review 매트릭스, autofix |
 | V3 5원칙 | ② 실패에서 출발 ③ 규칙은 적게 ⑤ 계속 개선 | harness.log + 2회 규칙 harness 이슈, 대응 우선순위 |
-| V4 Pocock (PR 병목) | 사람 리뷰량 축소. 딥모듈, 다이어그램, 되돌릴 수 없는 결정 집중 | 서비스별 `api/` 진입점, PR 흐름도 자동, one-way-door 라벨 + CODEOWNERS |
+| V4 Pocock (PR 병목) | 사람 리뷰량 축소. 딥모듈, 다이어그램, 되돌릴 수 없는 결정 집중 | 서비스별 진입점(controller/listener → service), PR 흐름도 자동, one-way-door 라벨 + CODEOWNERS |
 
 ## 2. 프로젝트 구조
 
@@ -123,8 +123,11 @@ factoryflow/
     ├── Dockerfile
     ├── build.gradle
     └── src/main/java/com/factoryflow/<svc>/
-        ├── api/                  # 외부 진입점 (Controller + Facade)
-        ├── <업무>/               # 도메인, 서비스, Repository
+        ├── controller/           # HTTP 진입점
+        ├── domain/               # Entity, enum
+        ├── dto/                  # 요청/응답 DTO
+        ├── repository/           # JPA Repository (service 에서만 사용)
+        ├── service/              # 업무 로직, 트랜잭션, 이벤트 발행
         ├── event/listener/
         ├── event/publisher/
         └── client/
@@ -144,10 +147,13 @@ factoryflow/
 
 ## 절대 규칙
 - 서비스 간 코드 직접 참조 금지. 비동기는 이벤트(common-event), 동기는 client/
-- 외부에서 들어오는 호출(Controller, Listener)은 api/ 를 거친다. Repository 직접 호출 금지
+- 외부에서 들어오는 호출(Controller, Listener)은 service 를 거친다. Repository 직접 호출 금지
 - RabbitTemplate 직접 사용 금지. EventPublisher 사용
 - 생성자 주입만
 - 테스트 삭제, @Disabled, 의미 없는 assert 금지. 테스트가 틀렸다고 판단되면 이유를 말하고 멈춘다
+
+## 패키지 구조 (서비스별)
+com.factoryflow.<svc>.{controller, domain, dto, repository, service, event/listener, event/publisher, client, exception}
 
 ## 사람만 수정 (수정 필요 시 제안만)
 .claude/, .github/, common/common-event/, common/common-test/, docs/specs/events.md, 루트 build.gradle, settings.gradle
@@ -164,7 +170,7 @@ factoryflow/
 - DB: order_db (Flyway: src/main/resources/db/migration)
 - 발행: order.created, order.cancelled
 - 수신: inventory.reserved, inventory.reservation-failed
-- 진입점: api/OrderApi
+- 진입점: controller/OrderController (HTTP), event/listener (이벤트) → service/OrderService
 - 보상: inventory.reservation-failed 수신 시 주문 상태 FAILED
 ```
 
@@ -297,7 +303,7 @@ tools: Read, Grep, Glob, Bash(git diff:*)
 ---
 git diff 기준으로 아래만 확인하고, 위반만 "파일:줄 - 문제 - 수정안" 형식으로 보고한다. 칭찬, 요약 금지.
 1. 다른 서비스 패키지/DB 직접 접근
-2. Controller/Listener가 api/를 거치지 않음
+2. Controller/Listener가 service를 거치지 않고 Repository를 직접 사용
 3. 이벤트 발행이 트랜잭션 + Outbox를 거치지 않음
 4. Listener 멱등 처리(processed_event) 누락
 5. 실패 시 보상 이벤트 누락
@@ -315,7 +321,7 @@ description: 새 RabbitMQ 이벤트를 추가할 때 사용
    - 발행: 서비스 / 수신: 서비스 목록
    - payload 필드 + 공통 필드(eventId, traceId, version, occurredAt)
 2. 발행 서비스: event/publisher/ 에 레코드 + EventPublisher.publish() (같은 트랜잭션, Outbox)
-3. 수신 서비스: event/listener/ 에 @RabbitListener → processed_event로 중복 확인 → api/ 호출
+3. 수신 서비스: event/listener/ 에 @RabbitListener → processed_event로 중복 확인 → service 호출
 4. 실패 시 보상 이벤트 정의 여부 확인
 5. 테스트: 발행 1개(Outbox 저장 확인), 수신 2개(정상 / 중복 무시)
 ```
@@ -347,7 +353,7 @@ public final class FactoryFlowRules {
         noClasses().that().haveSimpleNameEndingWith("Controller")
             .or().haveSimpleNameEndingWith("Listener")
             .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
-            .because("진입점은 api/를 거친다");
+            .because("진입점(Controller/Listener)은 service를 거친다");
 
     public static final ArchRule NO_DIRECT_PUBLISH =
         noClasses().that().resideOutsideOfPackage("com.factoryflow.common.event..")
@@ -548,7 +554,7 @@ labels: harness
 ### `review/msa.md`
 ```markdown
 - 다른 서비스 코드/DB 직접 접근
-- Controller/Listener → api/ 경유 여부
+- Controller/Listener → service 경유 여부
 - 이벤트 발행이 트랜잭션 + Outbox
 - Listener 멱등 처리
 - 실패 시 보상 이벤트
