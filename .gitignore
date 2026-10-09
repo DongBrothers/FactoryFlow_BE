@@ -42,3 +42,11 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+### Secrets / local ###
+.env
+*.pem
+**/application-local.yml
+
+### Claude Code ###
+.claude/harness.log
+.claude/settings.local.json
