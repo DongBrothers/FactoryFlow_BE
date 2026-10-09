@@ -1,0 +1,11 @@
+spring:
+  rabbitmq:
+    publisher-confirm-type: correlated
+  sql:
+    init:
+      mode: always
+
+factoryflow:
+  events:
+    # 테스트에서는 relay() 를 직접 호출한다
+    relay-interval: 1h

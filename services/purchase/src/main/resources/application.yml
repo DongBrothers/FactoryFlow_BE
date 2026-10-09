@@ -3,6 +3,9 @@ spring:
     name: purchase
   profiles:
     default: local
+  rabbitmq:
+    # common-event OutboxRelay 가 브로커 수신 확인(ack)을 받은 뒤에만 발행 완료로 기록한다
+    publisher-confirm-type: correlated
   jpa:
     open-in-view: false
     hibernate:
