@@ -1,1 +1,5 @@
 rootProject.name = 'factoryflow'
+
+include 'common:common-event', 'common:common-web', 'common:common-test'
+include 'services:gateway', 'services:order', 'services:inventory', 'services:purchase',
+        'services:production', 'services:auth', 'services:simulator'

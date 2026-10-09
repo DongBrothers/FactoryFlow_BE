@@ -1,20 +1,55 @@
 plugins {
-    id 'java'
+    id 'org.springframework.boot' version '4.0.8' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
 }
 
-group = 'com.factoryflow'
-version = '1.0-SNAPSHOT'
+allprojects {
+    group = 'com.factoryflow'
+    version = '0.0.1-SNAPSHOT'
 
-repositories {
-    mavenCentral()
+    repositories {
+        mavenCentral()
+    }
 }
 
-dependencies {
-    testImplementation platform('org.junit:junit-bom:5.10.0')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
+subprojects {
+    // 중간 디렉터리(common, services)는 모듈이 아님
+    if (!project.buildFile.exists()) {
+        return
+    }
 
-test {
-    useJUnitPlatform()
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+        }
+    }
+
+    dependencies {
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        testCompileOnly 'org.projectlombok:lombok'
+        testAnnotationProcessor 'org.projectlombok:lombok'
+
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
+
+    if (project.path.startsWith(':services:')) {
+        apply plugin: 'org.springframework.boot'
+    } else if (project.path.startsWith(':common:')) {
+        apply plugin: 'java-library'
+    }
 }
