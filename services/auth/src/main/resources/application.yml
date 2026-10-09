@@ -1,6 +1,12 @@
 spring:
   application:
     name: auth
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
 
 server:
   port: 8080

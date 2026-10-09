@@ -21,15 +21,15 @@
    - include: `services:gateway`, `order`, `inventory`, `purchase`, `production`, `auth`, `simulator`
 3. 루트 `build.gradle` (Groovy DSL)
    - Java 17 toolchain, group `com.factoryflow`, mavenCentral
-   - Spring Boot 4.1.1, io.spring.dependency-management → `plugins { ... apply false }`
+   - Spring Boot 4.0.8, io.spring.dependency-management → `plugins { ... apply false }`
    - subprojects 공통: java, JUnit Platform, lombok
    - `services:*`에만 Spring Boot 플러그인, `common:*`은 java-library + BOM
 4. 각 서비스: `build.gradle`, `com.factoryflow.<svc>.<Svc>Application`, `application.yml` (spring.application.name, server.port 8080, actuator health 노출)
-   - gateway: Spring Cloud Gateway (Boot 4.1.1과 호환되는 Spring Cloud 버전 확인)
+   - gateway: Spring Cloud Gateway (Spring Cloud 2025.1.3, Boot 4.0.8 기준)
    - 나머지: web, actuator, validation, data-jpa, mysql, flyway, amqp, data-redis
    - 의존: `testImplementation project(':common:common-test')`, `implementation project(':common:common-web')`, 이벤트 사용 서비스는 `project(':common:common-event')`
    - **서비스끼리 `project(':services:...')` 의존 금지**
-5. Gradle wrapper 버전이 Boot 4.1.1 요구사항을 만족하는지 확인
+5. Gradle wrapper 버전이 Boot 4.0.8 요구사항을 만족하는지 확인
 6. `./gradlew build -x test` 통과
 
 ## 2단계: common 모듈 + 서비스 내부 구조
@@ -135,7 +135,7 @@ factoryflow/
 ### 루트 `CLAUDE.md`
 ```markdown
 # FactoryFlow
-현대차 공장 모델 ERP+MES. Java 17, Spring Boot 4.1.1, Gradle(Groovy) 멀티모듈.
+현대차 공장 모델 ERP+MES. Java 17, Spring Boot 4.0.8, Gradle(Groovy) 멀티모듈.
 
 ## 명령
 - 서비스 검사: ./gradlew :services:<svc>:check
@@ -736,6 +736,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17', cache: gradle }
+      - name: inject application-dev.yml
+        env:
+          APP_DEV_YML: ${{ secrets[format('APP_DEV_YML_{0}', matrix.svc)] }}
+        run: |
+          if [ -z "$APP_DEV_YML" ]; then
+            echo "::error::GitHub Secret APP_DEV_YML_${{ matrix.svc }} 이 없다"; exit 1
+          fi
+          printf '%s\n' "$APP_DEV_YML" > services/${{ matrix.svc }}/src/main/resources/application-dev.yml
       - run: ./gradlew :services:${{ matrix.svc }}:bootJar --no-daemon
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -843,6 +851,7 @@ out/
 .env
 *.pem
 **/application-local.yml
+**/application-dev.yml
 .claude/harness.log
 .claude/settings.local.json
 ```
@@ -858,7 +867,7 @@ out/
 ## 구축 후
 - [ ] claude 재시작 후 하네스 테스트: "services/order 에 com.factoryflow.inventory 패키지 클래스를 import 하는 코드를 추가하고 작업을 끝내 봐" → Stop 훅이 잡고 스스로 되돌리는지, harness.log에 ARCH_VIOLATION 남는지 확인 → `git checkout .`
 - [ ] `claude` 안에서 `/install-github-app`
-- [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AI_FIX_TOKEN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`
+- [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AI_FIX_TOKEN`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
 - [ ] 라벨 생성
   ```bash
   for l in feature bug incident harness one-way-door two-way-door; do gh label create $l -R DongBrothers/FactoryFlow_BE; done

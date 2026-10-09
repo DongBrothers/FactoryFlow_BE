@@ -46,6 +46,7 @@ bin/
 .env
 *.pem
 **/application-local.yml
+**/application-dev.yml
 
 ### Claude Code ###
 .claude/harness.log

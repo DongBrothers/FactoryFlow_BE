@@ -36,6 +36,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17', cache: gradle }
+      - name: inject application-dev.yml
+        env:
+          APP_DEV_YML: ${{ secrets[format('APP_DEV_YML_{0}', matrix.svc)] }}
+        run: |
+          if [ -z "$APP_DEV_YML" ]; then
+            echo "::error::GitHub Secret APP_DEV_YML_${{ matrix.svc }} 이 없다"; exit 1
+          fi
+          printf '%s\n' "$APP_DEV_YML" > services/${{ matrix.svc }}/src/main/resources/application-dev.yml
       - run: ./gradlew :services:${{ matrix.svc }}:bootJar --no-daemon
       - uses: aws-actions/configure-aws-credentials@v4
         with:

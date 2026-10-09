@@ -1,6 +1,8 @@
 spring:
   application:
     name: gateway
+  profiles:
+    default: local
 
 server:
   port: 8080

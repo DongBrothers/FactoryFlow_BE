@@ -1,6 +1,8 @@
 spring:
   application:
     name: simulator
+  profiles:
+    default: local
 
 server:
   port: 8080

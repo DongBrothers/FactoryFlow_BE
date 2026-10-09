@@ -1,5 +1,5 @@
 # simulator 서비스
-- DB: 없음
+- DB: 없음 (JPA, Flyway 의존성 없음)
 - 발행: 없음
 - 수신: 없음
 - 진입점: api/SimulatorApi
