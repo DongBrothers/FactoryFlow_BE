@@ -21,9 +21,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 미발행 outbox 행을 주기적으로 RabbitMQ에 발행한다.
- * 브로커의 publisher confirm(ack)을 받은 행만 발행 완료로 기록하고, 나머지는 다음 주기에 다시 보낸다.
- * at-least-once 이므로 수신 측은 {@link ProcessedEventGuard}로 중복을 거른다.
+ * 미발행 outbox 행을 주기적으로 RabbitMQ에 발행한다. 브로커의 publisher confirm(ack)을 받은 행만 발행 완료로 기록하고, 나머지는 다음 주기에
+ * 다시 보낸다. at-least-once 이므로 수신 측은 {@link ProcessedEventGuard}로 중복을 거른다.
  */
 public class OutboxRelay {
 
@@ -35,8 +34,12 @@ public class OutboxRelay {
     private final EventProperties properties;
     private final Clock clock;
 
-    public OutboxRelay(JdbcTemplate jdbcTemplate, RabbitTemplate rabbitTemplate,
-                       TransactionTemplate transactionTemplate, EventProperties properties, Clock clock) {
+    public OutboxRelay(
+            JdbcTemplate jdbcTemplate,
+            RabbitTemplate rabbitTemplate,
+            TransactionTemplate transactionTemplate,
+            EventProperties properties,
+            Clock clock) {
         if (!rabbitTemplate.getConnectionFactory().isPublisherConfirms()) {
             throw new IllegalStateException(
                     "OutboxRelay 는 publisher confirm 이 필요하다: spring.rabbitmq.publisher-confirm-type=correlated");
@@ -50,43 +53,58 @@ public class OutboxRelay {
 
     @Scheduled(fixedDelayString = "${factoryflow.events.relay-interval:1s}")
     public void relay() {
-        transactionTemplate.executeWithoutResult(status -> {
-            List<OutboxRow> rows = jdbcTemplate.query(
-                    "SELECT id, event_id, event_name, payload FROM outbox"
-                            + " WHERE published_at IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
-                    (rs, i) -> new OutboxRow(
-                            rs.getLong("id"), rs.getString("event_id"),
-                            rs.getString("event_name"), rs.getString("payload")),
-                    properties.relayBatchSize());
+        transactionTemplate.executeWithoutResult(
+                status -> {
+                    List<OutboxRow> rows =
+                            jdbcTemplate.query(
+                                    "SELECT id, event_id, event_name, payload FROM outbox"
+                                            + " WHERE published_at IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
+                                    (rs, i) ->
+                                            new OutboxRow(
+                                                    rs.getLong("id"), rs.getString("event_id"),
+                                                    rs.getString("event_name"),
+                                                            rs.getString("payload")),
+                                    properties.relayBatchSize());
 
-            List<Sent> sent = new ArrayList<>();
-            for (OutboxRow row : rows) {
-                CorrelationData correlation = new CorrelationData(row.eventId());
-                try {
-                    rabbitTemplate.send(properties.exchange(), row.eventName(), toMessage(row), correlation);
-                } catch (AmqpException e) {
-                    log.warn("outbox 발행 실패, 다음 주기에 재시도: eventId={}", row.eventId(), e);
-                    break;
-                }
-                sent.add(new Sent(row, correlation));
-            }
+                    List<Sent> sent = new ArrayList<>();
+                    for (OutboxRow row : rows) {
+                        CorrelationData correlation = new CorrelationData(row.eventId());
+                        try {
+                            rabbitTemplate.send(
+                                    properties.exchange(),
+                                    row.eventName(),
+                                    toMessage(row),
+                                    correlation);
+                        } catch (AmqpException e) {
+                            log.warn("outbox 발행 실패, 다음 주기에 재시도: eventId={}", row.eventId(), e);
+                            break;
+                        }
+                        sent.add(new Sent(row, correlation));
+                    }
 
-            Timestamp now = Timestamp.from(clock.instant());
-            for (Sent s : sent) {
-                if (isAcked(s)) {
-                    jdbcTemplate.update("UPDATE outbox SET published_at = ? WHERE id = ?", now, s.row().id());
-                }
-            }
-        });
+                    Timestamp now = Timestamp.from(clock.instant());
+                    for (Sent s : sent) {
+                        if (isAcked(s)) {
+                            jdbcTemplate.update(
+                                    "UPDATE outbox SET published_at = ? WHERE id = ?",
+                                    now,
+                                    s.row().id());
+                        }
+                    }
+                });
     }
 
     private boolean isAcked(Sent s) {
         try {
-            CorrelationData.Confirm confirm = s.correlation().getFuture()
-                    .get(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            CorrelationData.Confirm confirm =
+                    s.correlation()
+                            .getFuture()
+                            .get(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
             if (!confirm.ack()) {
-                log.warn("브로커가 거부(nack), 다음 주기에 재시도: eventId={}, reason={}",
-                        s.row().eventId(), confirm.reason());
+                log.warn(
+                        "브로커가 거부(nack), 다음 주기에 재시도: eventId={}, reason={}",
+                        s.row().eventId(),
+                        confirm.reason());
             }
             return confirm.ack();
         } catch (TimeoutException e) {
@@ -109,9 +127,7 @@ public class OutboxRelay {
                 .build();
     }
 
-    private record OutboxRow(long id, String eventId, String eventName, String payload) {
-    }
+    private record OutboxRow(long id, String eventId, String eventName, String payload) {}
 
-    private record Sent(OutboxRow row, CorrelationData correlation) {
-    }
+    private record Sent(OutboxRow row, CorrelationData correlation) {}
 }

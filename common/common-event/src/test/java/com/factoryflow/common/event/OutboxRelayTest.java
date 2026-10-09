@@ -18,32 +18,31 @@ class OutboxRelayTest extends EventIntegrationTest {
 
     private static final long RECEIVE_TIMEOUT_MS = 5_000;
 
-    @Autowired
-    EventPublisher eventPublisher;
+    @Autowired EventPublisher eventPublisher;
 
-    @Autowired
-    OutboxRelay outboxRelay;
+    @Autowired OutboxRelay outboxRelay;
 
-    @Autowired
-    RabbitTemplate rabbitTemplate;
+    @Autowired RabbitTemplate rabbitTemplate;
 
-    @Autowired
-    RabbitAdmin rabbitAdmin;
+    @Autowired RabbitAdmin rabbitAdmin;
 
-    @Autowired
-    TopicExchange factoryFlowEventsExchange;
+    @Autowired TopicExchange factoryFlowEventsExchange;
 
     @Test
     void 브로커가_ack하면_이벤트_이름을_라우팅키로_발행하고_발행완료로_기록한다() {
         Queue queue = new AnonymousQueue();
         rabbitAdmin.declareQueue(queue);
-        rabbitAdmin.declareBinding(BindingBuilder.bind(queue).to(factoryFlowEventsExchange).with(TestEvent.NAME));
+        rabbitAdmin.declareBinding(
+                BindingBuilder.bind(queue).to(factoryFlowEventsExchange).with(TestEvent.NAME));
         EventEnvelope published = publishInTransaction(eventPublisher, new TestEvent(7L));
 
         outboxRelay.relay();
 
-        EventEnvelope received = rabbitTemplate.receiveAndConvert(
-                queue.getName(), RECEIVE_TIMEOUT_MS, new ParameterizedTypeReference<EventEnvelope>() {});
+        EventEnvelope received =
+                rabbitTemplate.receiveAndConvert(
+                        queue.getName(),
+                        RECEIVE_TIMEOUT_MS,
+                        new ParameterizedTypeReference<EventEnvelope>() {});
         assertThat(received).isNotNull();
         assertThat(received.eventId()).isEqualTo(published.eventId());
         assertThat(received.eventName()).isEqualTo(TestEvent.NAME);
@@ -54,8 +53,13 @@ class OutboxRelayTest extends EventIntegrationTest {
     @Test
     void 브로커가_거부하면_발행완료로_기록하지_않아_다음_주기에_다시_보낸다() {
         publishInTransaction(eventPublisher, new TestEvent(8L));
-        OutboxRelay toMissingExchange = new OutboxRelay(jdbcTemplate, rabbitTemplate, transactionTemplate,
-                new EventProperties("missing.exchange", 100, Duration.ofSeconds(5)), Clock.systemUTC());
+        OutboxRelay toMissingExchange =
+                new OutboxRelay(
+                        jdbcTemplate,
+                        rabbitTemplate,
+                        transactionTemplate,
+                        new EventProperties("missing.exchange", 100, Duration.ofSeconds(5)),
+                        Clock.systemUTC());
 
         toMissingExchange.relay();
 
@@ -63,6 +67,7 @@ class OutboxRelayTest extends EventIntegrationTest {
     }
 
     private int unpublishedCount() {
-        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox WHERE published_at IS NULL", Integer.class);
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox WHERE published_at IS NULL", Integer.class);
     }
 }

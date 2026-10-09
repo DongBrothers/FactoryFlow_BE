@@ -10,9 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 이벤트를 호출한 쪽의 트랜잭션 안에서 outbox 테이블에 저장한다. 실제 발행은 {@link OutboxRelay}가 한다.
- */
+/** 이벤트를 호출한 쪽의 트랜잭션 안에서 outbox 테이블에 저장한다. 실제 발행은 {@link OutboxRelay}가 한다. */
 public class EventPublisher {
 
     static final String TRACE_ID_MDC_KEY = "traceId";
@@ -30,13 +28,14 @@ public class EventPublisher {
     @Transactional(propagation = Propagation.MANDATORY)
     public EventEnvelope publish(DomainEvent event) {
         Instant now = clock.instant();
-        EventEnvelope envelope = new EventEnvelope(
-                UUID.randomUUID(),
-                event.eventName(),
-                currentTraceId(),
-                event.version(),
-                now,
-                objectMapper.valueToTree(event));
+        EventEnvelope envelope =
+                new EventEnvelope(
+                        UUID.randomUUID(),
+                        event.eventName(),
+                        currentTraceId(),
+                        event.version(),
+                        now,
+                        objectMapper.valueToTree(event));
 
         jdbcTemplate.update(
                 "INSERT INTO outbox (event_id, event_name, payload, created_at) VALUES (?, ?, ?, ?)",

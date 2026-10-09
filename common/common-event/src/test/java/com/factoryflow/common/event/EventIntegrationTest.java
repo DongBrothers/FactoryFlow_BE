@@ -9,11 +9,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @SpringBootTest(classes = EventTestApplication.class)
 abstract class EventIntegrationTest {
 
-    @Autowired
-    JdbcTemplate jdbcTemplate;
+    @Autowired JdbcTemplate jdbcTemplate;
 
-    @Autowired
-    TransactionTemplate transactionTemplate;
+    @Autowired TransactionTemplate transactionTemplate;
 
     @BeforeEach
     void cleanTables() {

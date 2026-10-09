@@ -1,4 +1,2 @@
-/**
- * 도메인 모델 (Entity, enum, 값 객체).
- */
+/** 도메인 모델 (Entity, enum, 값 객체). */
 package com.factoryflow.production.domain;

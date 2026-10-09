@@ -27,7 +27,9 @@ public class EventAutoConfiguration {
         return new TopicExchange(properties.exchange(), true, false);
     }
 
-    /** @RabbitListener 가 {@link EventEnvelope} 를 바로 받도록 JSON 변환기를 등록한다. */
+    /**
+     * @RabbitListener 가 {@link EventEnvelope} 를 바로 받도록 JSON 변환기를 등록한다.
+     */
     @Bean
     @ConditionalOnMissingBean(MessageConverter.class)
     MessageConverter eventMessageConverter(ObjectProvider<JsonMapper> jsonMapper) {
@@ -35,24 +37,35 @@ public class EventAutoConfiguration {
     }
 
     @Bean
-    EventPublisher eventPublisher(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
-                                  ObjectProvider<Clock> clock) {
-        return new EventPublisher(jdbcTemplate, objectMapper, clock.getIfAvailable(Clock::systemUTC));
+    EventPublisher eventPublisher(
+            JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ObjectProvider<Clock> clock) {
+        return new EventPublisher(
+                jdbcTemplate, objectMapper, clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean
-    OutboxRelay outboxRelay(JdbcTemplate jdbcTemplate, RabbitTemplate rabbitTemplate,
-                            PlatformTransactionManager transactionManager, EventProperties properties,
-                            ObjectProvider<Clock> clock) {
-        return new OutboxRelay(jdbcTemplate, rabbitTemplate, new TransactionTemplate(transactionManager),
-                properties, clock.getIfAvailable(Clock::systemUTC));
+    OutboxRelay outboxRelay(
+            JdbcTemplate jdbcTemplate,
+            RabbitTemplate rabbitTemplate,
+            PlatformTransactionManager transactionManager,
+            EventProperties properties,
+            ObjectProvider<Clock> clock) {
+        return new OutboxRelay(
+                jdbcTemplate,
+                rabbitTemplate,
+                new TransactionTemplate(transactionManager),
+                properties,
+                clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean
-    ProcessedEventGuard processedEventGuard(JdbcTemplate jdbcTemplate,
-                                            PlatformTransactionManager transactionManager,
-                                            ObjectProvider<Clock> clock) {
-        return new ProcessedEventGuard(jdbcTemplate, new TransactionTemplate(transactionManager),
+    ProcessedEventGuard processedEventGuard(
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager,
+            ObjectProvider<Clock> clock) {
+        return new ProcessedEventGuard(
+                jdbcTemplate,
+                new TransactionTemplate(transactionManager),
                 clock.getIfAvailable(Clock::systemUTC));
     }
 }

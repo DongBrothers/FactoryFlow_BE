@@ -14,11 +14,9 @@ import tools.jackson.databind.ObjectMapper;
 
 class EventPublisherTest extends EventIntegrationTest {
 
-    @Autowired
-    EventPublisher eventPublisher;
+    @Autowired EventPublisher eventPublisher;
 
-    @Autowired
-    ObjectMapper objectMapper;
+    @Autowired ObjectMapper objectMapper;
 
     @AfterEach
     void clearMdc() {
@@ -31,8 +29,9 @@ class EventPublisherTest extends EventIntegrationTest {
 
         EventEnvelope envelope = publishInTransaction(eventPublisher, new TestEvent(42L));
 
-        Map<String, Object> row = jdbcTemplate.queryForMap(
-                "SELECT event_id, event_name, payload, published_at FROM outbox");
+        Map<String, Object> row =
+                jdbcTemplate.queryForMap(
+                        "SELECT event_id, event_name, payload, published_at FROM outbox");
         assertThat(row.get("event_id")).isEqualTo(envelope.eventId().toString());
         assertThat(row.get("event_name")).isEqualTo(TestEvent.NAME);
         assertThat(row.get("published_at")).isNull();
@@ -51,16 +50,22 @@ class EventPublisherTest extends EventIntegrationTest {
         assertThatThrownBy(() -> eventPublisher.publish(new TestEvent(1L)))
                 .isInstanceOf(IllegalTransactionStateException.class);
 
-        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class))
+                .isZero();
     }
 
     @Test
     void 트랜잭션이_롤백되면_outbox도_롤백된다() {
-        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
-            eventPublisher.publish(new TestEvent(1L));
-            throw new IllegalStateException("업무 처리 실패");
-        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(
+                        () ->
+                                transactionTemplate.executeWithoutResult(
+                                        status -> {
+                                            eventPublisher.publish(new TestEvent(1L));
+                                            throw new IllegalStateException("업무 처리 실패");
+                                        }))
+                .isInstanceOf(IllegalStateException.class);
 
-        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class))
+                .isZero();
     }
 }

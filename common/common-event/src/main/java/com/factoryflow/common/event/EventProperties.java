@@ -8,6 +8,4 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record EventProperties(
         @DefaultValue("factoryflow.events") String exchange,
         @DefaultValue("100") int relayBatchSize,
-        @DefaultValue("5s") Duration confirmTimeout
-) {
-}
+        @DefaultValue("5s") Duration confirmTimeout) {}

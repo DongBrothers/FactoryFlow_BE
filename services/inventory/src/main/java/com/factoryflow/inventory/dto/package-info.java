@@ -1,4 +1,2 @@
-/**
- * 요청/응답 DTO.
- */
+/** 요청/응답 DTO. */
 package com.factoryflow.inventory.dto;

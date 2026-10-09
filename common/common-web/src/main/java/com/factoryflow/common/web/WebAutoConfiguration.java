@@ -18,18 +18,17 @@ public class WebAutoConfiguration {
 
     @Bean
     FilterRegistrationBean<TraceIdFilter> traceIdFilter() {
-        FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>(new TraceIdFilter());
+        FilterRegistrationBean<TraceIdFilter> registration =
+                new FilterRegistrationBean<>(new TraceIdFilter());
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }
 
     /**
-     * {@link BaseEntity} 의 createdAt/updatedAt 자동 기록.
-     * 자동 설정에 두면 @WebMvcTest 같은 슬라이스 테스트에는 로드되지 않는다.
+     * {@link BaseEntity} 의 createdAt/updatedAt 자동 기록. 자동 설정에 두면 @WebMvcTest 같은 슬라이스 테스트에는 로드되지 않는다.
      */
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(EnableJpaAuditing.class)
     @EnableJpaAuditing
-    static class JpaAuditingConfiguration {
-    }
+    static class JpaAuditingConfiguration {}
 }

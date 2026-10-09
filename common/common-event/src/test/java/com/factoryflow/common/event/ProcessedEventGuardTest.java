@@ -10,8 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 class ProcessedEventGuardTest extends EventIntegrationTest {
 
-    @Autowired
-    ProcessedEventGuard guard;
+    @Autowired ProcessedEventGuard guard;
 
     @Test
     void 같은_이벤트를_두번_받으면_한번만_처리한다() {
@@ -31,9 +30,14 @@ class ProcessedEventGuardTest extends EventIntegrationTest {
         UUID eventId = UUID.randomUUID();
         AtomicInteger handled = new AtomicInteger();
 
-        assertThatThrownBy(() -> guard.runOnce(eventId, () -> {
-            throw new IllegalStateException("처리 실패");
-        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(
+                        () ->
+                                guard.runOnce(
+                                        eventId,
+                                        () -> {
+                                            throw new IllegalStateException("처리 실패");
+                                        }))
+                .isInstanceOf(IllegalStateException.class);
         boolean retried = guard.runOnce(eventId, handled::incrementAndGet);
 
         assertThat(retried).isTrue();
