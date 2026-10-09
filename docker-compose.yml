@@ -17,13 +17,13 @@ services:
       timeout: 5s
       retries: 5
 
-  valkey:
-    image: valkey/valkey:8.1
-    container_name: ff-valkey
+  redis:
+    image: redis:7.4
+    container_name: ff-redis
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
