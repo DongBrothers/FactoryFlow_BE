@@ -56,7 +56,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             PR #${{ github.event.pull_request.number }} 리뷰.
             기준: .github/review/${{ matrix.kind }}.md 항목만.
@@ -75,7 +75,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             PR #${{ github.event.pull_request.number }} 변경을 Mermaid sequenceDiagram 하나로 그려라
             (서비스, 이벤트, DB 단위). PR 본문의 "## 흐름도 (AI)" 섹션 내용만 교체해서 gh pr edit --body 로 반영하라.

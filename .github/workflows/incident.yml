@@ -19,7 +19,7 @@ jobs:
           aws-region: ap-northeast-2
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             CloudWatch 알람: ${{ toJson(github.event.client_payload) }}
             1. aws logs 로 관련 /ecs/ff-* 로그 최근 30분 확인

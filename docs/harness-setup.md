@@ -667,7 +667,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             PR #${{ github.event.pull_request.number }} 리뷰.
             기준: .github/review/${{ matrix.kind }}.md 항목만.
@@ -686,7 +686,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             PR #${{ github.event.pull_request.number }} 변경을 Mermaid sequenceDiagram 하나로 그려라
             (서비스, 이벤트, DB 단위). PR 본문의 "## 흐름도 (AI)" 섹션 내용만 교체해서 gh pr edit --body 로 반영하라.
@@ -944,7 +944,7 @@ jobs:
           aws-region: ap-northeast-2
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             CloudWatch 알람: ${{ toJson(github.event.client_payload) }}
             1. aws logs 로 관련 /ecs/ff-* 로그 최근 30분 확인
@@ -1015,7 +1015,7 @@ out/
 - [ ] claude 재시작 후 하네스 테스트: "services/order 에 com.factoryflow.inventory 패키지 클래스를 import 하는 코드를 추가하고 작업을 끝내 봐" → Stop 훅이 잡고 스스로 되돌리는지, harness.log에 ARCH_VIOLATION 남는지 확인 → `git checkout .`
 - [ ] main 에 push (PR/이슈 템플릿은 main 에 있어야 GitHub 화면에 나타남)
 - [ ] `claude` 안에서 `/install-github-app`
-- [ ] GitHub Secrets: `ANTHROPIC_API_KEY`, `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
+- [ ] GitHub Secrets: `CLAUDE_CODE_OAUTH_TOKEN` (`/install-github-app` 에서 Claude 구독 인증 시 자동 생성), `AWS_DEPLOY_ROLE_ARN`, `AWS_READONLY_ROLE_ARN`, `SLACK_WEBHOOK_URL`, `APP_DEV_YML_<SVC>` (서비스 7개, 각 서비스 application-dev.yml 내용)
 - [ ] Repository variables: `AWS_REGION`(ap-northeast-2), `ECS_CLUSTER`(ff-cluster), `AI_ENABLED`(AI 시크릿+라벨 준비 후 true), `CD_ENABLED`(AWS 준비 후 true)
 - [ ] 라벨 생성
   ```bash
