@@ -48,6 +48,8 @@ jobs:
       group: cd-deploy-${{ matrix.svc }}
       cancel-in-progress: false
     strategy:
+      # 한 서비스가 실패해도 나머지 서비스 배포는 계속한다
+      fail-fast: false
       matrix:
         svc: ${{ fromJson(needs.detect.outputs.services) }}
     steps:
