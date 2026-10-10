@@ -1,5 +1,5 @@
 # FactoryFlow
-현대차 공장 모델 ERP+MES. Java 17, Spring Boot 4.0.8, Gradle(Groovy) 멀티모듈.
+자동차 공장 모델 ERP+MES. Java 17, Spring Boot 4.0.8, Gradle(Groovy) 멀티모듈.
 
 ## 명령
 - 서비스 검사: ./gradlew :services:<svc>:check
