@@ -22,12 +22,17 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             CloudWatch 알람: ${{ toJson(github.event.client_payload) }}
-            1. aws logs 로 관련 /ecs/ff-* 로그 최근 30분 확인
-            2. 에러와 관련된 코드, docs/runbooks/ 확인
-            3. .github/ISSUE_TEMPLATE/incident.md 형식으로 gh issue create --label incident
+            알람 이름(ff-<서비스>-...)에서 서비스를 정한다.
+            1. aws logs 로 /ecs/ff-<서비스> 로그 최근 30분 확인
+               예: aws logs tail /ecs/ff-gateway --since 30m --format short
+               예: aws logs filter-log-events --log-group-name /ecs/ff-gateway --filter-pattern ERROR --start-time <30분 전 epoch ms>
+            2. aws ecs describe-services --cluster ff-cluster --services ff-<서비스> 로 running/desired 수, 최근 이벤트, 배포 상태 확인
+            3. 에러와 관련된 코드, docs/runbooks/ 확인
+            4. .github/ISSUE_TEMPLATE/incident.md 형식으로 gh issue create --label incident
             "조치 결과" 섹션은 비워둔다.
+            aws 명령은 파이프(|), 리다이렉션(>), $(...) 없이 단독으로 실행하라 (허용되지 않아 차단된다).
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Bash(aws logs:*),Bash(gh issue create:*)"
+            --allowedTools "Read,Grep,Glob,Bash(aws logs:*),Bash(aws ecs describe-services:*),Bash(gh issue create:*)"
             --max-turns 20
       - if: always()
         run: |
