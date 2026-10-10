@@ -54,13 +54,19 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
+      # ECR 레포는 IMMUTABLE: 커밋 sha 태그만 쓰고, 같은 sha 이미지가 이미 있으면 다시 push 하지 않는다
+      # (재실행, 같은 커밋 수동 배포 시 "cannot be overwritten" 방지)
       - id: img
         run: |
-          REPO=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}
-          docker build -t $REPO:${{ github.sha }} -t $REPO:latest services/${{ matrix.svc }}
-          docker push $REPO:${{ github.sha }}
-          docker push $REPO:latest
-          echo "image=$REPO:${{ github.sha }}" >> $GITHUB_OUTPUT
+          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:${{ github.sha }}
+          if aws ecr describe-images --repository-name ff-${{ matrix.svc }} \
+               --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
+            echo "이미 있는 이미지 사용: $IMG"
+          else
+            docker build -t $IMG services/${{ matrix.svc }}
+            docker push $IMG
+          fi
+          echo "image=$IMG" >> $GITHUB_OUTPUT
       - run: |
           aws ecs describe-task-definition --task-definition ff-${{ matrix.svc }} \
             --query taskDefinition > td.json
