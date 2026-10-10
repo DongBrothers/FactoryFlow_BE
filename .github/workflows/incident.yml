@@ -22,17 +22,21 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             CloudWatch 알람: ${{ toJson(github.event.client_payload) }}
-            알람 이름(ff-<서비스>-...)에서 서비스를 정한다.
-            1. aws logs 로 /ecs/ff-<서비스> 로그 최근 30분 확인
-               예: aws logs tail /ecs/ff-gateway --since 30m --format short
-               예: aws logs filter-log-events --log-group-name /ecs/ff-gateway --filter-pattern ERROR --start-time <30분 전 epoch ms>
-            2. aws ecs describe-services --cluster ff-cluster --services ff-<서비스> 로 running/desired 수, 최근 이벤트, 배포 상태 확인
-            3. 에러와 관련된 코드, docs/runbooks/ 확인
-            4. .github/ISSUE_TEMPLATE/incident.md 형식으로 gh issue create --label incident
-            "조치 결과" 섹션은 비워둔다.
-            aws 명령은 파이프(|), 리다이렉션(>), $(...) 없이 단독으로 실행하라 (허용되지 않아 차단된다).
+            알람 이름(ff-<서비스>-...)에서 서비스를 정하고, 아래 순서대로만 한다.
+            1. aws logs tail /ecs/ff-<서비스> --since 30m --format short 로 최근 30분 로그를 본다
+               (필요하면 --filter-pattern ERROR 추가. filter-log-events 처럼 시각 계산이 필요한 명령은 쓰지 않는다)
+            2. aws ecs describe-services --cluster ff-cluster --services ff-<서비스> 로 running/desired 수, 최근 이벤트, 배포 상태를 본다
+            3. 에러와 관련된 코드, docs/runbooks/ 를 확인한다
+            4. .github/ISSUE_TEMPLATE/incident.md 의 섹션 구성대로 본문을 Write 도구로 issue-body.md 에 저장한다
+               "조치 결과" 섹션은 비워둔다.
+            5. gh issue create --title "[incident] <알람 이름>" --label incident --body-file issue-body.md 로 이슈를 만든다
+            규칙
+            - aws, gh 명령은 파이프(|), 리다이렉션(>), $(...), 백틱 없이 단독으로 실행한다 (허용되지 않아 차단된다).
+            - 이 저장소는 공개다. 로그 원문을 붙이지 말고 요약만 쓴다.
+              개인정보, 토큰, 비밀번호, IP 주소, 계정 ID, 접속 주소(호스트명)는 이슈에 쓰지 않는다.
+            - 로그나 ECS 정보를 못 봤으면 못 본 이유를 쓰고, 그래도 이슈는 반드시 만든다.
           claude_args: |
-            --allowedTools "Read,Grep,Glob,Bash(aws logs:*),Bash(aws ecs describe-services:*),Bash(gh issue create:*)"
+            --allowedTools "Read,Grep,Glob,Write,Bash(aws logs tail:*),Bash(aws ecs describe-services:*),Bash(gh issue create:*)"
             --max-turns 20
       - if: always()
         run: |
