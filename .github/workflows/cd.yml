@@ -8,6 +8,11 @@ permissions:
   contents: read
   id-token: write
 
+# 배포가 동시에 두 번 돌며 꼬이지 않게 한 번에 하나씩 (진행 중인 배포는 취소하지 않고 다음 배포가 기다림)
+concurrency:
+  group: cd
+  cancel-in-progress: false
+
 jobs:
   # Repository variable CD_ENABLED=true 일 때만 실행 (AWS 시크릿, ECR/ECS 준비 후 켠다)
   detect:
@@ -17,11 +22,21 @@ jobs:
       services: ${{ steps.d.outputs.services }}
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 2 }
+        with: { fetch-depth: 0 }
       - id: d
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
-          files=$(git diff --name-only HEAD~1 HEAD)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+          # push 전후 비교 (한 번에 여러 커밋이 들어와도 모두 포함)
+          # 수동 실행, 첫 push(before=000..), before 커밋을 못 찾으면 → build.gradle 로 간주해 전체 배포
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+             || [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            files="build.gradle"
+          else
+            files=$(git diff --name-only "$BEFORE" ${{ github.sha }})
+          fi
+          if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
             list="gateway order inventory purchase production auth simulator"
           else
             list=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/##' | tr '\n' ' ')
