@@ -8,11 +8,6 @@ permissions:
   contents: read
   id-token: write
 
-# 배포가 동시에 두 번 돌며 꼬이지 않게 한 번에 하나씩 (진행 중인 배포는 취소하지 않고 다음 배포가 기다림)
-concurrency:
-  group: cd
-  cancel-in-progress: false
-
 jobs:
   # Repository variable CD_ENABLED=true 일 때만 실행 (AWS 시크릿, ECR/ECS 준비 후 켠다)
   detect:
@@ -47,6 +42,11 @@ jobs:
     needs: detect
     if: needs.detect.outputs.services != '[]'
     runs-on: ubuntu-latest
+    # 같은 서비스 배포만 한 번에 하나씩. 워크플로 전체를 묶지 않아서 detect 는 push 마다 항상 돈다.
+    # 대기 중인 오래된 배포가 취소돼도 같은 서비스의 더 최신 커밋 배포가 그 변경을 포함한다.
+    concurrency:
+      group: cd-deploy-${{ matrix.svc }}
+      cancel-in-progress: false
     strategy:
       matrix:
         svc: ${{ fromJson(needs.detect.outputs.services) }}
