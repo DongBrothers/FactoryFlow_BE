@@ -17,11 +17,21 @@ jobs:
       services: ${{ steps.d.outputs.services }}
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 2 }
+        with: { fetch-depth: 0 }
       - id: d
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
-          files=$(git diff --name-only HEAD~1 HEAD)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
+          # push 전후 비교 (한 번에 여러 커밋이 들어와도 모두 포함)
+          # 수동 실행, 첫 push(before=000..), before 커밋을 못 찾으면 → build.gradle 로 간주해 전체 배포
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
+             || [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            files="build.gradle"
+          else
+            files=$(git diff --name-only "$BEFORE" ${{ github.sha }})
+          fi
+          if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
             list="gateway order inventory purchase production auth simulator"
           else
             list=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/##' | tr '\n' ' ')
@@ -32,6 +42,11 @@ jobs:
     needs: detect
     if: needs.detect.outputs.services != '[]'
     runs-on: ubuntu-latest
+    # 같은 서비스 배포만 한 번에 하나씩. 워크플로 전체를 묶지 않아서 detect 는 push 마다 항상 돈다.
+    # 대기 중인 오래된 배포가 취소돼도 같은 서비스의 더 최신 커밋 배포가 그 변경을 포함한다.
+    concurrency:
+      group: cd-deploy-${{ matrix.svc }}
+      cancel-in-progress: false
     strategy:
       matrix:
         svc: ${{ fromJson(needs.detect.outputs.services) }}
@@ -54,13 +69,19 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
+      # ECR 레포는 IMMUTABLE: 커밋 sha 태그만 쓰고, 같은 sha 이미지가 이미 있으면 다시 push 하지 않는다
+      # (재실행, 같은 커밋 수동 배포 시 "cannot be overwritten" 방지)
       - id: img
         run: |
-          REPO=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}
-          docker build -t $REPO:${{ github.sha }} -t $REPO:latest services/${{ matrix.svc }}
-          docker push $REPO:${{ github.sha }}
-          docker push $REPO:latest
-          echo "image=$REPO:${{ github.sha }}" >> $GITHUB_OUTPUT
+          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:${{ github.sha }}
+          if aws ecr describe-images --repository-name ff-${{ matrix.svc }} \
+               --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
+            echo "이미 있는 이미지 사용: $IMG"
+          else
+            docker build -t $IMG services/${{ matrix.svc }}
+            docker push $IMG
+          fi
+          echo "image=$IMG" >> $GITHUB_OUTPUT
       - run: |
           aws ecs describe-task-definition --task-definition ff-${{ matrix.svc }} \
             --query taskDefinition > td.json
