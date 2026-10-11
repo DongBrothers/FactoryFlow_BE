@@ -26,72 +26,53 @@ class MigrationTest {
                 new DriverManagerDataSource(
                         mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
         var result = Flyway.configure().dataSource(dataSource).load().migrate();
-        assertThat(result.targetSchemaVersion).isEqualTo("1");
+        assertThat(result.targetSchemaVersion).isEqualTo("2");
         jdbc = new JdbcTemplate(dataSource);
     }
 
     @Test
-    void createsSeparateCustomerAndAdminTables() {
+    void createsUserAccountAndDropsPlaceholderTables() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
-        assertThat(tables).contains("customer", "admin");
+        assertThat(tables).contains("user_account");
+        assertThat(tables).doesNotContain("customer", "admin");
     }
 
     @Test
-    void rejectsDuplicateCustomerEmail() {
-        insertCustomer("dup@factoryflow.test");
+    void rejectsDuplicateEmployeeNo() {
+        insertUser("E1001", "a@factoryflow.test");
 
-        assertThatThrownBy(() -> insertCustomer("dup@factoryflow.test"))
+        assertThatThrownBy(() -> insertUser("E1001", "b@factoryflow.test"))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_customer_email");
+                .hasMessageContaining("uk_user_account_employee_no");
     }
 
     @Test
-    void rejectsDuplicateAdminEmail() {
-        insertAdmin("admin-dup@factoryflow.test");
+    void rejectsDuplicateEmail() {
+        insertUser("E2001", "dup@factoryflow.test");
 
-        assertThatThrownBy(() -> insertAdmin("admin-dup@factoryflow.test"))
+        assertThatThrownBy(() -> insertUser("E2002", "dup@factoryflow.test"))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_admin_email");
+                .hasMessageContaining("uk_user_account_email");
     }
 
     @Test
-    void adminRequiresDepartment() {
-        assertThatThrownBy(
-                        () ->
-                                jdbc.update(
-                                        "INSERT INTO admin (email, password, name, position,"
-                                                + " created_at, updated_at)"
-                                                + " VALUES ('no-dept@factoryflow.test', 'hash',"
-                                                + " '관리자', '과장', NOW(6), NOW(6))"))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("department");
+    void allowsNullPasswordForInvitedAccount() {
+        // 발급(INVITED) 직후엔 비번이 없다. 활성화 때 설정된다.
+        insertUser("E3001", "invited@factoryflow.test");
+
+        var password =
+                jdbc.queryForObject(
+                        "SELECT password FROM user_account WHERE employee_no = 'E3001'",
+                        String.class);
+        assertThat(password).isNull();
     }
 
-    @Test
-    void adminRequiresPosition() {
-        assertThatThrownBy(
-                        () ->
-                                jdbc.update(
-                                        "INSERT INTO admin (email, password, name, department,"
-                                                + " created_at, updated_at)"
-                                                + " VALUES ('no-position@factoryflow.test', 'hash',"
-                                                + " '관리자', '구매팀', NOW(6), NOW(6))"))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("position");
-    }
-
-    private void insertCustomer(String email) {
+    private void insertUser(String employeeNo, String email) {
         jdbc.update(
-                "INSERT INTO customer (email, password, name, created_at, updated_at)"
-                        + " VALUES (?, 'hash', '고객', NOW(6), NOW(6))",
-                email);
-    }
-
-    private void insertAdmin(String email) {
-        jdbc.update(
-                "INSERT INTO admin (email, password, name, department, position, created_at,"
-                        + " updated_at) VALUES (?, 'hash', '관리자', '구매팀', '과장', NOW(6), NOW(6))",
+                "INSERT INTO user_account (employee_no, email, name, role, status, created_at,"
+                        + " updated_at) VALUES (?, ?, '홍길동', 'WORKER', 'INVITED', NOW(6), NOW(6))",
+                employeeNo,
                 email);
     }
 }
