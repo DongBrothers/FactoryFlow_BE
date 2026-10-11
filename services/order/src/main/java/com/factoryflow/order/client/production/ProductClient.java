@@ -13,7 +13,10 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.service.annotation.GetExchange;
 import org.springframework.web.service.annotation.HttpExchange;
 
-/** production 내부 API (HTTP Interface). 구현은 {@link ProductClientConfig} 가 만든다. */
+/**
+ * production 내부 API (HTTP Interface). 구현은 {@link
+ * com.factoryflow.order.config.client.production.ProductClientConfig} 가 만든다.
+ */
 @HttpExchange("/internal/products")
 public interface ProductClient {
 

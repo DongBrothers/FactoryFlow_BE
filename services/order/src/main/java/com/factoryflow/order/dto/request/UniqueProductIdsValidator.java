@@ -7,19 +7,18 @@ import java.util.List;
 import java.util.Objects;
 
 public class UniqueProductIdsValidator
-        implements ConstraintValidator<UniqueProductIds, List<CreateOrderRequest.Item>> {
+        implements ConstraintValidator<UniqueProductIds, List<CreateOrderItemRequest>> {
 
     /** null 이나 productId 가 빠진 항목은 다른 제약(@NotEmpty, @NotNull)이 막는다. */
     @Override
-    public boolean isValid(
-            List<CreateOrderRequest.Item> items, ConstraintValidatorContext context) {
+    public boolean isValid(List<CreateOrderItemRequest> items, ConstraintValidatorContext context) {
         if (items == null) {
             return true;
         }
         List<Long> productIds =
                 items.stream()
                         .filter(Objects::nonNull)
-                        .map(CreateOrderRequest.Item::productId)
+                        .map(CreateOrderItemRequest::productId)
                         .filter(Objects::nonNull)
                         .toList();
         return productIds.size() == new HashSet<>(productIds).size();

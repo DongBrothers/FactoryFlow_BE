@@ -6,9 +6,11 @@ import com.factoryflow.order.client.production.ProductClient;
 import com.factoryflow.order.client.production.dto.response.ProductResponse;
 import com.factoryflow.order.domain.CustomerOrder;
 import com.factoryflow.order.domain.OrderItem;
+import com.factoryflow.order.dto.request.CreateOrderItemRequest;
 import com.factoryflow.order.dto.request.CreateOrderRequest;
 import com.factoryflow.order.dto.response.CreateOrderResponse;
 import com.factoryflow.order.event.publisher.OrderCreated;
+import com.factoryflow.order.event.publisher.OrderCreatedProduct;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.factoryflow.order.repository.CustomerOrderRepository;
 import com.factoryflow.order.repository.OrderItemRepository;
@@ -48,7 +50,7 @@ public class OrderService {
      */
     public CreateOrderResponse create(Long customerId, CreateOrderRequest request) {
         List<Long> productIds =
-                request.items().stream().map(CreateOrderRequest.Item::productId).toList();
+                request.items().stream().map(CreateOrderItemRequest::productId).toList();
         Map<Long, ProductResponse> products =
                 productClient.findProducts(productIds).stream()
                         .collect(Collectors.toMap(ProductResponse::id, Function.identity()));
@@ -85,7 +87,7 @@ public class OrderService {
                 new OrderCreated(
                         order.getId(),
                         items.stream()
-                                .map(i -> new OrderCreated.Product(i.getProductId(), i.getQty()))
+                                .map(i -> new OrderCreatedProduct(i.getProductId(), i.getQty()))
                                 .toList()));
         return CreateOrderResponse.from(order);
     }

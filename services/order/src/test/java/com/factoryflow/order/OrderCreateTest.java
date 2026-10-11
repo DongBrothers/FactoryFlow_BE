@@ -186,7 +186,8 @@ class OrderCreateTest {
                                         "$.paths['/orders'].post.parameters[?(@.name == 'X-User-Id')].description")
                                 .value("로그인한 고객 번호 (gateway 가 넣음)"))
                 .andExpect(
-                        jsonPath("$.components.schemas.Item.properties.qty.description")
+                        jsonPath(
+                                        "$.components.schemas.CreateOrderItemRequest.properties.qty.description")
                                 .value("주문 수량 (1 이상)"))
                 .andExpect(
                         jsonPath(
