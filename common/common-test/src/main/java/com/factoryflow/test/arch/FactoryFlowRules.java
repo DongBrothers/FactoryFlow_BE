@@ -20,6 +20,8 @@ import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.JavaParameter;
+import com.tngtech.archunit.core.domain.JavaParameterizedType;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.CompositeArchRule;
@@ -110,6 +112,26 @@ public final class FactoryFlowRules {
                     "createNativeQuery",
                     "createNamedQuery",
                     "createStoredProcedureQuery");
+    private static final Set<String> PERSISTENCE_TYPES =
+            Set.of(
+                    "jakarta.persistence.Entity",
+                    "jakarta.persistence.Embeddable",
+                    "jakarta.persistence.MappedSuperclass");
+    private static final String CONSTRAINT = "jakarta.validation.Constraint";
+    private static final String CONSTRAINT_VALIDATOR = "jakarta.validation.ConstraintValidator";
+    private static final String JPA_QUERY_FACTORY = "com.querydsl.jpa.impl.JPAQueryFactory";
+    private static final String SERVICE = "org.springframework.stereotype.Service";
+    private static final String HTTP_SERVICE_PROXY_FACTORY =
+            "org.springframework.web.service.invoker.HttpServiceProxyFactory";
+    private static final String CUSTOM_EXCEPTION =
+            "com.factoryflow.common.web.exception.CustomException";
+    private static final Set<String> CONTEXT_TESTS =
+            Set.of(
+                    "org.springframework.boot.test.context.SpringBootTest",
+                    "org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest",
+                    "org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest");
+    private static final String TEST_CONTAINERS_CONFIG =
+            "com.factoryflow.test.container.TestContainersConfig";
     private static final String OPERATION = "io.swagger.v3.oas.annotations.Operation";
     private static final Set<String> API_RESPONSE_DOCS =
             Set.of(
@@ -287,6 +309,175 @@ public final class FactoryFlowRules {
                     .because(
                             "설정은 config/ 에 둔다. 다른 서비스 호출 설정({상대 도메인}ClientConfig)은"
                                     + " client/{상대 서비스}/ 에 둔다");
+
+    public static final ArchRule ENTITIES_IN_DOMAIN =
+            classes()
+                    .that(
+                            describe(
+                                    "are JPA entities, embeddables or mapped superclasses of a service",
+                                    c ->
+                                            serviceOf(c) != null
+                                                    && PERSISTENCE_TYPES.stream()
+                                                            .anyMatch(c::isAnnotatedWith)))
+                    .should()
+                    .resideInAPackage("..domain..")
+                    .because("엔티티는 domain/ 에 둔다");
+
+    public static final ArchRule CONSTRAINTS_IN_DTO_REQUEST =
+            classes()
+                    .that(
+                            describe(
+                                    "are custom constraints or their validators",
+                                    c ->
+                                            serviceOf(c) != null
+                                                    && (c.isAnnotatedWith(CONSTRAINT)
+                                                            || c.isAssignableTo(
+                                                                    CONSTRAINT_VALIDATOR))))
+                    .should()
+                    .resideInAPackage("..dto.request..")
+                    .because("요청 전용 커스텀 제약은 dto/request 에 둔다");
+
+    public static final ArchRule QUERYDSL_LAYOUT =
+            CompositeArchRule.of(
+                            classes()
+                                    .that(
+                                            describe(
+                                                    "use JPAQueryFactory",
+                                                    c ->
+                                                            serviceOf(c) != null
+                                                                    && c
+                                                                            .getDirectDependenciesFromSelf()
+                                                                            .stream()
+                                                                            .anyMatch(
+                                                                                    d ->
+                                                                                            d.getTargetClass()
+                                                                                                    .getName()
+                                                                                                    .equals(
+                                                                                                            JPA_QUERY_FACTORY))))
+                                    .should()
+                                    .haveSimpleNameEndingWith("RepositoryImpl")
+                                    .andShould()
+                                    .resideInAPackage("..repository.."))
+                    .and(
+                            classes()
+                                    .that()
+                                    .haveSimpleNameEndingWith("RepositoryImpl")
+                                    .should(
+                                            check(
+                                                    "implement {Entity}RepositoryCustom of the same name",
+                                                    c ->
+                                                            c.getRawInterfaces().stream()
+                                                                    .anyMatch(
+                                                                            i ->
+                                                                                    i.getSimpleName()
+                                                                                            .equals(
+                                                                                                    c.getSimpleName()
+                                                                                                                    .replace(
+                                                                                                                            "RepositoryImpl",
+                                                                                                                            "")
+                                                                                                            + "RepositoryCustom")),
+                                                    JavaClass::getName)))
+                    .and(
+                            classes()
+                                    .that()
+                                    .haveSimpleNameEndingWith("RepositoryCustom")
+                                    .should()
+                                    .beInterfaces()
+                                    .andShould()
+                                    .resideInAPackage("..repository.."))
+                    .because(
+                            "QueryDSL 은 repository/{엔티티}RepositoryCustom(인터페이스) +"
+                                    + " {엔티티}RepositoryImpl 에서만 쓴다");
+
+    public static final ArchRule REPOSITORY_NAMED_BY_ENTITY =
+            classes()
+                    .that(describe("are Spring Data repositories", c -> entityOf(c) != null))
+                    .should(
+                            check(
+                                    "be named {Entity}Repository",
+                                    c -> c.getSimpleName().equals(entityOf(c) + "Repository"),
+                                    JavaClass::getName))
+                    .because("Repository 는 {엔티티}Repository");
+
+    public static final ArchRule SERVICE_NAMING =
+            classes()
+                    .that(
+                            describe(
+                                    "are @Service beans of a service",
+                                    c -> serviceOf(c) != null && c.isAnnotatedWith(SERVICE)))
+                    .should()
+                    .haveSimpleNameEndingWith("Service")
+                    .because("Service 는 {도메인}Service");
+
+    public static final ArchRule CLIENT_CONFIG_USES_PROXY_FACTORY =
+            classes()
+                    .that()
+                    .haveSimpleNameEndingWith("ClientConfig")
+                    .should()
+                    .dependOnClassesThat()
+                    .haveFullyQualifiedName(HTTP_SERVICE_PROXY_FACTORY)
+                    .because(
+                            "{상대 도메인}Client 의 구현은 {상대 도메인}ClientConfig 가 HttpServiceProxyFactory 로 만든다");
+
+    public static final ArchRule INTERNAL_API_RESPONSE_NAMING =
+            methods()
+                    .that()
+                    .areDeclaredInClassesThat(
+                            describe(
+                                    "are internal API controllers",
+                                    c ->
+                                            CONTROLLERS.test(c)
+                                                    && c.getSimpleName().startsWith("Internal")))
+                    .and(describe("are request handlers", FactoryFlowRules::isHandler))
+                    .should(
+                            check(
+                                    "return only Internal*Response DTOs",
+                                    m ->
+                                            typesIn(m.getReturnType())
+                                                    .filter(API_RESPONSES)
+                                                    .allMatch(
+                                                            c ->
+                                                                    c.getSimpleName()
+                                                                            .startsWith(
+                                                                                    "Internal")),
+                                    JavaMethod::getFullName))
+                    .because("내부 API 응답은 Internal{도메인}Response");
+
+    public static final ArchRule FACTORY_METHOD_ARITY =
+            methods()
+                    .that()
+                    .areDeclaredInClassesThat(API_RESPONSES)
+                    .and()
+                    .areStatic()
+                    .and(
+                            describe(
+                                    "are named from or of",
+                                    m -> m.getName().equals("from") || m.getName().equals("of")))
+                    .should(
+                            check(
+                                    "take one source in from(...) and several values in of(...)",
+                                    m ->
+                                            m.getName().equals("from")
+                                                    ? m.getRawParameterTypes().size() == 1
+                                                    : m.getRawParameterTypes().size() >= 2,
+                                    JavaMethod::getFullName))
+                    .because("응답 DTO 는 도메인 객체 하나를 바꿀 때 from(원본), 값 여러 개로 만들 때 of(...)");
+
+    public static final ArchRule SERVICE_THROWS_CUSTOM_EXCEPTION =
+            noClasses()
+                    .that()
+                    .resideInAPackage("..service..")
+                    .should()
+                    .callConstructorWhere(
+                            describe(
+                                    "the target is a RuntimeException other than CustomException",
+                                    (JavaConstructorCall call) ->
+                                            call.getTargetOwner()
+                                                            .isAssignableTo(RuntimeException.class)
+                                                    && !call.getTargetOwner()
+                                                            .getName()
+                                                            .equals(CUSTOM_EXCEPTION)))
+                    .because("service 의 예외는 {서비스}ErrorCode 를 담은 CustomException 으로 던진다");
 
     public static final ArchRule CONTROLLER_NAMING =
             classes()
@@ -648,6 +839,28 @@ public final class FactoryFlowRules {
                             "테스트를 끄거나 건너뛰지 않는다 (@Disabled*, @Enabled*, Assumptions,"
                                     + " disabledWithoutDocker)");
 
+    public static final ArchRule TESTS_USE_TESTCONTAINERS =
+            CompositeArchRule.of(
+                            classes()
+                                    .that(
+                                            describe(
+                                                    "are @SpringBootTest or @DataJpaTest",
+                                                    c ->
+                                                            CONTEXT_TESTS.stream()
+                                                                    .anyMatch(c::isAnnotatedWith)))
+                                    .should(
+                                            check(
+                                                    "import TestContainersConfig",
+                                                    FactoryFlowRules::importsTestContainers,
+                                                    JavaClass::getName)))
+                    .and(
+                            noClasses()
+                                    .should()
+                                    .dependOnClassesThat()
+                                    .resideInAnyPackage(
+                                            "org.h2..", "org.hsqldb..", "org.apache.derby.."))
+                    .because("테스트의 DB, MQ, Redis 는 Testcontainers (TestContainersConfig) 로 띄운다");
+
     public static final ArchRule MOCK_ONLY_CLIENT_AND_CLOCK =
             fields().that(
                             describe(
@@ -896,6 +1109,50 @@ public final class FactoryFlowRules {
             return null;
         }
         return SERVICES.contains(parts[2]) ? parts[2] : null;
+    }
+
+    // Spring Data repository 면 엔티티 이름, 아니면 null (JpaRepository<CustomerOrder, Long> ->
+    // CustomerOrder)
+    private static String entityOf(JavaClass c) {
+        if (serviceOf(c) == null || !c.isInterface()) {
+            return null;
+        }
+        return c.getInterfaces().stream()
+                .filter(JavaParameterizedType.class::isInstance)
+                .map(JavaParameterizedType.class::cast)
+                .filter(t -> t.toErasure().getName().startsWith("org.springframework.data."))
+                .filter(t -> !t.getActualTypeArguments().isEmpty())
+                .map(t -> t.getActualTypeArguments().get(0).toErasure().getSimpleName())
+                .findFirst()
+                .orElse(null);
+    }
+
+    // 반환 타입과 그 타입 인자에 들어 있는 클래스 (ApiResponse<List<X>> -> ApiResponse, List, X)
+    private static Stream<JavaClass> typesIn(JavaType type) {
+        Stream<JavaClass> self = Stream.of(type.toErasure());
+        if (type instanceof JavaParameterizedType parameterized) {
+            return Stream.concat(
+                    self,
+                    parameterized.getActualTypeArguments().stream()
+                            .flatMap(FactoryFlowRules::typesIn));
+        }
+        return self;
+    }
+
+    private static boolean importsTestContainers(JavaClass c) {
+        for (JavaClass type = c; type != null; type = type.getRawSuperclass().orElse(null)) {
+            boolean imported =
+                    type
+                            .tryGetAnnotationOfType("org.springframework.context.annotation.Import")
+                            .flatMap(a -> a.get("value"))
+                            .stream()
+                            .flatMap(FactoryFlowRules::strings)
+                            .anyMatch(v -> v.contains(TEST_CONTAINERS_CONFIG));
+            if (imported) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isInClientPackage(JavaClass c) {

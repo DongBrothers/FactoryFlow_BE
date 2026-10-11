@@ -17,6 +17,23 @@ public final class ServiceArchitectureRules {
 
     @ArchTest static final ArchRule packages = FactoryFlowRules.LAYER_PACKAGES;
     @ArchTest static final ArchRule config = FactoryFlowRules.CONFIG_PACKAGE;
+    @ArchTest static final ArchRule entities = FactoryFlowRules.ENTITIES_IN_DOMAIN;
+    @ArchTest static final ArchRule constraints = FactoryFlowRules.CONSTRAINTS_IN_DTO_REQUEST;
+    @ArchTest static final ArchRule querydslLayout = FactoryFlowRules.QUERYDSL_LAYOUT;
+    @ArchTest static final ArchRule repositoryNaming = FactoryFlowRules.REPOSITORY_NAMED_BY_ENTITY;
+    @ArchTest static final ArchRule serviceNaming = FactoryFlowRules.SERVICE_NAMING;
+
+    @ArchTest
+    static final ArchRule clientConfig = FactoryFlowRules.CLIENT_CONFIG_USES_PROXY_FACTORY;
+
+    @ArchTest
+    static final ArchRule internalResponses = FactoryFlowRules.INTERNAL_API_RESPONSE_NAMING;
+
+    @ArchTest static final ArchRule factoryArity = FactoryFlowRules.FACTORY_METHOD_ARITY;
+
+    @ArchTest
+    static final ArchRule customException = FactoryFlowRules.SERVICE_THROWS_CUSTOM_EXCEPTION;
+
     @ArchTest static final ArchRule controllerNaming = FactoryFlowRules.CONTROLLER_NAMING;
     @ArchTest static final ArchRule errorCode = FactoryFlowRules.ERROR_CODE_NAMING;
     @ArchTest static final ArchRule listenerNaming = FactoryFlowRules.EVENT_LISTENER_NAMING;

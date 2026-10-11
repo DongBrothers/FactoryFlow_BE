@@ -9,6 +9,7 @@ public final class TestCodeRules {
     @ArchTest static final ArchRule noSkipped = FactoryFlowRules.NO_SKIPPED_TESTS;
     @ArchTest static final ArchRule mocks = FactoryFlowRules.MOCK_ONLY_CLIENT_AND_CLOCK;
     @ArchTest static final ArchRule inlineMocks = FactoryFlowRules.NO_INLINE_MOCK_OF_OUR_CODE;
+    @ArchTest static final ArchRule testcontainers = FactoryFlowRules.TESTS_USE_TESTCONTAINERS;
 
     private TestCodeRules() {}
 }
