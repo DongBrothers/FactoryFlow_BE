@@ -1,4 +1,4 @@
-package com.factoryflow.order.dto;
+package com.factoryflow.order.dto.request;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;

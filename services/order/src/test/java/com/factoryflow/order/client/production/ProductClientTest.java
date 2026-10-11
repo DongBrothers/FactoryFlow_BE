@@ -8,7 +8,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.production.dto.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductInfo;
 import com.factoryflow.order.exception.OrderErrorCode;
 import java.net.SocketTimeoutException;
 import java.util.List;

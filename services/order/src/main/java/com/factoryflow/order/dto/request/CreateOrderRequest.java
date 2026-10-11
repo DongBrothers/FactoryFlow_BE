@@ -1,4 +1,4 @@
-package com.factoryflow.order.dto;
+package com.factoryflow.order.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;

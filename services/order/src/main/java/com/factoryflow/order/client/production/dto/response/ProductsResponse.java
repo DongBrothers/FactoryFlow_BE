@@ -1,4 +1,4 @@
-package com.factoryflow.order.client.production.dto;
+package com.factoryflow.order.client.production.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;

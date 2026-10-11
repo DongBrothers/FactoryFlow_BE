@@ -1,4 +1,4 @@
-package com.factoryflow.order.dto;
+package com.factoryflow.order.dto.response;
 
 import com.factoryflow.order.domain.CustomerOrder;
 import io.swagger.v3.oas.annotations.media.Schema;

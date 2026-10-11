@@ -1,8 +1,8 @@
 package com.factoryflow.order.client.production;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.production.dto.ProductInfo;
-import com.factoryflow.order.client.production.dto.ProductsResponse;
+import com.factoryflow.order.client.production.dto.response.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductsResponse;
 import com.factoryflow.order.exception.OrderErrorCode;
 import java.util.Collection;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.factoryflow.production.dto;
+package com.factoryflow.production.dto.response;
 
 import com.factoryflow.production.domain.Product;
 import io.swagger.v3.oas.annotations.media.Schema;

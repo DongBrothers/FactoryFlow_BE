@@ -1,6 +1,6 @@
 package com.factoryflow.production.service;
 
-import com.factoryflow.production.dto.InternalProductResponse;
+import com.factoryflow.production.dto.response.InternalProductResponse;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import java.util.HashSet;

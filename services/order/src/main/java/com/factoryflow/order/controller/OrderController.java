@@ -1,8 +1,8 @@
 package com.factoryflow.order.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
-import com.factoryflow.order.dto.CreateOrderRequest;
-import com.factoryflow.order.dto.CreateOrderResponse;
+import com.factoryflow.order.dto.request.CreateOrderRequest;
+import com.factoryflow.order.dto.response.CreateOrderResponse;
 import com.factoryflow.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

@@ -1,7 +1,7 @@
 package com.factoryflow.production.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
-import com.factoryflow.production.dto.InternalProductResponse;
+import com.factoryflow.production.dto.response.InternalProductResponse;
 import com.factoryflow.production.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
