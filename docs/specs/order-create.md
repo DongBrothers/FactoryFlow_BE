@@ -44,6 +44,7 @@
 - production 내부 API 의 `ids` 가 없거나 숫자가 아니면 400 이다
 - 형식 오류(400)는 모두 common-web 공통 핸들러가 `VALIDATION_ERROR` 코드로 응답한다 (필수 헤더·파라미터 누락, 파라미터 형식 오류, 깨진 JSON, Bean Validation 실패)
 - production 주소는 설정 `clients.production.url` 로 받는다 (환경별로 다름)
+- 두 API(`POST /orders`, `GET /internal/products`)는 springdoc OpenAPI 로 문서화한다. order, production 은 `/v3/api-docs` 와 Swagger UI 를 연다. 응답 코드는 API 마다 `@ApiResponse` 로 적고, 공통 예외 핸들러의 응답을 모든 API 에 자동으로 붙이지 않는다 (`springdoc.override-with-generic-response: false`)
 
 ## 관련 이벤트 (events.md 참조)
 | 이벤트 | 발행 → 수신 | payload |
@@ -59,3 +60,4 @@
 - [ ] order_no 는 UNIQUE 다 (같은 값 두 번 저장 불가)
 - [ ] production `GET /internal/products?ids=` 는 있는 제품만 돌려주고, BOM 유무로 orderable 을 정한다
 - [ ] 깨진 JSON 본문, `ids` 누락, `ids` 숫자 아님은 모두 400 VALIDATION_ERROR (공통 핸들러 테스트)
+- [ ] `/v3/api-docs` 에 두 API 의 summary, 실제로 나는 응답 코드(`POST /orders`: 201, 400, 404, 503 / `GET /internal/products`: 200, 400), 요청·응답 필드 설명이 나온다. `POST /orders` 에 500 은 나오지 않는다
