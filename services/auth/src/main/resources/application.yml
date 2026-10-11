@@ -11,6 +11,10 @@ spring:
 server:
   port: 8080
 
+auth:
+  allowed-email-domain: gmail.com   # 로컬·데모용 placeholder. 운영은 회사 도메인
+  activation-token-ttl: 24h
+
 management:
   endpoints:
     web:

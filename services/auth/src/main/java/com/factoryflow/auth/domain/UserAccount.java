@@ -1,6 +1,8 @@
 package com.factoryflow.auth.domain;
 
+import com.factoryflow.auth.exception.AuthErrorCode;
 import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.exception.CustomException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -47,4 +49,26 @@ public class UserAccount extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AccountStatus status;
+
+    private UserAccount(String employeeNo, String email, String name, Role role) {
+        this.employeeNo = employeeNo;
+        this.email = email;
+        this.name = name;
+        this.role = role;
+        this.status = AccountStatus.INVITED;
+    }
+
+    /** 관리자 발급: 비번 없이 INVITED 상태로 생성한다. */
+    public static UserAccount invite(String employeeNo, String email, String name, Role role) {
+        return new UserAccount(employeeNo, email, name, role);
+    }
+
+    /** 사원 활성화: INVITED 상태에서만 비번을 설정하고 ACTIVE 로 전환한다. */
+    public void activate(String encodedPassword) {
+        if (this.status != AccountStatus.INVITED) {
+            throw new CustomException(AuthErrorCode.ACCOUNT_NOT_INVITED);
+        }
+        this.password = encodedPassword;
+        this.status = AccountStatus.ACTIVE;
+    }
 }
