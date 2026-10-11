@@ -12,6 +12,7 @@
 - 외부에서 들어오는 호출(Controller, Listener)은 service 를 거친다. Repository 직접 호출 금지
 - RabbitTemplate 직접 사용 금지. EventPublisher 사용
 - 생성자 주입만. System.out 금지, 로그는 Slf4j
+- 요청 값 검증은 Bean Validation. @RequestBody DTO 는 필드 제약 + @Valid, @RequestParam/@PathVariable 은 파라미터에 제약만 단다 (Spring 내장 검증, 컨트롤러에 @Validated 붙이지 않음). 기본 제약으로 안 되는 형식 규칙은 커스텀 제약. 실패는 공통 핸들러가 400. 서비스는 비즈니스 규칙(없음 404, 충돌 409)만 확인
 - 테스트 삭제, @Disabled, 의미 없는 assert 금지. 테스트가 틀렸다고 판단되면 이유를 말하고 멈춘다
 
 ## 패키지 구조 (서비스별)

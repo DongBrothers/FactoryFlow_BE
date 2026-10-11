@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
@@ -27,6 +28,15 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException e) {
         log.error("[Common] 유효성 검사 실패: {}", e.getMessage());
         String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleHandlerMethodValidation(
+            HandlerMethodValidationException e) {
+        log.error("[Common] 유효성 검사 실패: {}", e.getMessage());
+        String message = e.getAllErrors().get(0).getDefaultMessage();
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
     }
