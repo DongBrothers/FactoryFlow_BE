@@ -30,7 +30,14 @@ class ActivationTokenStoreTest {
         redisTemplate.afterPropertiesSet();
         store =
                 new ActivationTokenStore(
-                        redisTemplate, new AuthProperties("gmail.com", Duration.ofMinutes(5)));
+                        redisTemplate,
+                        new AuthProperties(
+                                "gmail.com",
+                                Duration.ofMinutes(5),
+                                Duration.ofMinutes(15),
+                                Duration.ofDays(14),
+                                5,
+                                Duration.ofMinutes(15)));
     }
 
     @Test

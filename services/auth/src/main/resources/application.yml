@@ -14,6 +14,10 @@ server:
 auth:
   allowed-email-domain: gmail.com   # 로컬·데모용 placeholder. 운영은 회사 도메인
   activation-token-ttl: 24h
+  access-token-ttl: 15m
+  refresh-token-ttl: 14d
+  max-login-attempts: 5
+  login-lock-window: 15m
 
 management:
   endpoints:
