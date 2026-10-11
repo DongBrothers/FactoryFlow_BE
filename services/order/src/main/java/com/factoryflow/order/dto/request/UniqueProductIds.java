@@ -8,7 +8,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** 주문 품목 목록에 같은 productId 가 두 번 나오면 안 된다. */
 @Documented
 @Constraint(validatedBy = UniqueProductIdsValidator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})

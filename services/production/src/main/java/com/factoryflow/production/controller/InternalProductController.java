@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 서비스 간 호출 전용. gateway 에 노출하지 않는다. */
 @Tag(name = "제품 (내부)", description = "서비스 간 호출 전용. gateway 에 노출하지 않음")
 @RestController
 @RequestMapping("/internal/products")

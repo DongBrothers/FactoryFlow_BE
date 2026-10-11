@@ -6,7 +6,6 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-/** 테스트 코드 규칙. */
 @AnalyzeClasses(
         packages = "com.factoryflow.simulator",
         importOptions = ImportOption.OnlyIncludeTests.class)

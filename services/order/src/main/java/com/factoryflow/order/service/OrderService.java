@@ -30,8 +30,6 @@ public class OrderService {
     private final CustomerOrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final EventPublisher eventPublisher;
-
-    /** Spring Boot 가 만드는 TransactionTemplate (기본 전파, 격리 수준). */
     private final TransactionTemplate transactionTemplate;
 
     /**

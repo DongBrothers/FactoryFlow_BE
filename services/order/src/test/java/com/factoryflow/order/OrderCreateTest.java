@@ -214,7 +214,6 @@ class OrderCreateTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
     }
 
-    /** 형식 오류는 production 을 부르기 전에 막히고, 아무것도 저장되지 않는다. */
     private void assertRejectedBeforeLookup() {
         verifyNoInteractions(productClient);
         assertNothingSaved();

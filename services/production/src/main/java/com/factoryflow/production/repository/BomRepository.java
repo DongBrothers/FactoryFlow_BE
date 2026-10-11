@@ -9,7 +9,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface BomRepository extends JpaRepository<Bom, Long> {
 
-    /** 주어진 제품 중 BOM 이 하나 이상 있는 제품 id. */
     @Query(
             "SELECT DISTINCT b.productId FROM Bom b"
                     + " WHERE b.productId IN :productIds AND b.isDeleted = false")
