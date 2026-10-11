@@ -29,7 +29,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
             MethodArgumentNotValidException e) {
-        log.error("[Common] 유효성 검사 실패: {}", e.getMessage());
+        log.error(
+                "[Common] 유효성 검사 실패: {}",
+                e.getBindingResult().getFieldErrors().stream()
+                        .map(error -> error.getField() + "(" + error.getCode() + ")")
+                        .toList());
         String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
@@ -80,13 +84,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        log.error("[Common] 파라미터 형식 오류: {}", e.getMessage());
+        log.error(
+                "[Common] 파라미터 형식 오류: {} 는 {} 여야 한다",
+                e.getName(),
+                e.getRequiredType() == null ? "?" : e.getRequiredType().getSimpleName());
         return badRequest(e.getName() + " 값의 형식이 올바르지 않습니다.");
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
-        log.error("[Common] 요청 본문 읽기 실패: {}", e.getMessage());
+        log.error("[Common] 요청 본문 읽기 실패: {}", e.getMostSpecificCause().getClass().getSimpleName());
         return badRequest("요청 본문을 읽을 수 없습니다.");
     }
 
