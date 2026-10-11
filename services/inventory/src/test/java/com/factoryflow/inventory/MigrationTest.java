@@ -95,7 +95,15 @@ class MigrationTest {
     }
 
     @Test
-    void processedEventIdIsUnique() {
+    void processedEventKeyIsIdAndEventIdIsUnique() {
+        var pk =
+                jdbc.queryForList(
+                        "SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'processed_event'"
+                                + " AND CONSTRAINT_NAME = 'PRIMARY'",
+                        String.class);
+        assertThat(pk).containsExactly("id");
+
         var eventId = "33333333-3333-3333-3333-333333333333";
         insertProcessedEvent(eventId);
 
