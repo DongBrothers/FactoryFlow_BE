@@ -56,15 +56,29 @@ class MigrationTest {
     }
 
     @Test
-    void adminRequiresDepartmentAndPosition() {
+    void adminRequiresDepartment() {
         assertThatThrownBy(
                         () ->
                                 jdbc.update(
-                                        "INSERT INTO admin (email, password, name, created_at,"
-                                                + " updated_at) VALUES ('no-dept@factoryflow.test',"
-                                                + " 'hash', '관리자', NOW(6), NOW(6))"))
+                                        "INSERT INTO admin (email, password, name, position,"
+                                                + " created_at, updated_at)"
+                                                + " VALUES ('no-dept@factoryflow.test', 'hash',"
+                                                + " '관리자', '과장', NOW(6), NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("department");
+    }
+
+    @Test
+    void adminRequiresPosition() {
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO admin (email, password, name, department,"
+                                                + " created_at, updated_at)"
+                                                + " VALUES ('no-position@factoryflow.test', 'hash',"
+                                                + " '관리자', '구매팀', NOW(6), NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("position");
     }
 
     private void insertCustomer(String email) {
