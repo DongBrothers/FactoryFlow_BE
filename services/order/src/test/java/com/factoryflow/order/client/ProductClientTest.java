@@ -26,7 +26,7 @@ class ProductClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder().baseUrl("http://production");
         server = MockRestServiceServer.bindTo(builder).build();
-        productClient = new ProductClient(builder.build());
+        productClient = ProductClientConfig.create(builder.build());
     }
 
     @Test

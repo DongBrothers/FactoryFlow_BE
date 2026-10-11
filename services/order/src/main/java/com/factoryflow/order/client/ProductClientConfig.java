@@ -6,17 +6,26 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 @Configuration(proxyBeanMethods = false)
-class ProductClientConfig {
+public class ProductClientConfig {
 
     @Bean
-    RestClient productRestClient(
+    ProductClient productClient(
             @Value("${clients.production.url}") String baseUrl,
             @Value("${clients.production.timeout:3s}") Duration timeout) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(timeout);
         requestFactory.setReadTimeout(timeout);
-        return RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build();
+        return create(RestClient.builder().baseUrl(baseUrl).requestFactory(requestFactory).build());
+    }
+
+    /** RestClient 위에 HTTP Interface 구현을 만든다. 테스트도 이 메서드로 만든다. */
+    public static ProductClient create(RestClient restClient) {
+        return HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(ProductClient.class);
     }
 }
