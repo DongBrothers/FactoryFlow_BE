@@ -77,15 +77,15 @@ public final class FactoryFlowRules {
     private static final String DOMAIN_EVENT = "com.factoryflow.common.event.DomainEvent";
     private static final String ERROR_CODE =
             "com.factoryflow.common.web.exception.errorcode.ErrorCode";
+    private static final Pattern DISABLING_ANNOTATION =
+            Pattern.compile(
+                    "(org\\.junit\\.jupiter\\.api\\.(condition\\.)?"
+                            + "|org\\.springframework\\.test\\.context\\.junit\\.jupiter\\.)"
+                            + "(Disabled|Enabled)\\w*");
     private static final DescribedPredicate<JavaAnnotation<?>> DISABLING =
             describe(
-                    "@Disabled or @Disabled* (org.junit.jupiter.api.condition)",
-                    a ->
-                            a.getRawType().getName().equals("org.junit.jupiter.api.Disabled")
-                                    || a.getRawType()
-                                            .getName()
-                                            .startsWith(
-                                                    "org.junit.jupiter.api.condition.Disabled"));
+                    "@Disabled*, @Enabled* (JUnit, Spring)",
+                    a -> DISABLING_ANNOTATION.matcher(a.getRawType().getName()).matches());
     private static final Set<String> MOCK_ANNOTATIONS =
             Set.of(
                     "org.springframework.test.context.bean.override.mockito.MockitoBean",
@@ -398,7 +398,8 @@ public final class FactoryFlowRules {
     public static final ArchRule NO_DISABLED_TESTS =
             CompositeArchRule.of(noClasses().should().beAnnotatedWith(DISABLING))
                     .and(noMethods().should().beAnnotatedWith(DISABLING))
-                    .because("Disabled 계열 어노테이션(@Disabled, @DisabledIf 등)으로 테스트를 끄지 않는다");
+                    .because(
+                            "@Disabled*, @Enabled* 어노테이션(@DisabledIf, @EnabledIf 등)으로 테스트를 끄지 않는다");
 
     public static final ArchRule MOCK_ONLY_CLIENT_AND_CLOCK =
             fields().that(
