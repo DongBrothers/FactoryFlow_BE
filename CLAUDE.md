@@ -14,6 +14,7 @@
 - 생성자 주입만. System.out 금지, 로그는 Slf4j
 - 요청 값 검증은 Bean Validation. @RequestBody DTO 는 필드 제약 + @Valid, @RequestParam/@PathVariable 은 파라미터에 제약만 단다 (Spring 내장 검증, 컨트롤러에 @Validated 붙이지 않음). 기본 제약으로 안 되는 형식 규칙은 커스텀 제약. 실패는 공통 핸들러가 400. 서비스는 비즈니스 규칙(없음 404, 충돌 409)만 확인
 - 테스트 삭제, @Disabled, 의미 없는 assert 금지. 테스트가 틀렸다고 판단되면 이유를 말하고 멈춘다
+- 테스트에서 우리 코드(Repository, Service, EventPublisher)는 mock 금지. DB, MQ, Redis는 Testcontainers. mock은 client/(타 서비스 호출)와 Clock만
 
 ## 패키지 구조 (서비스별)
 com.factoryflow.<svc>.{controller, domain, dto, repository, service, event/listener, event/publisher, client, exception}
