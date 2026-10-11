@@ -49,6 +49,46 @@ class ProductClientTest {
     }
 
     @Test
+    void emptyDataIsEmptyList() {
+        server.expect(requestTo("http://production/internal/products?ids=9"))
+                .andRespond(
+                        withSuccess(
+                                """
+                                {"data":[],"status":200,"message":"OK"}
+                                """,
+                                MediaType.APPLICATION_JSON));
+
+        assertThat(productClient.findProducts(List.of(9L))).isEmpty();
+    }
+
+    @Test
+    void missingDataIsProductionUnavailable() {
+        server.expect(requestTo("http://production/internal/products?ids=1"))
+                .andRespond(
+                        withSuccess(
+                                """
+                                {"status":200,"message":"OK"}
+                                """,
+                                MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> productClient.findProducts(List.of(1L)))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(OrderErrorCode.PRODUCTION_UNAVAILABLE);
+    }
+
+    @Test
+    void emptyBodyIsProductionUnavailable() {
+        server.expect(requestTo("http://production/internal/products?ids=1"))
+                .andRespond(withSuccess());
+
+        assertThatThrownBy(() -> productClient.findProducts(List.of(1L)))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(OrderErrorCode.PRODUCTION_UNAVAILABLE);
+    }
+
+    @Test
     void serverErrorIsProductionUnavailable() {
         server.expect(requestTo("http://production/internal/products?ids=1"))
                 .andRespond(withServerError());

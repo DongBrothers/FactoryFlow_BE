@@ -35,7 +35,7 @@
 | 같은 productId 가 두 번 나옴 (커스텀 제약 `@UniqueProductIds`) | 400 | 없음 |
 | 없는 제품이 하나라도 있음 | 404 (PRODUCT_NOT_FOUND) | 없음 |
 | BOM 없는 제품이 하나라도 있음 | 404 (BOM_NOT_FOUND) | 없음 |
-| production 호출 실패 또는 시간 초과 (3초) | 503 (PRODUCTION_UNAVAILABLE) | 없음 |
+| production 호출 실패, 시간 초과 (3초), 응답 본문이나 data 가 없는 비정상 응답 | 503 (PRODUCTION_UNAVAILABLE) | 없음 |
 
 - 주문은 전부 성공하거나 전부 실패한다. 일부 제품만 주문되지 않는다
 - 요청 형식 검증은 모두 DTO 의 Bean Validation 으로 한다 (`@Valid`). 서비스에서 형식 검사를 다시 하지 않는다
@@ -56,7 +56,7 @@
 - [ ] order.created payload 에 orderId 와 products[{productId, qty}] 가 들어간다
 - [ ] 헤더 없음 400, items 비어 있음 400, qty 0 이하 400, productId 중복 400
 - [ ] 없는 제품 404, BOM 없는 제품 404. 둘 다 주문과 outbox 가 생기지 않는다
-- [ ] production 장애 또는 3초 초과 시 503, 주문과 outbox 가 생기지 않는다
+- [ ] production 장애, 3초 초과, 본문이나 data 가 없는 응답이면 503, 주문과 outbox 가 생기지 않는다. data 가 빈 정상 응답은 빈 목록(→ 없는 제품 404)
 - [ ] order_no 는 UNIQUE 다 (같은 값 두 번 저장 불가)
 - [ ] production `GET /internal/products?ids=` 는 있는 제품만 돌려주고, BOM 유무로 orderable 을 정한다
 - [ ] 깨진 JSON 본문, `ids` 누락, `ids` 숫자 아님은 모두 400 VALIDATION_ERROR (공통 핸들러 테스트)
