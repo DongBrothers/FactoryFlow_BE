@@ -85,29 +85,20 @@ public class GlobalExceptionHandler {
         return badRequest("요청 본문을 읽을 수 없습니다.");
     }
 
-    private static ResponseEntity<ErrorResponse> badRequest(String message) {
-        return ResponseEntity.badRequest()
-                .body(ErrorResponse.builder().code(VALIDATION_ERROR).message(message).build());
-    }
-
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(
-                        ErrorResponse.builder()
-                                .code("NOT_FOUND")
-                                .message("요청한 리소스를 찾을 수 없습니다.")
-                                .build());
+                .body(ErrorResponse.of("NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception e) {
         log.error("[Common] 처리되지 않은 예외: {}", e.getMessage(), e);
         return ResponseEntity.internalServerError()
-                .body(
-                        ErrorResponse.builder()
-                                .code("INTERNAL_SERVER_ERROR")
-                                .message("서버 내부 오류가 발생했습니다.")
-                                .build());
+                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."));
+    }
+
+    private static ResponseEntity<ErrorResponse> badRequest(String message) {
+        return ResponseEntity.badRequest().body(ErrorResponse.of(VALIDATION_ERROR, message));
     }
 }

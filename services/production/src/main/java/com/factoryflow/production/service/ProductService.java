@@ -17,7 +17,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final BomRepository bomRepository;
 
-    /** 있는 제품만 돌려준다. 없는 id 는 결과에서 빠진다. */
+    /** 있는 제품만 돌려준다. 없는 id 와 삭제된 제품은 결과에서 빠진다. */
     @Transactional(readOnly = true)
     public List<InternalProductResponse> findProducts(List<Long> ids) {
         Set<Long> withBom = new HashSet<>(bomRepository.findProductIdsHavingBom(ids));

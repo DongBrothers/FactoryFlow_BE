@@ -43,7 +43,7 @@ public class OrderController {
                 description = "없는 제품 (PRODUCT_NOT_FOUND) 또는 BOM 없는 제품 (BOM_NOT_FOUND)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "503",
-                description = "production 응답 없음 또는 3초 초과 (PRODUCTION_UNAVAILABLE)")
+                description = "production 응답 없음, 3초 초과, 본문이나 data 없는 응답 (PRODUCTION_UNAVAILABLE)")
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

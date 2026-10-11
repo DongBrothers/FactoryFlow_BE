@@ -59,16 +59,7 @@ public class OrderService {
         CustomerOrder order = orderRepository.save(CustomerOrder.receive(customerId));
         List<OrderItem> items =
                 request.items().stream()
-                        .map(
-                                item -> {
-                                    ProductResponse product = products.get(item.productId());
-                                    return OrderItem.receive(
-                                            order.getId(),
-                                            product.id(),
-                                            product.code(),
-                                            product.name(),
-                                            item.qty());
-                                })
+                        .map(item -> toOrderItem(order, item, products.get(item.productId())))
                         .toList();
         orderItemRepository.saveAll(items);
         eventPublisher.publish(
@@ -78,5 +69,11 @@ public class OrderService {
                                 .map(i -> new OrderCreatedProduct(i.getProductId(), i.getQty()))
                                 .toList()));
         return CreateOrderResponse.from(order);
+    }
+
+    private static OrderItem toOrderItem(
+            CustomerOrder order, CreateOrderItemRequest item, ProductResponse product) {
+        return OrderItem.receive(
+                order.getId(), product.id(), product.code(), product.name(), item.qty());
     }
 }

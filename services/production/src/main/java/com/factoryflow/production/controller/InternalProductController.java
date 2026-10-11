@@ -25,11 +25,12 @@ public class InternalProductController {
 
     @Operation(
             summary = "제품 조회 (서비스 간 내부용)",
-            description = "주어진 id 중 있는 제품만 돌려준다. 없는 id 는 결과에서 빠진다. orderable 은 BOM 이 있는지다.")
+            description =
+                    "주어진 id 중 있는 제품만 돌려준다. 없는 id 와 삭제된 제품은 결과에서 빠진다. orderable 은 삭제되지 않은 BOM 이 있는지다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
-                description = "조회 성공 (없는 제품은 결과에서 빠짐)"),
+                description = "조회 성공 (없는 제품, 삭제된 제품은 결과에서 빠짐)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "ids 가 없거나 숫자가 아님")
