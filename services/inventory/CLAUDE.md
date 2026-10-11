@@ -1,7 +1,8 @@
 # inventory 서비스
-- DB: inventory_db (Flyway: src/main/resources/db/migration)
-- 발행: inventory.reserved, inventory.reservation-failed, inventory.shortage
-- 수신: order.created, order.cancelled, purchase.received, production.completed
+- DB: inventory_db (Flyway: src/main/resources/db/migration). 테이블: part (재고 수량 포함), part_reservation, stock_history
+- part.reserved 는 part_reservation 의 RESERVED 합계와 같다. 예약 변경과 같은 트랜잭션에서 갱신
+- 발행: inventory.reserved, inventory.reservation-pending, inventory.shortage
+- 수신: production.material-requested, production.cancelled, production.completed, purchase.received
 - 진입점: controller/InventoryController (HTTP), event/listener (이벤트) → service/InventoryService
-- 보상: 미정 (정의 시 docs/specs 에 먼저 작성)
+- 보상: production.cancelled 수신 시 예약 RELEASED + available 복구. 재고 변동은 모두 stock_history 에 기록
 - 에러 코드: exception/InventoryErrorCode (common-web ErrorCode 구현, CustomException 으로 던진다)

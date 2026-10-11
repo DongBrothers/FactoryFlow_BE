@@ -1,7 +1,9 @@
 # order 서비스
-- DB: order_db (Flyway: src/main/resources/db/migration)
+- DB: order_db (Flyway: src/main/resources/db/migration). 테이블: customer_order, order_item
+- 상태: 품목(order_item)마다 상태를 갖고, customer_order.status 는 품목 상태의 요약이다. 품목 상태를 바꿀 때 같은 트랜잭션에서 함께 갱신
+- 스냅샷: 주문 생성 때 client/ 로 production 에 1회 조회해 제품 존재 확인 + product_code, product_name 저장
 - 발행: order.created, order.cancelled
-- 수신: inventory.reserved, inventory.reservation-failed, production.completed
+- 수신: production.status-changed, production.completed
 - 진입점: controller/OrderController (HTTP), event/listener (이벤트) → service/OrderService
-- 보상: inventory.reservation-failed 수신 시 주문 상태 FAILED
+- 보상: 주문 취소 시 order.cancelled → production 이 생산 건 취소
 - 에러 코드: exception/OrderErrorCode (common-web ErrorCode 구현, CustomException 으로 던진다)
