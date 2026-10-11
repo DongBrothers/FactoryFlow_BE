@@ -62,6 +62,15 @@ class InternalProductControllerTest {
     }
 
     @Test
+    void deletedBomDoesNotMakeProductOrderable() throws Exception {
+        jdbc.update("UPDATE bom SET is_deleted = TRUE WHERE product_id = ?", carA);
+
+        mockMvc.perform(get("/internal/products").param("ids", String.valueOf(carA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].orderable").value(false));
+    }
+
+    @Test
     void missingIdsIs400() throws Exception {
         mockMvc.perform(get("/internal/products")).andExpect(status().isBadRequest());
     }

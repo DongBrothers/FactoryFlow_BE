@@ -14,7 +14,7 @@
    ```json
    [ { "id": 1, "code": "CAR-A", "name": "소형차 A", "orderable": true } ]
    ```
-   - 없는 id 는 응답에서 빠진다. `orderable` 은 BOM 이 하나 이상 있으면 true
+   - 없는 id 와 삭제된 제품(is_deleted)은 응답에서 빠진다. `orderable` 은 삭제되지 않은 BOM 이 하나 이상 있으면 true
 4. 한 트랜잭션에서
    - customer_order 저장 (order_no = 새 UUID, customer_id, status = RECEIVED)
    - order_item 저장 (제품마다 1줄, status = RECEIVED, product_code·product_name 은 3번 응답의 스냅샷)
@@ -58,6 +58,6 @@
 - [ ] 없는 제품 404, BOM 없는 제품 404. 둘 다 주문과 outbox 가 생기지 않는다
 - [ ] production 장애, 3초 초과, 본문이나 data 가 없는 응답이면 503, 주문과 outbox 가 생기지 않는다. data 가 빈 정상 응답은 빈 목록(→ 없는 제품 404)
 - [ ] order_no 는 UNIQUE 다 (같은 값 두 번 저장 불가)
-- [ ] production `GET /internal/products?ids=` 는 있는 제품만 돌려주고, BOM 유무로 orderable 을 정한다
+- [ ] production `GET /internal/products?ids=` 는 있는 제품만 돌려주고, BOM 유무로 orderable 을 정한다. 삭제된 제품은 빠지고, 삭제된 BOM 만 있는 제품은 orderable false
 - [ ] 깨진 JSON 본문, `ids` 누락, `ids` 숫자 아님은 모두 400 VALIDATION_ERROR (공통 핸들러 테스트)
 - [ ] `/v3/api-docs` 에 두 API 의 summary, 실제로 나는 응답 코드(`POST /orders`: 201, 400, 404, 503 / `GET /internal/products`: 200, 400), 요청·응답 필드 설명이 나온다. `POST /orders` 에 500 은 나오지 않는다
