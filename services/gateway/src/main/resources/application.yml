@@ -3,9 +3,19 @@ spring:
     name: gateway
   profiles:
     default: local
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # auth 서비스의 공개키(JWKS). 환경별로 주입(로컬·도커·AWS). 기본은 도커 컨테이너명 기준
+          jwk-set-uri: ${AUTH_JWKS_URI:http://auth:8080/.well-known/jwks.json}
 
 server:
   port: 8080
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://factoryflow.dev}
 
 management:
   endpoints:

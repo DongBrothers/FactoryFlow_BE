@@ -16,7 +16,8 @@ public enum AuthErrorCode implements ErrorCode {
     LOGIN_FAILED("AUTH-006", "사번 또는 비밀번호가 올바르지 않습니다.", HttpStatus.UNAUTHORIZED),
     ACCOUNT_NOT_ACTIVE("AUTH-007", "활성화되지 않았거나 비활성화된 계정입니다.", HttpStatus.FORBIDDEN),
     ACCOUNT_LOCKED("AUTH-008", "로그인 시도가 많아 일시적으로 잠겼습니다.", HttpStatus.TOO_MANY_REQUESTS),
-    INVALID_REFRESH_TOKEN("AUTH-009", "유효하지 않은 리프레시 토큰입니다.", HttpStatus.UNAUTHORIZED);
+    INVALID_REFRESH_TOKEN("AUTH-009", "유효하지 않은 리프레시 토큰입니다.", HttpStatus.UNAUTHORIZED),
+    FORBIDDEN("AUTH-010", "권한이 없습니다.", HttpStatus.FORBIDDEN);
 
     private final String code;
     private final String message;
