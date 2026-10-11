@@ -9,6 +9,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 
 import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaConstructorCall;
 import com.tngtech.archunit.core.domain.JavaField;
@@ -76,7 +77,15 @@ public final class FactoryFlowRules {
     private static final String DOMAIN_EVENT = "com.factoryflow.common.event.DomainEvent";
     private static final String ERROR_CODE =
             "com.factoryflow.common.web.exception.errorcode.ErrorCode";
-    private static final String DISABLED = "org.junit.jupiter.api.Disabled";
+    private static final DescribedPredicate<JavaAnnotation<?>> DISABLING =
+            describe(
+                    "@Disabled or @Disabled* (org.junit.jupiter.api.condition)",
+                    a ->
+                            a.getRawType().getName().equals("org.junit.jupiter.api.Disabled")
+                                    || a.getRawType()
+                                            .getName()
+                                            .startsWith(
+                                                    "org.junit.jupiter.api.condition.Disabled"));
     private static final Set<String> MOCK_ANNOTATIONS =
             Set.of(
                     "org.springframework.test.context.bean.override.mockito.MockitoBean",
@@ -387,9 +396,9 @@ public final class FactoryFlowRules {
     // ---- 테스트 코드 (ImportOption.OnlyIncludeTests 로 등록) ----
 
     public static final ArchRule NO_DISABLED_TESTS =
-            CompositeArchRule.of(noClasses().should().beAnnotatedWith(DISABLED))
-                    .and(noMethods().should().beAnnotatedWith(DISABLED))
-                    .because("Disabled 어노테이션으로 테스트를 끄지 않는다");
+            CompositeArchRule.of(noClasses().should().beAnnotatedWith(DISABLING))
+                    .and(noMethods().should().beAnnotatedWith(DISABLING))
+                    .because("Disabled 계열 어노테이션(@Disabled, @DisabledIf 등)으로 테스트를 끄지 않는다");
 
     public static final ArchRule MOCK_ONLY_CLIENT_AND_CLOCK =
             fields().that(
