@@ -19,7 +19,7 @@
 ## 패키지 구조 (서비스별)
 - 엔티티는 domain/ 에 둔다
 - 요청 전용 커스텀 제약은 dto/request 에 둔다
-- 자동 쿼리 메서드로 안 되는 쿼리는 QueryDSL: repository/{엔티티}RepositoryCustom(인터페이스) + {엔티티}RepositoryImpl, {엔티티}Repository 가 Custom 을 상속한다. JPAQueryFactory Bean 은 config/QuerydslConfig. 쓰는 서비스는 build.gradle 에 querydsl-jpa, querydsl-apt(jpa) 를 추가한다
+- 자동 쿼리 메서드로 안 되는 쿼리는 QueryDSL: repository/{엔티티}RepositoryCustom(인터페이스) + {엔티티}RepositoryImpl, {엔티티}Repository 가 Custom 을 상속한다. JPAQueryFactory Bean 은 common-web 의 QuerydslAutoConfiguration 이 자동으로 만든다 (서비스에 config 를 두지 않는다). 쓰는 서비스는 build.gradle 에 querydsl-jpa, querydsl-apt(jpa) 를 추가한다
 
 ## 이름 규칙
 - 서비스 간 내부 API(/internal/**)는 gateway 에 노출하지 않는다

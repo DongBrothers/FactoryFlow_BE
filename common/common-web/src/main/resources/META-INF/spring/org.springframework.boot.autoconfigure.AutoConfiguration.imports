@@ -1,1 +1,2 @@
 com.factoryflow.common.web.WebAutoConfiguration
+com.factoryflow.common.web.QuerydslAutoConfiguration
