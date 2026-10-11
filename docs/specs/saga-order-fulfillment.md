@@ -23,13 +23,16 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 1. order: 주문 생성 (customer_order, order_item = RECEIVED) → `order.created`
 2. production: 제품마다 생산 건 생성 (PLANNED), BOM × 수량으로 필요한 부품 계산 → `production.material-requested`
 3. inventory: 부품마다 예약 줄 생성
-   - available 이 충분하면 RESERVED (available −, reserved +, stock_history RESERVE)
-   - 부족하면 WAITING (재고는 건드리지 않음) + 부족분 `inventory.shortage` → purchase 가 AUTO 구매 요청
+   - 같은 부품에 WAITING 줄이 없고 available 이 충분하면 RESERVED (available −, reserved +, stock_history RESERVE)
+   - 그 외에는 WAITING (재고는 건드리지 않음). 앞에 기다리는 줄이 있으면 재고가 있어도 새 줄은 뒤에 선다 (먼저 온 순서 보장)
+   - 새 WAITING 때문에 부족이 늘었으면 `inventory.shortage` (shortQty 계산은 아래 "부족 수량")
+   - purchase: shortage 수신 시 같은 부품의 AUTO + REQUESTED 구매 건이 있으면 그 qty 에 더하고, 없으면 새로 만든다
    - 생산 건의 모든 줄이 RESERVED → `inventory.reserved`, 하나라도 WAITING → `inventory.reservation-pending`
 4. production: reserved → READY, reservation-pending → WAITING_MATERIAL. 상태가 바뀔 때마다 `production.status-changed`
 5. 입고: purchase RECEIVED → `purchase.received` → inventory available + (stock_history RECEIVE),
    그 부품의 WAITING 줄을 id 순서(먼저 온 순서)로 RESERVED 처리. 어떤 생산 건의 모든 줄이 RESERVED 가 되면 `inventory.reserved`
-6. production: READY → IN_PROGRESS (생산 시작, started_at) → COMPLETED (completed_at) → `production.completed`
+6. simulator(생산 라인)가 production 내부 API 를 호출한다: READY 건 조회 → 시작 → 완료 (가끔 불량)
+   production: READY → IN_PROGRESS (started_at) → COMPLETED (completed_at) → `production.completed`
 7. inventory: completed 수신 → 그 생산 건 줄 CONSUMED (reserved −, stock_history CONSUME)
 8. order: status-changed / completed 수신 → order_item 상태 갱신, customer_order.status 요약 갱신 (같은 트랜잭션)
 
@@ -92,6 +95,17 @@ CANCELLED 품목은 제외하고 남은 품목으로 계산한다. 위에서부�
   (inventory 해제는 RESERVED/WAITING 줄에만 적용되므로 여러 번 받아도 안전)
 - 취소가 생산 건 생성보다 먼저 도착하면 NOT_READY 로 거절한다. 고객은 다시 취소를 요청한다
 
+### 부족 수량 (shortQty)
+대기 중인 수량까지 포함해 "이번 요청으로 새로 늘어난 부족분"만 보낸다. 같은 부족을 두 번 구매하지 않기 위해서다.
+- 이전 부족 = max(0, 그 부품의 WAITING qty 합 − available)
+- 이후 부족 = max(0, 그 부품의 WAITING qty 합 + 이번 qty − available)
+- shortQty = 이후 − 이전. 0 이면 shortage 를 보내지 않는다
+- 예: available 3, 대기 2, 새 요청 2 → 이전 0, 이후 1 → shortQty 1
+
+### 생산 라인 (simulator)
+- simulator 는 production 내부 API 만 호출한다 (READY 목록 조회, 시작, 완료, 불량). 이벤트를 발행하거나 받지 않는다
+- 불량 호출은 이 문서의 "3. 불량 재생산" 으로 이어진다
+
 ### 멈춤 감시
 - WAITING_MATERIAL 은 입고까지 며칠 걸릴 수 있으므로 자동 보상하지 않는다
 - production 스케줄러가 WAITING_MATERIAL 로 설정 시간(기본 24시간) 넘게 머문 생산 건을 WARN 로그로 남긴다 (`SAGA_STUCK productionId=…`)
@@ -124,3 +138,7 @@ inventory.shortage, purchase.received
 - [ ] 취소 후 늦게 온 inventory.reserved 는 해제로 정리된다
 - [ ] 같은 이벤트를 두 번 받아도 재고와 상태가 한 번만 바뀐다
 - [ ] part.reserved 는 항상 그 부품의 RESERVED 예약 qty 합과 같다
+- [ ] 같은 부품에 대기 줄이 있으면 재고가 있어도 새 요청은 WAITING 으로 뒤에 선다
+- [ ] shortQty 는 대기 수량을 포함한 증가분만 계산된다 (예: available 3, 대기 2, 새 요청 2 → 1)
+- [ ] 같은 부품 부족이 여러 번 오면 REQUESTED 상태의 AUTO 구매 1건에 수량이 합쳐진다
+- [ ] simulator 의 시작, 완료, 불량 호출로 생산 건 상태가 바뀐다
