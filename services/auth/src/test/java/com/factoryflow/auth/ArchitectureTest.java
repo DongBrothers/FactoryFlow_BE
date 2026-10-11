@@ -15,6 +15,7 @@ class ArchitectureTest {
     @ArchTest ArchRule publish = FactoryFlowRules.NO_DIRECT_PUBLISH;
     @ArchTest ArchRule injection = FactoryFlowRules.NO_FIELD_INJECTION;
     @ArchTest ArchRule methodInjection = FactoryFlowRules.NO_METHOD_INJECTION;
+    @ArchTest ArchRule lombokConstructor = FactoryFlowRules.CONSTRUCTOR_BY_LOMBOK;
     @ArchTest ArchRule streams = FactoryFlowRules.NO_STANDARD_STREAMS;
     @ArchTest ArchRule logging = FactoryFlowRules.SLF4J_ONLY;
 

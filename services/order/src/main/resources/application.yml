@@ -14,10 +14,10 @@ spring:
 server:
   port: 8080
 
-# 서비스 간 호출 주소. 환경별 파일이나 환경 변수로 바꾼다
+# 서비스 간 호출 주소. 환경별 파일이나 환경 변수로 바꾼다. 기본값은 local 프로필의 production 포트(8084)
 clients:
   production:
-    url: ${PRODUCTION_URL:http://localhost:8080}
+    url: ${PRODUCTION_URL:http://localhost:8084}
     timeout: 3s
 
 management:

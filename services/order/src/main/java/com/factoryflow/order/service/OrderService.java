@@ -18,31 +18,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
+@RequiredArgsConstructor
 public class OrderService {
 
     private final ProductClient productClient;
     private final CustomerOrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final EventPublisher eventPublisher;
-    private final TransactionTemplate transactionTemplate;
 
-    public OrderService(
-            ProductClient productClient,
-            CustomerOrderRepository orderRepository,
-            OrderItemRepository orderItemRepository,
-            EventPublisher eventPublisher,
-            PlatformTransactionManager transactionManager) {
-        this.productClient = productClient;
-        this.orderRepository = orderRepository;
-        this.orderItemRepository = orderItemRepository;
-        this.eventPublisher = eventPublisher;
-        this.transactionTemplate = new TransactionTemplate(transactionManager);
-    }
+    /** Spring Boot 가 만드는 TransactionTemplate (기본 전파, 격리 수준). */
+    private final TransactionTemplate transactionTemplate;
 
     /**
      * 제품을 확인한 뒤 주문, 품목, order.created 를 한 트랜잭션에 저장하고 주문 번호를 담은 응답을 돌려준다. production 조회는 트랜잭션 밖에서 해서

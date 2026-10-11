@@ -4,6 +4,7 @@ import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.codeUnits;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.constructors;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -65,6 +66,17 @@ public final class FactoryFlowRules {
     private static final String VALIDATED = "org.springframework.validation.annotation.Validated";
     private static final String CONFIGURATION =
             "org.springframework.context.annotation.Configuration";
+    private static final Set<String> SPRING_BEAN_ANNOTATIONS =
+            Set.of(
+                    "org.springframework.stereotype.Component",
+                    "org.springframework.stereotype.Service",
+                    "org.springframework.stereotype.Repository",
+                    "org.springframework.stereotype.Controller",
+                    "org.springframework.web.bind.annotation.RestController",
+                    "org.springframework.web.bind.annotation.ControllerAdvice",
+                    "org.springframework.web.bind.annotation.RestControllerAdvice",
+                    "org.springframework.context.annotation.Configuration");
+    private static final String LOMBOK_GENERATED = "lombok.Generated";
     private static final String AUTOWIRED =
             "org.springframework.beans.factory.annotation.Autowired";
     private static final String HTTP_EXCHANGE =
@@ -180,6 +192,22 @@ public final class FactoryFlowRules {
                     .should()
                     .beAnnotatedWith(AUTOWIRED)
                     .because("생성자 주입만 쓴다 (setter, 메서드 주입 금지)");
+
+    public static final ArchRule CONSTRUCTOR_BY_LOMBOK =
+            constructors()
+                    .that()
+                    .areDeclaredInClassesThat(
+                            describe(
+                                    "are Spring beans",
+                                    c ->
+                                            SPRING_BEAN_ANNOTATIONS.stream()
+                                                    .anyMatch(c::isAnnotatedWith)))
+                    .and(describe("have parameters", c -> !c.getRawParameterTypes().isEmpty()))
+                    .should()
+                    .beAnnotatedWith(LOMBOK_GENERATED)
+                    .because(
+                            "Bean 의 생성자는 @RequiredArgsConstructor 로 만든다 (직접 쓰지 않음, lombok.config 의"
+                                    + " addLombokGeneratedAnnotation 필요)");
 
     public static final ArchRule SLF4J_ONLY =
             noClasses()
