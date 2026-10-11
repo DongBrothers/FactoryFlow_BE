@@ -14,5 +14,29 @@ class ArchitectureTest {
     @ArchTest ArchRule entry = FactoryFlowRules.ENTRY_THROUGH_API;
     @ArchTest ArchRule publish = FactoryFlowRules.NO_DIRECT_PUBLISH;
     @ArchTest ArchRule injection = FactoryFlowRules.NO_FIELD_INJECTION;
+    @ArchTest ArchRule methodInjection = FactoryFlowRules.NO_METHOD_INJECTION;
     @ArchTest ArchRule streams = FactoryFlowRules.NO_STANDARD_STREAMS;
+    @ArchTest ArchRule logging = FactoryFlowRules.SLF4J_ONLY;
+
+    @ArchTest ArchRule packages = FactoryFlowRules.LAYER_PACKAGES;
+    @ArchTest ArchRule config = FactoryFlowRules.CONFIG_PACKAGE;
+    @ArchTest ArchRule controllerNaming = FactoryFlowRules.CONTROLLER_NAMING;
+    @ArchTest ArchRule errorCode = FactoryFlowRules.errorCodeNamed("auth");
+    @ArchTest ArchRule listenerNaming = FactoryFlowRules.EVENT_LISTENER_NAMING;
+
+    @ArchTest ArchRule noValidated = FactoryFlowRules.NO_VALIDATED_ON_CONTROLLER;
+    @ArchTest ArchRule validBody = FactoryFlowRules.VALID_REQUEST_BODY;
+
+    @ArchTest ArchRule dtoRecords = FactoryFlowRules.DTOS_ARE_RECORDS;
+    @ArchTest ArchRule responseNaming = FactoryFlowRules.RESPONSE_NAMING;
+    @ArchTest ArchRule records = FactoryFlowRules.NO_RECORD_INSIDE_RECORD;
+    @ArchTest ArchRule responseFactory = FactoryFlowRules.RESPONSE_STATIC_FACTORY;
+    @ArchTest ArchRule responseNew = FactoryFlowRules.NO_RESPONSE_CONSTRUCTOR_OUTSIDE;
+
+    @ArchTest ArchRule httpInterface = FactoryFlowRules.CLIENT_IS_HTTP_INTERFACE;
+    @ArchTest ArchRule noRestTemplate = FactoryFlowRules.NO_REST_TEMPLATE_OR_FEIGN;
+    @ArchTest ArchRule events = FactoryFlowRules.EVENTS_ARE_PUBLISHER_RECORDS;
+
+    @ArchTest ArchRule apiDocs = FactoryFlowRules.API_DOCUMENTED;
+    @ArchTest ArchRule dtoDocs = FactoryFlowRules.DTO_FIELDS_DOCUMENTED;
 }
