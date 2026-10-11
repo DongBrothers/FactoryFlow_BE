@@ -17,6 +17,7 @@ import com.tngtech.archunit.core.domain.JavaCodeUnit;
 import com.tngtech.archunit.core.domain.JavaConstructorCall;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -81,6 +82,14 @@ public final class FactoryFlowRules {
             "org.springframework.beans.factory.annotation.Autowired";
     private static final String HTTP_EXCHANGE =
             "org.springframework.web.service.annotation.HttpExchange";
+    private static final Set<String> EXCHANGE_ANNOTATIONS =
+            Set.of(
+                    HTTP_EXCHANGE,
+                    "org.springframework.web.service.annotation.GetExchange",
+                    "org.springframework.web.service.annotation.PostExchange",
+                    "org.springframework.web.service.annotation.PutExchange",
+                    "org.springframework.web.service.annotation.PatchExchange",
+                    "org.springframework.web.service.annotation.DeleteExchange");
     private static final String OPERATION = "io.swagger.v3.oas.annotations.Operation";
     private static final Set<String> API_RESPONSE_DOCS =
             Set.of(
@@ -386,6 +395,26 @@ public final class FactoryFlowRules {
                     .dependOnClassesThat()
                     .resideInAnyPackage("org.springframework.cloud.openfeign..", "feign..")
                     .because("동기 호출은 HTTP Interface 로 한다 (OpenFeign, RestTemplate 쓰지 않음)");
+
+    public static final ArchRule CLIENT_EXCHANGE_ONLY_FROM_CLIENT =
+            noClasses()
+                    .should()
+                    .callMethodWhere(
+                            describe(
+                                    "the target is an HTTP exchange method of another type",
+                                    (JavaMethodCall call) ->
+                                            !call.getOriginOwner().equals(call.getTargetOwner())
+                                                    && call.getTarget().resolveMember().stream()
+                                                            .anyMatch(
+                                                                    m ->
+                                                                            EXCHANGE_ANNOTATIONS
+                                                                                    .stream()
+                                                                                    .anyMatch(
+                                                                                            m
+                                                                                                    ::isAnnotatedWith))))
+                    .because(
+                            "HTTP 선언 메서드는 client 의 default 메서드에서만 부른다 (실패를 {상대"
+                                    + " 서비스}_UNAVAILABLE 로 바꾸기 위해)");
 
     // ---- 이벤트 ----
 

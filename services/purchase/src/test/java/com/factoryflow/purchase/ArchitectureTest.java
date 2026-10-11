@@ -35,6 +35,7 @@ class ArchitectureTest {
     @ArchTest ArchRule responseNew = FactoryFlowRules.NO_RESPONSE_CONSTRUCTOR_OUTSIDE;
 
     @ArchTest ArchRule httpInterface = FactoryFlowRules.CLIENT_IS_HTTP_INTERFACE;
+    @ArchTest ArchRule exchangeCalls = FactoryFlowRules.CLIENT_EXCHANGE_ONLY_FROM_CLIENT;
     @ArchTest ArchRule noRestTemplate = FactoryFlowRules.NO_REST_TEMPLATE_OR_FEIGN;
     @ArchTest ArchRule events = FactoryFlowRules.EVENTS_ARE_PUBLISHER_RECORDS;
 
