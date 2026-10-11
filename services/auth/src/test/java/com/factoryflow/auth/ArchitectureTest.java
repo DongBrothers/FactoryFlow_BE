@@ -36,6 +36,10 @@ class ArchitectureTest {
 
     @ArchTest ArchRule httpInterface = FactoryFlowRules.CLIENT_IS_HTTP_INTERFACE;
     @ArchTest ArchRule exchangeCalls = FactoryFlowRules.CLIENT_EXCHANGE_ONLY_FROM_CLIENT;
+
+    @ArchTest ArchRule queries = FactoryFlowRules.QUERYDSL_FOR_CUSTOM_QUERIES;
+    @ArchTest ArchRule noJdbc = FactoryFlowRules.NO_JDBC;
+    @ArchTest ArchRule controllerResult = FactoryFlowRules.CONTROLLER_STORES_SERVICE_RESULT;
     @ArchTest ArchRule noRestTemplate = FactoryFlowRules.NO_REST_TEMPLATE_OR_FEIGN;
     @ArchTest ArchRule events = FactoryFlowRules.EVENTS_ARE_PUBLISHER_RECORDS;
 

@@ -8,7 +8,7 @@
 - 로컬 인프라: docker compose up -d
 
 ## ArchUnit 이 검사하는 규칙
-패키지 위치, 이름 접미사, 주입 방식, 로그, DTO(record, 정적 팩토리), client, 이벤트, Swagger 어노테이션과 summary/description/example 값, 테스트 건너뛰기(@Disabled*, @Enabled*, Assumptions, disabledWithoutDocker), mock 대상(필드, Mockito.mock/spy)은 common/common-test 의 FactoryFlowRules 가 검사한다 (각 서비스 ArchitectureTest, TestArchitectureTest). 규칙 목록과 이유는 그 파일을 보고, check 실패 메시지를 따른다. 아래에는 ArchUnit 으로 검사할 수 없는 규칙만 둔다.
+패키지 위치, 이름 접미사, 주입 방식, 로그, DTO(record, 정적 팩토리), client, 이벤트, Swagger 어노테이션과 summary/description/example 값, 테스트 건너뛰기(@Disabled*, @Enabled*, Assumptions, disabledWithoutDocker), mock 대상(필드, Mockito.mock/spy), 데이터 접근(@Query·EntityManager 쿼리·JDBC 금지), 컨트롤러의 service 결과 처리(변수에 담은 뒤 응답에 넣기)는 common/common-test 의 FactoryFlowRules 가 검사한다 (각 서비스 ArchitectureTest, TestArchitectureTest). 규칙 목록과 이유는 그 파일을 보고, check 실패 메시지를 따른다. 아래에는 ArchUnit 으로 검사할 수 없는 규칙만 둔다.
 
 ## 절대 규칙
 - 서비스 간 통신: 비동기는 이벤트(common-event), 동기는 client/
@@ -19,6 +19,7 @@
 ## 패키지 구조 (서비스별)
 - 엔티티는 domain/ 에 둔다
 - 요청 전용 커스텀 제약은 dto/request 에 둔다
+- 자동 쿼리 메서드로 안 되는 쿼리는 QueryDSL: repository/{엔티티}RepositoryCustom(인터페이스) + {엔티티}RepositoryImpl, {엔티티}Repository 가 Custom 을 상속한다. JPAQueryFactory Bean 은 config/QuerydslConfig. 쓰는 서비스는 build.gradle 에 querydsl-jpa, querydsl-apt(jpa) 를 추가한다
 
 ## 이름 규칙
 - 서비스 간 내부 API(/internal/**)는 gateway 에 노출하지 않는다

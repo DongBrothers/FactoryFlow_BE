@@ -26,6 +26,16 @@ import com.tngtech.archunit.lang.CompositeArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.GeneralCodingRules;
+import com.tngtech.archunit.thirdparty.org.objectweb.asm.ClassReader;
+import com.tngtech.archunit.thirdparty.org.objectweb.asm.ClassVisitor;
+import com.tngtech.archunit.thirdparty.org.objectweb.asm.Label;
+import com.tngtech.archunit.thirdparty.org.objectweb.asm.MethodVisitor;
+import com.tngtech.archunit.thirdparty.org.objectweb.asm.Opcodes;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -90,6 +100,16 @@ public final class FactoryFlowRules {
                     "org.springframework.web.service.annotation.PutExchange",
                     "org.springframework.web.service.annotation.PatchExchange",
                     "org.springframework.web.service.annotation.DeleteExchange");
+    private static final Set<String> QUERY_ANNOTATIONS =
+            Set.of(
+                    "org.springframework.data.jpa.repository.Query",
+                    "org.springframework.data.jpa.repository.NativeQuery");
+    private static final Set<String> ENTITY_MANAGER_QUERIES =
+            Set.of(
+                    "createQuery",
+                    "createNativeQuery",
+                    "createNamedQuery",
+                    "createStoredProcedureQuery");
     private static final String OPERATION = "io.swagger.v3.oas.annotations.Operation";
     private static final Set<String> API_RESPONSE_DOCS =
             Set.of(
@@ -416,6 +436,65 @@ public final class FactoryFlowRules {
                             "HTTP 선언 메서드는 client 의 default 메서드에서만 부른다 (실패를 {상대"
                                     + " 서비스}_UNAVAILABLE 로 바꾸기 위해)");
 
+    // ---- 데이터 접근 ----
+
+    public static final ArchRule QUERYDSL_FOR_CUSTOM_QUERIES =
+            CompositeArchRule.of(
+                            noMethods()
+                                    .should()
+                                    .beAnnotatedWith(
+                                            describe(
+                                                    "@Query or @NativeQuery",
+                                                    (JavaAnnotation<?> a) ->
+                                                            QUERY_ANNOTATIONS.contains(
+                                                                    a.getRawType().getName()))))
+                    .and(
+                            noClasses()
+                                    .should()
+                                    .callMethodWhere(
+                                            describe(
+                                                    "the target is EntityManager.create*Query",
+                                                    (JavaMethodCall call) ->
+                                                            call.getTargetOwner()
+                                                                            .getName()
+                                                                            .equals(
+                                                                                    "jakarta.persistence.EntityManager")
+                                                                    && ENTITY_MANAGER_QUERIES
+                                                                            .contains(
+                                                                                    call
+                                                                                            .getName()))))
+                    .because(
+                            "쿼리는 Spring Data 자동 쿼리 메서드로 만들고, 그걸로 안 되면 QueryDSL"
+                                    + " ({엔티티}RepositoryCustom + {엔티티}RepositoryImpl) 로 만든다");
+
+    public static final ArchRule NO_JDBC =
+            noClasses()
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage("org.springframework.jdbc..", "java.sql..", "javax.sql..")
+                    .because("DB 접근은 JPA(Spring Data, QueryDSL) 로만 한다. JDBC 를 쓰지 않는다");
+
+    // ---- 컨트롤러 ----
+
+    public static final ArchRule CONTROLLER_STORES_SERVICE_RESULT =
+            classes()
+                    .that(CONTROLLERS)
+                    .should(
+                            new ArchCondition<JavaClass>(
+                                    "store service call results in a local variable before using them") {
+                                @Override
+                                public void check(JavaClass controller, ConditionEvents events) {
+                                    for (String violation : inlineServiceCalls(controller)) {
+                                        events.add(
+                                                SimpleConditionEvent.violated(
+                                                        controller, violation));
+                                    }
+                                }
+                            })
+                    .because(
+                            "service 호출 결과를 ApiResponse.ok(...) 같은 다른 호출 안에 바로 넣지 않는다."
+                                    + " 지역 변수에 먼저 담는다");
+
     // ---- 이벤트 ----
 
     public static final ArchRule EVENTS_ARE_PUBLISHER_RECORDS =
@@ -658,6 +737,135 @@ public final class FactoryFlowRules {
                 && (c.getSimpleName().endsWith("Repository")
                         || c.getSimpleName().endsWith("Service")
                         || c.getName().equals("com.factoryflow.common.event.EventPublisher"));
+    }
+
+    // service 메서드 호출 바로 다음 명령이 지역 변수 저장, 반환, 버리기가 아니면 다른 식 안에서 바로 쓴 것이다
+    private static List<String> inlineServiceCalls(JavaClass controller) {
+        List<String> violations = new ArrayList<>();
+        URI source =
+                controller
+                        .getSource()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                controller.getName() + " 의 class 파일을 찾을 수 없다"))
+                        .getUri();
+        try (InputStream in = source.toURL().openStream()) {
+            new ClassReader(in)
+                    .accept(
+                            new ClassVisitor(Opcodes.ASM9) {
+                                @Override
+                                public MethodVisitor visitMethod(
+                                        int access,
+                                        String name,
+                                        String descriptor,
+                                        String signature,
+                                        String[] exceptions) {
+                                    return new InlineCallFinder(
+                                            controller.getName(), name, violations);
+                                }
+                            },
+                            ClassReader.SKIP_FRAMES);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return violations;
+    }
+
+    private static final class InlineCallFinder extends MethodVisitor {
+        private final String owner;
+        private final String method;
+        private final List<String> violations;
+        private String pendingCall;
+        private int line;
+
+        InlineCallFinder(String owner, String method, List<String> violations) {
+            super(Opcodes.ASM9);
+            this.owner = owner;
+            this.method = method;
+            this.violations = violations;
+        }
+
+        @Override
+        public void visitLineNumber(int line, Label start) {
+            this.line = line;
+        }
+
+        @Override
+        public void visitVarInsn(int opcode, int varIndex) {
+            if (opcode >= Opcodes.ISTORE && opcode <= Opcodes.ASTORE) {
+                pendingCall = null;
+            } else {
+                usedInline();
+            }
+        }
+
+        @Override
+        public void visitTypeInsn(int opcode, String type) {
+            if (opcode != Opcodes.CHECKCAST) {
+                usedInline();
+            }
+        }
+
+        @Override
+        public void visitInsn(int opcode) {
+            boolean returnedOrDropped =
+                    (opcode >= Opcodes.IRETURN && opcode <= Opcodes.RETURN)
+                            || opcode == Opcodes.POP
+                            || opcode == Opcodes.POP2;
+            if (returnedOrDropped) {
+                pendingCall = null;
+            } else {
+                usedInline();
+            }
+        }
+
+        @Override
+        public void visitMethodInsn(
+                int opcode, String owner, String name, String descriptor, boolean isInterface) {
+            usedInline();
+            String className = owner.replace('/', '.');
+            if (className.contains(".service.")
+                    && className.endsWith("Service")
+                    && !descriptor.endsWith(")V")) {
+                pendingCall = className.substring(className.lastIndexOf('.') + 1) + "." + name;
+            }
+        }
+
+        @Override
+        public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+            usedInline();
+        }
+
+        @Override
+        public void visitIntInsn(int opcode, int operand) {
+            usedInline();
+        }
+
+        @Override
+        public void visitLdcInsn(Object value) {
+            usedInline();
+        }
+
+        @Override
+        public void visitJumpInsn(int opcode, Label label) {
+            usedInline();
+        }
+
+        private void usedInline() {
+            if (pendingCall != null) {
+                violations.add(
+                        owner
+                                + "."
+                                + method
+                                + " (line "
+                                + line
+                                + ") 이 "
+                                + pendingCall
+                                + " 결과를 변수에 담지 않고 바로 쓴다");
+                pendingCall = null;
+            }
+        }
     }
 
     private static boolean isInClientPackage(JavaClass c) {

@@ -38,6 +38,7 @@ public class InternalProductController {
     public ApiResponse<List<InternalProductResponse>> findProducts(
             @Parameter(description = "조회할 제품 번호들", example = "1,2") @RequestParam("ids") @NotEmpty
                     List<Long> ids) {
-        return ApiResponse.ok(productService.findProducts(ids));
+        List<InternalProductResponse> products = productService.findProducts(ids);
+        return ApiResponse.ok(products);
     }
 }
