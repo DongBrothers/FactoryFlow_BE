@@ -105,9 +105,14 @@
 - gateway 배선: 라우트 테이블(5개 서비스) + **신원 헤더 전달**. 이때 gateway 는 들어온 `X-User-*`
   헤더를 **반드시 버리고(strip)** 검증된 JWT 로 `X-User-Id`/`X-User-Role` 를 다시 채워야 한다.
   (이게 빠지면 위 "X-User-Role 신뢰 전제"가 깨져 운영에서도 역할 위조가 가능하다.)
-- order 서비스에 **거래처 마스터 테이블** 신설, `customer_order.customer_id` 재연결
+- order 서비스에 **거래처 마스터 테이블** 신설, `customer_order.customer_id` 를 그 테이블로 재연결
+  (고객은 로그인 안 하므로 `user_account` 가 아니라 order 소유 데이터를 가리킨다)
+- purchase `requested_by` 의 논리 참조를 `auth_db.admin.id` → **`auth_db.user_account.id`** 로 변경
+  (발주를 요청한 사원. admin 이 user_account 로 통합됨). 현재 주석: `services/purchase/.../V2__create_purchase_tables.sql`
 - saga 명세의 "고객이 취소 요청" → "판매 담당이 거래처 주문을 취소 요청"으로 문구 수정
 - services/auth/CLAUDE.md의 `customer`/`admin` 설명을 `user_account`/`role`로 갱신
+- 참고: 위 참조들은 실제 FK 가 아니라 ID만 보관하는 논리 참조라 auth 변경으로 구조가 깨지지는 않는다.
+  해당 서비스를 구현할 때 의미에 맞게 재연결한다.
 
 ## 완료 조건 (테스트로 확인할 것)
 
