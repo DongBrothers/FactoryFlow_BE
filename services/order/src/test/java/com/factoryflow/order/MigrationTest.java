@@ -26,7 +26,7 @@ class MigrationTest {
                 new DriverManagerDataSource(
                         mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
         var result = Flyway.configure().dataSource(dataSource).load().migrate();
-        assertThat(result.targetSchemaVersion).isEqualTo("2");
+        assertThat(result.targetSchemaVersion).isEqualTo("3");
         jdbc = new JdbcTemplate(dataSource);
     }
 
@@ -69,6 +69,23 @@ class MigrationTest {
         assertThatThrownBy(() -> insertProcessedEvent(eventId))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_processed_event_event_id");
+    }
+
+    @Test
+    void rejectsDuplicateOrderNo() {
+        var orderNo = "550e8400-e29b-41d4-a716-446655440000";
+        insertOrder(orderNo);
+
+        assertThatThrownBy(() -> insertOrder(orderNo))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_customer_order_order_no");
+    }
+
+    private void insertOrder(String orderNo) {
+        jdbc.update(
+                "INSERT INTO customer_order (order_no, customer_id, status, created_at, updated_at)"
+                        + " VALUES (?, 1, 'RECEIVED', NOW(6), NOW(6))",
+                orderNo);
     }
 
     private void insertItem(long orderId, long productId, int qty) {
