@@ -23,7 +23,7 @@ com.factoryflow.<svc>.{controller, domain, dto, repository, service, event/liste
 - Controller: {도메인}Controller. 서비스 간 내부 API(/internal/**)는 Internal{도메인}Controller (gateway 에 노출 안 함)
 - Service: 도메인(엔티티)별 {도메인}Service (예: OrderService, ProductService)
 - Repository: {엔티티}Repository
-- client/: {상대 도메인}Client 는 HTTP Interface(@HttpExchange) 로 선언하고 구현은 {상대 도메인}ClientConfig 가 HttpServiceProxyFactory 로 만든다 (OpenFeign, RestTemplate 쓰지 않음). 응답은 {도메인}Info record. 호출 실패와 시간 초과는 client 의 default 메서드에서 {상대 서비스}_UNAVAILABLE(503) 로 바꾼다
+- client/{상대 서비스}/ 아래에 {상대 도메인}Client, {상대 도메인}ClientConfig, dto/(응답 record) 를 둔다 (예: order/client/production/ProductClient). {상대 도메인}Client 는 HTTP Interface(@HttpExchange) 로 선언하고 구현은 {상대 도메인}ClientConfig 가 HttpServiceProxyFactory 로 만든다 (OpenFeign, RestTemplate 쓰지 않음). 응답은 {도메인}Info record. 호출 실패와 시간 초과는 client 의 default 메서드에서 {상대 서비스}_UNAVAILABLE(503) 로 바꾼다
 - DTO: {동작}{도메인}Request/Response (예: CreateOrderRequest). 내부 API 응답은 Internal{도메인}Response
 - DTO(요청, 응답, 내부 API 응답)는 모두 record. 응답 DTO 는 밖에서 new 로 만들지 않고 정적 팩토리로 만든다: 도메인 객체 하나를 바꿀 때 from(원본), 값 여러 개로 만들 때 of(...)
 - 이벤트: 발행 payload 는 event/publisher 의 과거형 record (예: OrderCreated), 수신은 event/listener 의 {발행 서비스}EventListener

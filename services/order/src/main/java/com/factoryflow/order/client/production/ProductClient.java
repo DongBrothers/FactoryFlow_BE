@@ -1,8 +1,9 @@
-package com.factoryflow.order.client;
+package com.factoryflow.order.client.production;
 
 import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.order.client.production.dto.ProductInfo;
+import com.factoryflow.order.client.production.dto.ProductsResponse;
 import com.factoryflow.order.exception.OrderErrorCode;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Collection;
 import java.util.List;
 import org.slf4j.Logger;
@@ -31,7 +32,4 @@ public interface ProductClient {
             throw new CustomException(OrderErrorCode.PRODUCTION_UNAVAILABLE);
         }
     }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record ProductsResponse(List<ProductInfo> data) {}
 }

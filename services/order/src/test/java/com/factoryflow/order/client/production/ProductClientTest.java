@@ -1,4 +1,4 @@
-package com.factoryflow.order.client;
+package com.factoryflow.order.client.production;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,6 +8,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.order.client.production.dto.ProductInfo;
 import com.factoryflow.order.exception.OrderErrorCode;
 import java.net.SocketTimeoutException;
 import java.util.List;

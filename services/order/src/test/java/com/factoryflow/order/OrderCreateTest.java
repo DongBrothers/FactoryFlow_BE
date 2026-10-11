@@ -10,8 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.ProductClient;
-import com.factoryflow.order.client.ProductInfo;
+import com.factoryflow.order.client.production.ProductClient;
+import com.factoryflow.order.client.production.dto.ProductInfo;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;

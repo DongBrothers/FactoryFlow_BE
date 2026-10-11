@@ -2,8 +2,8 @@ package com.factoryflow.order.service;
 
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.ProductClient;
-import com.factoryflow.order.client.ProductInfo;
+import com.factoryflow.order.client.production.ProductClient;
+import com.factoryflow.order.client.production.dto.ProductInfo;
 import com.factoryflow.order.domain.CustomerOrder;
 import com.factoryflow.order.domain.OrderItem;
 import com.factoryflow.order.dto.CreateOrderRequest;
