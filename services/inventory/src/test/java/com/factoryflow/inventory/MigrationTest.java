@@ -41,7 +41,9 @@ class MigrationTest {
 
     @Test
     void newPartStartsWithZeroStock() {
-        insertPart("BRK-ZERO", 0, 0);
+        jdbc.update(
+                "INSERT INTO part (code, name, unit, created_at, updated_at)"
+                        + " VALUES ('BRK-ZERO', '브레이크 패드', 'EA', NOW(6), NOW(6))");
 
         var stock =
                 jdbc.queryForMap("SELECT available, reserved FROM part WHERE code = 'BRK-ZERO'");
