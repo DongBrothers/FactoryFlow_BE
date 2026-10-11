@@ -1,6 +1,5 @@
-package com.factoryflow.order.config.client.production;
+package com.factoryflow.order.client.production;
 
-import com.factoryflow.order.client.production.ProductClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

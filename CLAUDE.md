@@ -25,7 +25,7 @@
 - 서비스 간 내부 API(/internal/**)는 gateway 에 노출하지 않는다
 - Service: 도메인(엔티티)별 {도메인}Service (예: OrderService, ProductService)
 - Repository: {엔티티}Repository
-- client: {상대 도메인}Client 의 구현은 config/client/{상대 서비스}/{상대 도메인}ClientConfig 가 HttpServiceProxyFactory 로 만든다. 호출 실패와 시간 초과는 client 의 default 메서드에서 {상대 서비스}_UNAVAILABLE(503) 로 바꾼다
+- client: {상대 도메인}Client 의 구현은 같은 client/{상대 서비스}/ 의 {상대 도메인}ClientConfig 가 HttpServiceProxyFactory 로 만든다. 호출 실패와 시간 초과는 client 의 default 메서드에서 {상대 서비스}_UNAVAILABLE(503) 로 바꾼다
 - DTO: {동작}{도메인}Request/Response (예: CreateOrderRequest). 내부 API 응답은 Internal{도메인}Response
 - 응답 DTO 정적 팩토리: 도메인 객체 하나를 바꿀 때 from(원본), 값 여러 개로 만들 때 of(...)
 - 이벤트 payload 이름은 과거형 (예: OrderCreated)

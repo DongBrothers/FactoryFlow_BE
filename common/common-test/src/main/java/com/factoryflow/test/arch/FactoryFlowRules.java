@@ -269,19 +269,24 @@ public final class FactoryFlowRules {
                     .and(suffixInPackage("Response", "..dto.response.."))
                     .and(suffixInPackage("ErrorCode", "..exception.."))
                     .and(suffixInPackage("EventListener", "..event.listener.."))
-                    .and(suffixInPackage("Client", "..client.*"))
-                    .and(suffixInPackage("ClientConfig", "..config.client.*"))
+                    .and(suffixInPackage("Client", "com.factoryflow.*.client.*"))
+                    .and(suffixInPackage("ClientConfig", "com.factoryflow.*.client.*"))
                     .because("CLAUDE.md 패키지 구조를 따른다");
 
     public static final ArchRule CONFIG_PACKAGE =
             classes()
-                    .that()
-                    .areAnnotatedWith(CONFIGURATION)
-                    .or()
-                    .haveSimpleNameEndingWith("Config")
+                    .that(
+                            describe(
+                                    "are configuration classes other than {상대 도메인}ClientConfig",
+                                    c ->
+                                            (c.isAnnotatedWith(CONFIGURATION)
+                                                            || c.getSimpleName().endsWith("Config"))
+                                                    && !c.getSimpleName().endsWith("ClientConfig")))
                     .should()
                     .resideInAPackage("..config..")
-                    .because("설정은 config/ 에 둔다. 다른 서비스 호출 설정은 config/client/{상대 서비스}/");
+                    .because(
+                            "설정은 config/ 에 둔다. 다른 서비스 호출 설정({상대 도메인}ClientConfig)은"
+                                    + " client/{상대 서비스}/ 에 둔다");
 
     public static final ArchRule CONTROLLER_NAMING =
             classes()
