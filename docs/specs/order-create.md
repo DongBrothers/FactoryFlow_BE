@@ -28,6 +28,7 @@
 | 상황 | 응답 | 저장 / 이벤트 |
 |---|---|---|
 | `X-User-Id` 헤더 없음 | 400 | 없음 |
+| 요청 본문이 JSON 으로 읽히지 않음 (깨진 JSON, 숫자 자리에 문자 등) | 400 | 없음 |
 | items 가 비어 있음 (`@NotEmpty`) | 400 | 없음 |
 | productId 가 없음 (`@NotNull`) | 400 | 없음 |
 | qty 가 1 미만 (`@Positive`) | 400 | 없음 |
@@ -40,6 +41,8 @@
 - 요청 형식 검증은 모두 DTO 의 Bean Validation 으로 한다 (`@Valid`). 서비스에서 형식 검사를 다시 하지 않는다
 - order_no 는 UUID, customer_order 에 UNIQUE (Flyway V3). 이벤트와 서비스 간 참조는 내부 id(orderId) 를 쓴다
 - production 내부 API 는 gateway 에 노출하지 않는다 (서비스끼리만 호출)
+- production 내부 API 의 `ids` 가 없거나 숫자가 아니면 400 이다
+- 형식 오류(400)는 모두 common-web 공통 핸들러가 `VALIDATION_ERROR` 코드로 응답한다 (필수 헤더·파라미터 누락, 파라미터 형식 오류, 깨진 JSON, Bean Validation 실패)
 - production 주소는 설정 `clients.production.url` 로 받는다 (환경별로 다름)
 
 ## 관련 이벤트 (events.md 참조)
@@ -55,3 +58,4 @@
 - [ ] production 장애 또는 3초 초과 시 503, 주문과 outbox 가 생기지 않는다
 - [ ] order_no 는 UNIQUE 다 (같은 값 두 번 저장 불가)
 - [ ] production `GET /internal/products?ids=` 는 있는 제품만 돌려주고, BOM 유무로 orderable 을 정한다
+- [ ] 깨진 JSON 본문, `ids` 누락, `ids` 숫자 아님은 모두 400 VALIDATION_ERROR (공통 핸들러 테스트)
