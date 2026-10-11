@@ -10,6 +10,8 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | production.cancelled | production | inventory | productionId |
 | production.status-changed | production | order | orderId, productionId, productId, status |
 | production.completed | production | order, inventory | orderId, productionId, productId, qty |
+| production.failed | production | inventory | orderId, productionId |
+| production.cancel-rejected | production | order | orderId, productionId, reason |
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
 | inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
@@ -18,6 +20,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 ## 흐름
 고객 주문(order) → 생산 건(production, BOM 전개) → 부품 예약(inventory)
 → 부족하면 대기(WAITING_MATERIAL) + 자동 구매 요청(purchase) → 입고 후 재예약 → 생산 → 완료
+취소는 생산 시작 전까지만 (보상: 예약 해제), 생산 중 불량은 재생산. 상세: docs/specs/saga-order-fulfillment.md
 
 ## 변경 규칙
 - 필드 추가만 허용 (version 유지). 삭제/이름 변경은 새 version + 기존 버전 병행
