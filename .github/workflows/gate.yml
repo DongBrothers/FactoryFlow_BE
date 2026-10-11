@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # one-way-door 변경은 사람 승인 1명 필수 (라벨별 승인 수는 브랜치 보호로 못 걸어서 체크로 강제)
+  # one-way-door 변경은 PR 본문에 롤백 방법을 체크하고 작성해야 통과 (사람 승인 대신)
   door-gate:
     runs-on: ubuntu-latest
     steps:
@@ -34,13 +34,13 @@ jobs:
              && ! echo "$files" | grep -E 'db/migration/|^common/common-event/|^docs/specs/events.md|^services/auth/|^services/gateway/.*/security/|/reservation/' >/dev/null; then
             echo "two-way-door: 승인 불필요"; exit 0
           fi
-          approved=$(gh pr view "$PR" --json reviews --jq '
-            [.reviews[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")]
-            | group_by(.author.login) | map(last) | map(select(.state == "APPROVED")) | length')
-          if [ "$approved" -lt 1 ]; then
-            echo "::error::one-way-door 변경이다. 사람 승인 1명이 필요하다"; exit 1
+          # "- [x] one-way-door 라벨이면 롤백 방법 작성: <내용>" 줄이 체크되어 있고 내용이 있어야 한다
+          rollback=$(gh pr view "$PR" --json body --jq .body \
+            | grep -E '^- \[[xX]\] one-way-door 라벨이면 롤백 방법 작성[^:]*:' \
+            | sed -E 's/^[^:]*://' | tr -d '[:space:]')
+          if [ -z "$rollback" ] || [ "$rollback" = "해당없음" ]; then
+            echo "::error::one-way-door 변경이다. PR 본문 '롤백 방법 작성' 항목을 체크하고 방법을 적어라"; exit 1
           fi
-          echo "one-way-door: 승인 $approved 명"
 
   # AI 리뷰(msa, security, spec) 위반 코멘트가 이 커밋에 있으면 실패. quality 는 보지 않는다
   ai-review-gate:
