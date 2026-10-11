@@ -3,6 +3,7 @@ package com.factoryflow.test.arch;
 import static com.tngtech.archunit.base.DescribedPredicate.describe;
 import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.codeUnits;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
@@ -11,6 +12,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaCodeUnit;
 import com.tngtech.archunit.core.domain.JavaConstructorCall;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaMethod;
@@ -86,6 +88,15 @@ public final class FactoryFlowRules {
             describe(
                     "@Disabled*, @Enabled* (JUnit, Spring)",
                     a -> DISABLING_ANNOTATION.matcher(a.getRawType().getName()).matches());
+    private static final Set<String> ASSUMPTION_APIS =
+            Set.of(
+                    "org.junit.jupiter.api.Assumptions",
+                    "org.assertj.core.api.Assumptions",
+                    "org.assertj.core.api.BDDAssumptions",
+                    "org.junit.Assume");
+    private static final String TESTCONTAINERS = "org.testcontainers.junit.jupiter.Testcontainers";
+    private static final Set<String> NO_EXAMPLE_TYPES =
+            Set.of("java.util.List", "java.util.Set", "java.util.Collection", "java.util.Map");
     private static final Set<String> MOCK_ANNOTATIONS =
             Set.of(
                     "org.springframework.test.context.bean.override.mockito.MockitoBean",
@@ -382,6 +393,45 @@ public final class FactoryFlowRules {
                                                     .filter(FactoryFlowRules::isSimpleValueParam)
                                                     .allMatch(p -> p.isAnnotatedWith(PARAMETER)),
                                     JavaMethod::getFullName))
+                    .andShould(
+                            check(
+                                    "fill summary and description of @Operation",
+                                    m ->
+                                            m.tryGetAnnotationOfType(OPERATION)
+                                                    .map(
+                                                            a ->
+                                                                    hasText(a, "summary")
+                                                                            && hasText(
+                                                                                    a,
+                                                                                    "description"))
+                                                    .orElse(true),
+                                    JavaMethod::getFullName))
+                    .andShould(
+                            check(
+                                    "fill responseCode and description of every @ApiResponse",
+                                    m ->
+                                            apiResponses(m)
+                                                    .allMatch(
+                                                            a ->
+                                                                    hasText(a, "responseCode")
+                                                                            && hasText(
+                                                                                    a,
+                                                                                    "description")),
+                                    JavaMethod::getFullName))
+                    .andShould(
+                            check(
+                                    "fill description and example of every @Parameter",
+                                    m ->
+                                            m.getParameters().stream()
+                                                    .filter(FactoryFlowRules::isSimpleValueParam)
+                                                    .map(p -> p.tryGetAnnotationOfType(PARAMETER))
+                                                    .flatMap(java.util.Optional::stream)
+                                                    .allMatch(
+                                                            a ->
+                                                                    hasText(a, "description")
+                                                                            && hasText(
+                                                                                    a, "example")),
+                                    JavaMethod::getFullName))
                     .because("문서 없는 API 는 머지하지 않는다");
 
     public static final ArchRule DTO_FIELDS_DOCUMENTED =
@@ -391,15 +441,55 @@ public final class FactoryFlowRules {
                     .areNotStatic()
                     .should()
                     .beAnnotatedWith(SCHEMA)
+                    .andShould(
+                            check(
+                                    "fill description of @Schema, and example unless the field is a"
+                                            + " list, map, array or record",
+                                    f ->
+                                            f.tryGetAnnotationOfType(SCHEMA)
+                                                    .map(
+                                                            a ->
+                                                                    hasText(a, "description")
+                                                                            && (!needsExample(
+                                                                                            f
+                                                                                                    .getRawType())
+                                                                                    || hasText(
+                                                                                            a,
+                                                                                            "example")))
+                                                    .orElse(true),
+                                    JavaField::getFullName))
                     .because("요청/응답 DTO 필드는 @Schema(description, example) 로 문서화한다");
 
     // ---- 테스트 코드 (ImportOption.OnlyIncludeTests 로 등록) ----
 
-    public static final ArchRule NO_DISABLED_TESTS =
+    public static final ArchRule NO_SKIPPED_TESTS =
             CompositeArchRule.of(noClasses().should().beAnnotatedWith(DISABLING))
                     .and(noMethods().should().beAnnotatedWith(DISABLING))
+                    .and(
+                            noClasses()
+                                    .should()
+                                    .dependOnClassesThat(
+                                            describe(
+                                                    "are assumption APIs (Assumptions, Assume)",
+                                                    c -> ASSUMPTION_APIS.contains(c.getName()))))
+                    .and(
+                            noClasses()
+                                    .should()
+                                    .beAnnotatedWith(
+                                            describe(
+                                                    "@Testcontainers(disabledWithoutDocker = true)",
+                                                    a ->
+                                                            a.getRawType()
+                                                                            .getName()
+                                                                            .equals(TESTCONTAINERS)
+                                                                    && Boolean.TRUE.equals(
+                                                                            a.get(
+                                                                                            "disabledWithoutDocker")
+                                                                                    .orElse(
+                                                                                            false)))))
                     .because(
-                            "@Disabled*, @Enabled* 어노테이션(@DisabledIf, @EnabledIf 등)으로 테스트를 끄지 않는다");
+                            "테스트를 끄거나 건너뛰지 않는다 (@Disabled*, @Enabled*, Assumptions,"
+                                    + " disabledWithoutDocker)");
 
     public static final ArchRule MOCK_ONLY_CLIENT_AND_CLOCK =
             fields().that(
@@ -416,6 +506,19 @@ public final class FactoryFlowRules {
                                                             .getName()
                                                             .equals("java.time.Clock"),
                                     JavaField::getFullName))
+                    .because("우리 코드(Repository, Service, EventPublisher)는 mock 하지 않는다");
+
+    public static final ArchRule NO_INLINE_MOCK_OF_OUR_CODE =
+            codeUnits()
+                    .should(
+                            check(
+                                    "not pass Repository, Service or EventPublisher to Mockito.mock/spy",
+                                    cu ->
+                                            !callsMockitoMockOrSpy(cu)
+                                                    || cu.getReferencedClassObjects().stream()
+                                                            .noneMatch(
+                                                                    r -> isOurCode(r.getRawType())),
+                                    JavaCodeUnit::getFullName))
                     .because("우리 코드(Repository, Service, EventPublisher)는 mock 하지 않는다");
 
     // ---- helpers ----
@@ -450,6 +553,54 @@ public final class FactoryFlowRules {
 
     private static boolean isRecord(JavaClass c) {
         return c.getRawSuperclass().map(s -> s.getName().equals("java.lang.Record")).orElse(false);
+    }
+
+    private static boolean hasText(JavaAnnotation<?> annotation, String attribute) {
+        return annotation.get(attribute).map(v -> !String.valueOf(v).isBlank()).orElse(false);
+    }
+
+    private static Stream<JavaAnnotation<?>> apiResponses(JavaMethod m) {
+        Stream<JavaAnnotation<?>> single =
+                m
+                        .tryGetAnnotationOfType(
+                                "io.swagger.v3.oas.annotations.responses.ApiResponse")
+                        .stream()
+                        .map(a -> (JavaAnnotation<?>) a);
+        Stream<JavaAnnotation<?>> container =
+                m
+                        .tryGetAnnotationOfType(
+                                "io.swagger.v3.oas.annotations.responses.ApiResponses")
+                        .flatMap(a -> a.get("value"))
+                        .stream()
+                        .flatMap(
+                                v ->
+                                        v instanceof Object[] array
+                                                ? Arrays.stream(array)
+                                                : Stream.of(v))
+                        .filter(JavaAnnotation.class::isInstance)
+                        .map(v -> (JavaAnnotation<?>) v);
+        return Stream.concat(single, container);
+    }
+
+    private static boolean needsExample(JavaClass type) {
+        return !(type.isArray() || NO_EXAMPLE_TYPES.contains(type.getName()) || isRecord(type));
+    }
+
+    private static boolean callsMockitoMockOrSpy(JavaCodeUnit cu) {
+        return cu.getMethodCallsFromSelf().stream()
+                .anyMatch(
+                        call ->
+                                call.getTargetOwner().getName().equals("org.mockito.Mockito")
+                                        && (call.getName().equals("mock")
+                                                || call.getName().equals("spy")));
+    }
+
+    private static boolean isOurCode(JavaClass c) {
+        return c.getName().startsWith("com.factoryflow.")
+                && !isInClientPackage(c)
+                && (c.getSimpleName().endsWith("Repository")
+                        || c.getSimpleName().endsWith("Service")
+                        || c.getName().equals("com.factoryflow.common.event.EventPublisher"));
     }
 
     private static boolean isInClientPackage(JavaClass c) {

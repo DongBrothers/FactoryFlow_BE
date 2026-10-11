@@ -8,7 +8,7 @@
 - 로컬 인프라: docker compose up -d
 
 ## ArchUnit 이 검사하는 규칙
-패키지 위치, 이름 접미사, 주입 방식, 로그, DTO(record, 정적 팩토리), client, 이벤트, Swagger 어노테이션 유무, @Disabled, mock 대상은 common/common-test 의 FactoryFlowRules 가 검사한다 (각 서비스 ArchitectureTest, TestArchitectureTest). 규칙 목록과 이유는 그 파일을 보고, check 실패 메시지를 따른다. 아래에는 ArchUnit 으로 검사할 수 없는 규칙만 둔다.
+패키지 위치, 이름 접미사, 주입 방식, 로그, DTO(record, 정적 팩토리), client, 이벤트, Swagger 어노테이션과 summary/description/example 값, 테스트 건너뛰기(@Disabled*, @Enabled*, Assumptions, disabledWithoutDocker), mock 대상(필드, Mockito.mock/spy)은 common/common-test 의 FactoryFlowRules 가 검사한다 (각 서비스 ArchitectureTest, TestArchitectureTest). 규칙 목록과 이유는 그 파일을 보고, check 실패 메시지를 따른다. 아래에는 ArchUnit 으로 검사할 수 없는 규칙만 둔다.
 
 ## 절대 규칙
 - 서비스 간 통신: 비동기는 이벤트(common-event), 동기는 client/
@@ -30,8 +30,7 @@
 - 이벤트 payload 이름은 과거형 (예: OrderCreated)
 
 ## API 문서 (Swagger)
-- @Operation 에는 summary, description. @ApiResponse 는 응답 코드마다 (성공, 400, 404, 409, 503 등 실제로 나는 것 전부)
-- @Parameter, @Schema 에는 description, example
+- @ApiResponse 는 응답 코드마다 (성공, 400, 404, 409, 503 등 실제로 나는 것 전부)
 - 공통 응답 ApiResponse 와 이름이 같으므로 Swagger 쪽은 io.swagger.v3.oas.annotations.responses.ApiResponse 로 전체 이름을 쓴다
 
 ## 사람만 수정 (수정 필요 시 제안만)

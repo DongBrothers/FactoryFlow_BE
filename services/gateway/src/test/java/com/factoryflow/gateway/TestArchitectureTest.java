@@ -11,6 +11,7 @@ import com.tngtech.archunit.lang.ArchRule;
         packages = "com.factoryflow.gateway",
         importOptions = ImportOption.OnlyIncludeTests.class)
 class TestArchitectureTest {
-    @ArchTest ArchRule noDisabled = FactoryFlowRules.NO_DISABLED_TESTS;
+    @ArchTest ArchRule noSkipped = FactoryFlowRules.NO_SKIPPED_TESTS;
     @ArchTest ArchRule mocks = FactoryFlowRules.MOCK_ONLY_CLIENT_AND_CLOCK;
+    @ArchTest ArchRule inlineMocks = FactoryFlowRules.NO_INLINE_MOCK_OF_OUR_CODE;
 }
