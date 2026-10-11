@@ -36,7 +36,7 @@ jobs:
           fi
           # "- [x] one-way-door 라벨이면 롤백 방법 작성: <내용>" 줄이 체크되어 있고 내용이 있어야 한다
           rollback=$(gh pr view "$PR" --json body --jq .body \
-            | grep -E '^- \[[xX]\] one-way-door 라벨이면 롤백 방법 작성' \
+            | grep -E '^- \[[xX]\] one-way-door 라벨이면 롤백 방법 작성[^:]*:' \
             | sed -E 's/^[^:]*://' | tr -d '[:space:]')
           if [ -z "$rollback" ] || [ "$rollback" = "해당없음" ]; then
             echo "::error::one-way-door 변경이다. PR 본문 '롤백 방법 작성' 항목을 체크하고 방법을 적어라"; exit 1
