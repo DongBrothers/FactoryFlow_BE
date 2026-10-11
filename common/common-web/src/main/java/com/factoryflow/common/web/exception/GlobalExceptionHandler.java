@@ -19,6 +19,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String VALIDATION_ERROR = "VALIDATION_ERROR";
+
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ErrorResponse> handleCustomException(CustomException e) {
         log.error("[Common] 비즈니스 예외: {}", e.getMessage());
@@ -34,18 +36,14 @@ public class GlobalExceptionHandler {
                 e.getBindingResult().getFieldErrors().stream()
                         .map(error -> error.getField() + "(" + error.getCode() + ")")
                         .toList());
-        String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
-        return ResponseEntity.badRequest()
-                .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
+        return badRequest(e.getBindingResult().getAllErrors().get(0).getDefaultMessage());
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<ErrorResponse> handleHandlerMethodValidation(
             HandlerMethodValidationException e) {
         log.error("[Common] 유효성 검사 실패: {}", e.getMessage());
-        String message = e.getAllErrors().get(0).getDefaultMessage();
-        return ResponseEntity.badRequest()
-                .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
+        return badRequest(e.getAllErrors().get(0).getDefaultMessage());
     }
 
     @ExceptionHandler(ValidationException.class)
@@ -55,24 +53,14 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(customException.getErrorCode().getHttpStatus())
                     .body(ErrorResponse.of(customException.getErrorCode()));
         }
-        return ResponseEntity.badRequest()
-                .body(
-                        ErrorResponse.builder()
-                                .code("VALIDATION_ERROR")
-                                .message(e.getMessage())
-                                .build());
+        return badRequest(e.getMessage());
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestHeader(
             MissingRequestHeaderException e) {
         log.error("[Common] 필수 헤더 누락: {}", e.getMessage());
-        return ResponseEntity.badRequest()
-                .body(
-                        ErrorResponse.builder()
-                                .code("VALIDATION_ERROR")
-                                .message(e.getHeaderName() + " 헤더가 필요합니다.")
-                                .build());
+        return badRequest(e.getHeaderName() + " 헤더가 필요합니다.");
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -99,7 +87,7 @@ public class GlobalExceptionHandler {
 
     private static ResponseEntity<ErrorResponse> badRequest(String message) {
         return ResponseEntity.badRequest()
-                .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
+                .body(ErrorResponse.builder().code(VALIDATION_ERROR).message(message).build());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
