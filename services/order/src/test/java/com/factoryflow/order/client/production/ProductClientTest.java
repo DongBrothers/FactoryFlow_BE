@@ -8,7 +8,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.production.dto.response.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductResponse;
 import com.factoryflow.order.exception.OrderErrorCode;
 import java.net.SocketTimeoutException;
 import java.util.List;
@@ -41,9 +41,9 @@ class ProductClientTest {
                                 """,
                                 MediaType.APPLICATION_JSON));
 
-        List<ProductInfo> products = productClient.findProducts(List.of(1L, 2L));
+        List<ProductResponse> products = productClient.findProducts(List.of(1L, 2L));
 
-        assertThat(products).containsExactly(new ProductInfo(1L, "CAR-A", "소형차 A", true));
+        assertThat(products).containsExactly(new ProductResponse(1L, "CAR-A", "소형차 A", true));
         server.verify();
     }
 

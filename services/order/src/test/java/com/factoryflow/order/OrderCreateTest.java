@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.order.client.production.ProductClient;
-import com.factoryflow.order.client.production.dto.response.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductResponse;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
@@ -53,8 +53,8 @@ class OrderCreateTest {
     @Test
     void savesOrderItemsAndOutboxTogether() throws Exception {
         productsExist(
-                new ProductInfo(1L, "CAR-A", "소형차 A", true),
-                new ProductInfo(2L, "CAR-B", "소형차 B", true));
+                new ProductResponse(1L, "CAR-A", "소형차 A", true),
+                new ProductResponse(2L, "CAR-B", "소형차 B", true));
 
         String body =
                 postOrder("7", TWO_PRODUCTS)
@@ -102,7 +102,7 @@ class OrderCreateTest {
 
     @Test
     void unknownProductIs404() throws Exception {
-        productsExist(new ProductInfo(1L, "CAR-A", "소형차 A", true));
+        productsExist(new ProductResponse(1L, "CAR-A", "소형차 A", true));
 
         postOrder("7", TWO_PRODUCTS)
                 .andExpect(status().isNotFound())
@@ -113,8 +113,8 @@ class OrderCreateTest {
     @Test
     void productWithoutBomIs404() throws Exception {
         productsExist(
-                new ProductInfo(1L, "CAR-A", "소형차 A", true),
-                new ProductInfo(2L, "CAR-B", "소형차 B", false));
+                new ProductResponse(1L, "CAR-A", "소형차 A", true),
+                new ProductResponse(2L, "CAR-B", "소형차 B", false));
 
         postOrder("7", TWO_PRODUCTS)
                 .andExpect(status().isNotFound())
@@ -194,7 +194,7 @@ class OrderCreateTest {
                                 .value("주문 번호 (UUID)"));
     }
 
-    private void productsExist(ProductInfo... products) {
+    private void productsExist(ProductResponse... products) {
         when(productClient.findProducts(anyList())).thenReturn(List.of(products));
     }
 

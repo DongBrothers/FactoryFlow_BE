@@ -1,7 +1,7 @@
 package com.factoryflow.order.client.production;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.order.client.production.dto.response.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductResponse;
 import com.factoryflow.order.client.production.dto.response.ProductsResponse;
 import com.factoryflow.order.exception.OrderErrorCode;
 import java.util.Collection;
@@ -23,7 +23,7 @@ public interface ProductClient {
     ProductsResponse getProducts(@RequestParam("ids") Collection<Long> ids);
 
     /** 있는 제품만 돌려준다. 실패와 시간 초과는 모두 PRODUCTION_UNAVAILABLE(503) 이다. */
-    default List<ProductInfo> findProducts(Collection<Long> ids) {
+    default List<ProductResponse> findProducts(Collection<Long> ids) {
         try {
             ProductsResponse response = getProducts(ids);
             return response == null || response.data() == null ? List.of() : response.data();

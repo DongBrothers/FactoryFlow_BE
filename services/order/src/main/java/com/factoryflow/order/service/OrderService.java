@@ -3,7 +3,7 @@ package com.factoryflow.order.service;
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.order.client.production.ProductClient;
-import com.factoryflow.order.client.production.dto.response.ProductInfo;
+import com.factoryflow.order.client.production.dto.response.ProductResponse;
 import com.factoryflow.order.domain.CustomerOrder;
 import com.factoryflow.order.domain.OrderItem;
 import com.factoryflow.order.dto.request.CreateOrderRequest;
@@ -49,11 +49,11 @@ public class OrderService {
     public CreateOrderResponse create(Long customerId, CreateOrderRequest request) {
         List<Long> productIds =
                 request.items().stream().map(CreateOrderRequest.Item::productId).toList();
-        Map<Long, ProductInfo> products =
+        Map<Long, ProductResponse> products =
                 productClient.findProducts(productIds).stream()
-                        .collect(Collectors.toMap(ProductInfo::id, Function.identity()));
+                        .collect(Collectors.toMap(ProductResponse::id, Function.identity()));
         for (Long productId : productIds) {
-            ProductInfo product = products.get(productId);
+            ProductResponse product = products.get(productId);
             if (product == null) {
                 throw new CustomException(OrderErrorCode.PRODUCT_NOT_FOUND);
             }
@@ -65,13 +65,13 @@ public class OrderService {
     }
 
     private CreateOrderResponse save(
-            Long customerId, CreateOrderRequest request, Map<Long, ProductInfo> products) {
+            Long customerId, CreateOrderRequest request, Map<Long, ProductResponse> products) {
         CustomerOrder order = orderRepository.save(CustomerOrder.receive(customerId));
         List<OrderItem> items =
                 request.items().stream()
                         .map(
                                 item -> {
-                                    ProductInfo product = products.get(item.productId());
+                                    ProductResponse product = products.get(item.productId());
                                     return OrderItem.receive(
                                             order.getId(),
                                             product.id(),
