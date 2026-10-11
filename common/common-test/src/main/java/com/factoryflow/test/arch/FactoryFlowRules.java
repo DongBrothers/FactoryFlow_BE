@@ -173,20 +173,30 @@ public final class FactoryFlowRules {
 
     // ---- 기존 규칙 ----
 
-    public static ArchRule noOtherServiceAccess(String me) {
-        String[] others =
-                SERVICES.stream()
-                        .filter(s -> !s.equals(me))
-                        .map(s -> "com.factoryflow." + s + "..")
-                        .toArray(String[]::new);
-        return noClasses()
-                .that()
-                .resideInAPackage("com.factoryflow." + me + "..")
-                .should()
-                .dependOnClassesThat()
-                .resideInAnyPackage(others)
-                .because("서비스 간 직접 참조 금지. 이벤트나 client/로 통신");
-    }
+    public static final ArchRule NO_OTHER_SERVICE_ACCESS =
+            classes()
+                    .that(describe("belong to a service", c -> serviceOf(c) != null))
+                    .should(
+                            new ArchCondition<JavaClass>("not depend on another service") {
+                                @Override
+                                public void check(JavaClass c, ConditionEvents events) {
+                                    String me = serviceOf(c);
+                                    c.getDirectDependenciesFromSelf().stream()
+                                            .filter(
+                                                    d -> {
+                                                        String other =
+                                                                serviceOf(d.getTargetClass());
+                                                        return other != null && !other.equals(me);
+                                                    })
+                                            .forEach(
+                                                    d ->
+                                                            events.add(
+                                                                    SimpleConditionEvent.violated(
+                                                                            d,
+                                                                            d.getDescription())));
+                                }
+                            })
+                    .because("서비스 간 직접 참조 금지. 이벤트나 client/로 통신");
 
     public static final ArchRule ENTRY_THROUGH_API =
             noClasses()
@@ -290,16 +300,22 @@ public final class FactoryFlowRules {
                                     JavaClass::getName))
                     .because("내부 API(/internal/**)는 Internal{도메인}Controller, 나머지는 {도메인}Controller");
 
-    public static ArchRule errorCodeNamed(String me) {
-        return classes()
-                .that()
-                .implement(ERROR_CODE)
-                .should()
-                .haveSimpleName(capitalize(me) + "ErrorCode")
-                .andShould()
-                .resideInAPackage("..exception")
-                .because("에러 코드는 exception/{서비스}ErrorCode");
-    }
+    public static final ArchRule ERROR_CODE_NAMING =
+            classes()
+                    .that()
+                    .implement(ERROR_CODE)
+                    .should(
+                            check(
+                                    "be exception/{Service}ErrorCode of its own service",
+                                    c ->
+                                            serviceOf(c) != null
+                                                    && c.getPackageName().endsWith(".exception")
+                                                    && c.getSimpleName()
+                                                            .equals(
+                                                                    capitalize(serviceOf(c))
+                                                                            + "ErrorCode"),
+                                    JavaClass::getName))
+                    .because("에러 코드는 exception/{서비스}ErrorCode");
 
     public static final ArchRule EVENT_LISTENER_NAMING =
             classes()
@@ -866,6 +882,15 @@ public final class FactoryFlowRules {
                 pendingCall = null;
             }
         }
+    }
+
+    // com.factoryflow.<서비스>.. 에 있으면 그 서비스 이름, 아니면 null
+    private static String serviceOf(JavaClass c) {
+        String[] parts = c.getPackageName().split("\\.");
+        if (parts.length < 3 || !parts[0].equals("com") || !parts[1].equals("factoryflow")) {
+            return null;
+        }
+        return SERVICES.contains(parts[2]) ? parts[2] : null;
     }
 
     private static boolean isInClientPackage(JavaClass c) {

@@ -1,4 +1,4 @@
-package com.factoryflow.order;
+package com.factoryflow.test.container;
 
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -10,15 +10,18 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
 @TestConfiguration(proxyBeanMethods = false)
 public class TestContainersConfig {
 
+    public static final String MYSQL_IMAGE = "mysql:8.4";
+    public static final String RABBITMQ_IMAGE = "rabbitmq:3.13-management";
+
     @Bean
     @ServiceConnection
     MySQLContainer mysql() {
-        return new MySQLContainer("mysql:8.4");
+        return new MySQLContainer(MYSQL_IMAGE);
     }
 
     @Bean
     @ServiceConnection
     RabbitMQContainer rabbit() {
-        return new RabbitMQContainer("rabbitmq:3.13-management");
+        return new RabbitMQContainer(RABBITMQ_IMAGE);
     }
 }

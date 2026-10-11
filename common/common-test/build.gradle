@@ -1,3 +1,12 @@
 dependencies {
     api 'com.tngtech.archunit:archunit-junit5:1.5.1'
+
+    // TestContainersConfig, MigrationTestSupport 용. 실행 때는 쓰는 서비스의 testImplementation 이 준다
+    compileOnly 'org.springframework.boot:spring-boot-starter-test'
+    compileOnly 'org.springframework.boot:spring-boot-testcontainers'
+    compileOnly 'org.testcontainers:testcontainers-junit-jupiter'
+    compileOnly 'org.testcontainers:testcontainers-mysql'
+    compileOnly 'org.testcontainers:testcontainers-rabbitmq'
+    compileOnly 'org.flywaydb:flyway-core'
+    compileOnly 'org.springframework:spring-jdbc'
 }
