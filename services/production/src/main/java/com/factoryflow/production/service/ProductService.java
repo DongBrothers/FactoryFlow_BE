@@ -24,11 +24,8 @@ public class ProductService {
         return productRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
                 .map(
                         product ->
-                                new InternalProductResponse(
-                                        product.getId(),
-                                        product.getCode(),
-                                        product.getName(),
-                                        withBom.contains(product.getId())))
+                                InternalProductResponse.of(
+                                        product, withBom.contains(product.getId())))
                 .toList();
     }
 }

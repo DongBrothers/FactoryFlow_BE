@@ -52,7 +52,6 @@ public class OrderController {
                     @RequestHeader("X-User-Id")
                     Long customerId,
             @Valid @RequestBody CreateOrderRequest request) {
-        return ApiResponse.created(
-                new CreateOrderResponse(orderService.create(customerId, request)));
+        return ApiResponse.created(orderService.create(customerId, request));
     }
 }
