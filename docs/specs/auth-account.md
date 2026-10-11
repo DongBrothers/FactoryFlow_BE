@@ -78,6 +78,12 @@
 - **역할**: 1인 1역할. 값 집합 `SALES, PURCHASE, PRODUCTION, WORKER, ADMIN`.
   **enum 컬럼으로 저장**(별도 role 테이블 없음).
 - **진입점**: controller(HTTP) → service. Repository 직접 호출 금지.
+- **X-User-Role 신뢰 전제 (보안)**: 서비스는 gateway 가 넘기는 `X-User-Role` 헤더로 ADMIN 여부를
+  판단한다(방어 심층). 이 신뢰는 다음 두 가지가 모두 성립할 때만 유효하다.
+  1. 서비스는 gateway 를 통해서만 접근 가능(네트워크 격리: ECS 보안그룹에서 인터넷 직접 접속 차단).
+  2. gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 **버리고(strip), 검증된 JWT 로 다시 채운다**.
+  둘 중 하나라도 빠지면 클라이언트가 헤더를 위조해 우회할 수 있다(로컬에서 서비스를 직접 호출하면
+  실제로 위조된다). 더 강한 보장이 필요하면 각 서비스가 헤더 대신 JWT 를 직접 검증(zero-trust)한다.
 
 ## 관련 이벤트 (events.md 참조)
 
@@ -96,6 +102,9 @@
 고객이 로그인하지 않기로 정함에 따라(사내 B2B), auth가 쥐고 있던 고객 로그인 계정이 사라진다.
 그 여파로 다음이 필요하다.
 
+- gateway 배선: 라우트 테이블(5개 서비스) + **신원 헤더 전달**. 이때 gateway 는 들어온 `X-User-*`
+  헤더를 **반드시 버리고(strip)** 검증된 JWT 로 `X-User-Id`/`X-User-Role` 를 다시 채워야 한다.
+  (이게 빠지면 위 "X-User-Role 신뢰 전제"가 깨져 운영에서도 역할 위조가 가능하다.)
 - order 서비스에 **거래처 마스터 테이블** 신설, `customer_order.customer_id` 재연결
 - saga 명세의 "고객이 취소 요청" → "판매 담당이 거래처 주문을 취소 요청"으로 문구 수정
 - services/auth/CLAUDE.md의 `customer`/`admin` 설명을 `user_account`/`role`로 갱신
