@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -168,6 +169,29 @@ class OrderCreateTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("같은 제품을 두 번 주문할 수 없습니다."));
         assertRejectedBeforeLookup();
+    }
+
+    @Test
+    void createOrderApiIsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/orders'].post.summary").value("주문 생성"))
+                .andExpect(jsonPath("$.paths['/orders'].post.responses['201']").exists())
+                .andExpect(jsonPath("$.paths['/orders'].post.responses['400']").exists())
+                .andExpect(jsonPath("$.paths['/orders'].post.responses['404']").exists())
+                .andExpect(jsonPath("$.paths['/orders'].post.responses['503']").exists())
+                .andExpect(jsonPath("$.paths['/orders'].post.responses['500']").doesNotExist())
+                .andExpect(
+                        jsonPath(
+                                        "$.paths['/orders'].post.parameters[?(@.name == 'X-User-Id')].description")
+                                .value("로그인한 고객 번호 (gateway 가 넣음)"))
+                .andExpect(
+                        jsonPath("$.components.schemas.Item.properties.qty.description")
+                                .value("주문 수량 (1 이상)"))
+                .andExpect(
+                        jsonPath(
+                                        "$.components.schemas.CreateOrderResponse.properties.orderNo.description")
+                                .value("주문 번호 (UUID)"));
     }
 
     private void productsExist(ProductInfo... products) {

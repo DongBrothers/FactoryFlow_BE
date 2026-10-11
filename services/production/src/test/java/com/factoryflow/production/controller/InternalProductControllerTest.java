@@ -66,6 +66,21 @@ class InternalProductControllerTest {
         mockMvc.perform(get("/internal/products")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void internalProductApiIsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.paths['/internal/products'].get.summary")
+                                .value("제품 조회 (서비스 간 내부용)"))
+                .andExpect(jsonPath("$.paths['/internal/products'].get.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/internal/products'].get.responses['400']").exists())
+                .andExpect(
+                        jsonPath(
+                                        "$.components.schemas.InternalProductResponse.properties.orderable.description")
+                                .value("BOM 이 있어 주문할 수 있는지"));
+    }
+
     private long insertProduct(String code, String name) {
         jdbc.update(
                 "INSERT INTO product (code, name, created_at, updated_at)"

@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class ProductQueryService {
+public class ProductService {
 
     private final ProductRepository productRepository;
     private final BomRepository bomRepository;
