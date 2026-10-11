@@ -37,14 +37,15 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 8. order: status-changed / completed 수신 → order_item 상태 갱신, customer_order.status 요약 갱신 (같은 트랜잭션)
 
 ### 2. 취소 (보상)
-생산 시작(IN_PROGRESS)이 되돌릴 수 없는 지점이다. 취소는 주문 전체 단위다.
+생산 시작(IN_PROGRESS)이 되돌릴 수 없는 지점이다. 판단 기준은 상태가 아니라 started_at 이다
+(재생산 중에는 WAITING_MATERIAL, READY 로 돌아가도 이미 시작한 건이라 취소할 수 없다). 취소는 주문 전체 단위다.
 1. order: 고객 취소 요청
    - 품목 중 COMPLETED, CANCELLED 가 있으면 바로 거절 (409)
    - 아니면 모든 품목을 CANCEL_REQUESTED 로 바꾸고 `order.cancelled`
    - order 가 가진 품목 상태는 늦을 수 있으므로, 취소 가능 여부의 최종 판단은 production 이 한다
 2. production: 생산 건마다 판단
-   - PLANNED, WAITING_MATERIAL, READY → CANCELLED + `production.cancelled` + `production.status-changed`(CANCELLED)
-   - IN_PROGRESS, COMPLETED → 상태 유지 + `production.cancel-rejected`(reason = ALREADY_STARTED)
+   - started_at 이 없음 (PLANNED, WAITING_MATERIAL, READY) → CANCELLED + `production.cancelled` + `production.status-changed`(CANCELLED)
+   - started_at 이 있음 (IN_PROGRESS, COMPLETED, 재생산 중) → 상태 유지 + `production.cancel-rejected`(reason = ALREADY_STARTED)
    - 그 주문의 생산 건이 아직 없음 → `production.cancel-rejected`(reason = NOT_READY)
 3. inventory: cancelled 수신 → 그 생산 건의 RESERVED 줄 RELEASED (available +, reserved −, stock_history RELEASE),
    WAITING 줄은 RELEASED (재고 변화 없음). 이미 들어간 AUTO 구매는 취소하지 않는다 (재고로 남음)
@@ -134,6 +135,7 @@ inventory.shortage, purchase.received
 - [ ] 제품 2종 주문에서 A 는 바로 생산, B 는 대기 → 주문 IN_PRODUCTION, 품목 상태가 각각 다름
 - [ ] 생산 시작 전 취소: 예약 해제, available 복구, stock_history RELEASE, 품목과 주문 CANCELLED
 - [ ] 생산 중 취소: cancel-rejected, 품목 IN_PRODUCTION 으로 복귀
+- [ ] 불량 재생산 중(WAITING_MATERIAL, started_at 있음) 취소도 cancel-rejected, 품목 IN_PRODUCTION 으로 복귀
 - [ ] 불량: 부품 CONSUME 기록 후 같은 예약 줄로 재예약, 주문 품목은 IN_PRODUCTION 유지
 - [ ] 취소 후 늦게 온 inventory.reserved 는 해제로 정리된다
 - [ ] 같은 이벤트를 두 번 받아도 재고와 상태가 한 번만 바뀐다
