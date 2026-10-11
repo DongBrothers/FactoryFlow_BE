@@ -4,6 +4,6 @@
 - 스냅샷: 주문 생성 때 client/ 로 production 에 1회 조회해 제품 존재 확인 + product_code, product_name 저장
 - 발행: order.created, order.cancelled
 - 수신: production.status-changed, production.completed, production.cancel-rejected
-- 진입점: controller/OrderController (HTTP), event/listener (이벤트) → service/OrderService
+- 진입점: controller/{도메인}Controller (HTTP), 내부 API 는 Internal{도메인}Controller, event/listener (이벤트) → service/{도메인}Service. 이름 규칙과 Swagger 문서는 루트 CLAUDE.md
 - 보상: 주문 취소 시 품목 CANCEL_REQUESTED + order.cancelled. production 이 생산 시작 전이면 취소, 아니면 cancel-rejected 로 품목 복귀 (docs/specs/saga-order-fulfillment.md)
 - 에러 코드: exception/OrderErrorCode (common-web ErrorCode 구현, CustomException 으로 던진다)

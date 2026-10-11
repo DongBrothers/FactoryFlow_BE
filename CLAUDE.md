@@ -19,6 +19,22 @@
 ## 패키지 구조 (서비스별)
 com.factoryflow.<svc>.{controller, domain, dto, repository, service, event/listener, event/publisher, client, exception}
 
+## 이름 규칙
+- Controller: {도메인}Controller. 서비스 간 내부 API(/internal/**)는 Internal{도메인}Controller (gateway 에 노출 안 함)
+- Service: 도메인(엔티티)별 {도메인}Service (예: OrderService, ProductService)
+- Repository: {엔티티}Repository
+- client/: {상대 도메인}Client, 응답은 {도메인}Info record
+- DTO: {동작}{도메인}Request/Response (예: CreateOrderRequest). 내부 API 응답은 Internal{도메인}Response
+- 이벤트: 발행 payload 는 event/publisher 의 과거형 record (예: OrderCreated), 수신은 event/listener 의 {발행 서비스}EventListener
+- 에러 코드: exception/{서비스}ErrorCode
+
+## API 문서 (Swagger)
+- 모든 API(외부, 내부)는 springdoc OpenAPI 로 문서화한다. 문서 없는 API 는 머지하지 않는다
+- Controller 메서드: @Operation(summary, description) + 응답 코드마다 @ApiResponse (성공, 400, 404, 409, 503 등 실제로 나는 것 전부)
+- 헤더, 쿼리, 경로 값: @Parameter(description, example)
+- 요청/응답 DTO 필드: @Schema(description, example)
+- 공통 응답 ApiResponse 와 이름이 같으므로 Swagger 쪽은 io.swagger.v3.oas.annotations.responses.ApiResponse 로 전체 이름을 쓴다
+
 ## 사람만 수정 (수정 필요 시 제안만)
 CLAUDE.md(루트), .claude/, .github/, common/common-event/, common/common-test/, docs/specs/events.md, 루트 build.gradle, settings.gradle
 
