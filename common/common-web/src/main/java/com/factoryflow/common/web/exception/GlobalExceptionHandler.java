@@ -5,11 +5,14 @@ import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
@@ -66,6 +69,30 @@ public class GlobalExceptionHandler {
                                 .code("VALIDATION_ERROR")
                                 .message(e.getHeaderName() + " 헤더가 필요합니다.")
                                 .build());
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRequestParameter(
+            MissingServletRequestParameterException e) {
+        log.error("[Common] 필수 파라미터 누락: {}", e.getMessage());
+        return badRequest(e.getParameterName() + " 파라미터가 필요합니다.");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.error("[Common] 파라미터 형식 오류: {}", e.getMessage());
+        return badRequest(e.getName() + " 값의 형식이 올바르지 않습니다.");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+        log.error("[Common] 요청 본문 읽기 실패: {}", e.getMessage());
+        return badRequest("요청 본문을 읽을 수 없습니다.");
+    }
+
+    private static ResponseEntity<ErrorResponse> badRequest(String message) {
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.builder().code("VALIDATION_ERROR").message(message).build());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

@@ -27,7 +27,7 @@
 ## 규칙 / 예외
 | 상황 | 응답 | 저장 / 이벤트 |
 |---|---|---|
-| `X-User-Id` 헤더 없음 | 401 | 없음 |
+| `X-User-Id` 헤더 없음 | 400 | 없음 |
 | items 가 비어 있음 (`@NotEmpty`) | 400 | 없음 |
 | productId 가 없음 (`@NotNull`) | 400 | 없음 |
 | qty 가 1 미만 (`@Positive`) | 400 | 없음 |
@@ -50,7 +50,7 @@
 ## 완료 조건 (테스트로 확인할 것)
 - [ ] 정상 주문: 201 + orderNo(UUID), customer_order 1건(RECEIVED, order_no 저장), order_item 제품 수만큼(RECEIVED, 스냅샷 저장), outbox 에 order.created 1건
 - [ ] order.created payload 에 orderId 와 products[{productId, qty}] 가 들어간다
-- [ ] 헤더 없음 401, items 비어 있음 400, qty 0 이하 400, productId 중복 400
+- [ ] 헤더 없음 400, items 비어 있음 400, qty 0 이하 400, productId 중복 400
 - [ ] 없는 제품 404, BOM 없는 제품 404. 둘 다 주문과 outbox 가 생기지 않는다
 - [ ] production 장애 또는 3초 초과 시 503, 주문과 outbox 가 생기지 않는다
 - [ ] order_no 는 UNIQUE 다 (같은 값 두 번 저장 불가)

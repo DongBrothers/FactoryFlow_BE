@@ -72,6 +72,33 @@ class GlobalExceptionHandlerValidationTest {
                 .andExpect(jsonPath("$.message").value("X-User-Id 헤더가 필요합니다."));
     }
 
+    @Test
+    void missingRequestParamIs400() throws Exception {
+        mockMvc.perform(get("/samples"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("size 파라미터가 필요합니다."));
+    }
+
+    @Test
+    void wrongParamTypeIs400() throws Exception {
+        mockMvc.perform(get("/samples").param("size", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("size 값의 형식이 올바르지 않습니다."));
+    }
+
+    @Test
+    void malformedJsonBodyIs400() throws Exception {
+        mockMvc.perform(
+                        post("/samples")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"qty\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("요청 본문을 읽을 수 없습니다."));
+    }
+
     record SampleRequest(@NotNull @Positive(message = "qty 는 1 이상이어야 합니다.") Integer qty) {}
 
     @RestController
