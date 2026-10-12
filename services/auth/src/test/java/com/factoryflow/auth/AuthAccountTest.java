@@ -14,6 +14,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jwt.SignedJWT;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -321,6 +322,51 @@ class AuthAccountTest {
                 .doesNotContain("wrong-password")
                 .doesNotContain(token)
                 .doesNotContain(refresh.getValue());
+    }
+
+    // --- API 문서 ---
+
+    @Test
+    void apiDocsListActualResponseCodesAndFieldDescriptions() throws Exception {
+        String docs =
+                mockMvc.perform(get("/v3/api-docs"))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+
+        // 명세 "API 별 응답" 표의 코드만 나오고, 공통 핸들러의 500 은 자동으로 붙지 않는다
+        assertResponseCodes(docs, "/api/auth/admin/users", "201", "400", "403", "409");
+        assertResponseCodes(docs, "/api/auth/activation", "204", "400", "409");
+        assertResponseCodes(docs, "/api/auth/login", "200", "400", "401", "403", "429");
+        assertResponseCodes(docs, "/api/auth/token/refresh", "200", "401", "403");
+        assertResponseCodes(docs, "/api/auth/logout", "204");
+        assertThat(JsonPath.<Object>read(docs, "$.paths['/.well-known/jwks.json'].get.summary"))
+                .isNotNull();
+        assertThat(
+                        JsonPath.<Map<String, Object>>read(
+                                        docs, "$.paths['/.well-known/jwks.json'].get.responses")
+                                .keySet())
+                .containsExactly("200");
+
+        assertThat(
+                        JsonPath.<String>read(
+                                docs,
+                                "$.components.schemas.IssueAccountRequest.properties.email.description"))
+                .isNotBlank();
+        assertThat(
+                        JsonPath.<String>read(
+                                docs,
+                                "$.components.schemas.AccessTokenResponse.properties.accessToken.description"))
+                .isNotBlank();
+    }
+
+    private static void assertResponseCodes(String docs, String path, String... codes) {
+        assertThat(JsonPath.<String>read(docs, "$.paths['" + path + "'].post.summary"))
+                .isNotBlank();
+        Map<String, Object> responses =
+                JsonPath.read(docs, "$.paths['" + path + "'].post.responses");
+        assertThat(responses.keySet()).containsExactlyInAnyOrder(codes);
     }
 
     // --- helpers ---
