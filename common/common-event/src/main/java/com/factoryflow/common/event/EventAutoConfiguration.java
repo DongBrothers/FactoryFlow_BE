@@ -12,8 +12,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -47,25 +45,15 @@ public class EventAutoConfiguration {
     OutboxRelay outboxRelay(
             JdbcTemplate jdbcTemplate,
             RabbitTemplate rabbitTemplate,
-            PlatformTransactionManager transactionManager,
             EventProperties properties,
             ObjectProvider<Clock> clock) {
         return new OutboxRelay(
-                jdbcTemplate,
-                rabbitTemplate,
-                new TransactionTemplate(transactionManager),
-                properties,
-                clock.getIfAvailable(Clock::systemUTC));
+                jdbcTemplate, rabbitTemplate, properties, clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean
     ProcessedEventGuard processedEventGuard(
-            JdbcTemplate jdbcTemplate,
-            PlatformTransactionManager transactionManager,
-            ObjectProvider<Clock> clock) {
-        return new ProcessedEventGuard(
-                jdbcTemplate,
-                new TransactionTemplate(transactionManager),
-                clock.getIfAvailable(Clock::systemUTC));
+            JdbcTemplate jdbcTemplate, ObjectProvider<Clock> clock) {
+        return new ProcessedEventGuard(jdbcTemplate, clock.getIfAvailable(Clock::systemUTC));
     }
 }

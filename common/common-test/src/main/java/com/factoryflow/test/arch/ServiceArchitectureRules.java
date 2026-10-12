@@ -34,6 +34,21 @@ public final class ServiceArchitectureRules {
     @ArchTest
     static final ArchRule customException = FactoryFlowRules.SERVICE_THROWS_CUSTOM_EXCEPTION;
 
+    @ArchTest
+    static final ArchRule transactionalOnly = FactoryFlowRules.TRANSACTIONAL_ANNOTATION_ONLY;
+
+    @ArchTest
+    static final ArchRule transactionalLayer = FactoryFlowRules.TRANSACTIONAL_IN_SERVICE_LAYER;
+
+    @ArchTest
+    static final ArchRule transactionalProxyable = FactoryFlowRules.TRANSACTIONAL_METHODS_PROXYABLE;
+
+    @ArchTest
+    static final ArchRule noSelfTransactional = FactoryFlowRules.NO_SELF_CALL_TO_TRANSACTIONAL;
+
+    @ArchTest
+    static final ArchRule noClientInTransaction = FactoryFlowRules.NO_CLIENT_CALL_IN_TRANSACTION;
+
     @ArchTest static final ArchRule controllerNaming = FactoryFlowRules.CONTROLLER_NAMING;
     @ArchTest static final ArchRule errorCode = FactoryFlowRules.ERROR_CODE_NAMING;
     @ArchTest static final ArchRule listenerNaming = FactoryFlowRules.EVENT_LISTENER_NAMING;

@@ -132,6 +132,8 @@ public final class FactoryFlowRules {
                     "org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest");
     private static final String TEST_CONTAINERS_CONFIG =
             "com.factoryflow.test.container.TestContainersConfig";
+    private static final String SPRING_TRANSACTIONAL =
+            "org.springframework.transaction.annotation.Transactional";
     private static final String OPERATION = "io.swagger.v3.oas.annotations.Operation";
     private static final Set<String> API_RESPONSE_DOCS =
             Set.of(
@@ -478,6 +480,84 @@ public final class FactoryFlowRules {
                                                             .getName()
                                                             .equals(CUSTOM_EXCEPTION)))
                     .because("service 의 예외는 {서비스}ErrorCode 를 담은 CustomException 으로 던진다");
+
+    // ---- 트랜잭션 ----
+
+    public static final ArchRule TRANSACTIONAL_ANNOTATION_ONLY =
+            CompositeArchRule.of(
+                            noClasses()
+                                    .that()
+                                    .resideInAPackage("com.factoryflow..")
+                                    .should()
+                                    .dependOnClassesThat()
+                                    .haveFullyQualifiedName(
+                                            "org.springframework.transaction.support.TransactionTemplate"))
+                    .and(
+                            noClasses()
+                                    .should()
+                                    .dependOnClassesThat()
+                                    .haveFullyQualifiedName("jakarta.transaction.Transactional"))
+                    .because(
+                            "트랜잭션은 Spring @Transactional 로 건다 (TransactionTemplate,"
+                                    + " jakarta.transaction.Transactional 쓰지 않음)");
+
+    public static final ArchRule TRANSACTIONAL_IN_SERVICE_LAYER =
+            classes()
+                    .that(describe("use @Transactional", FactoryFlowRules::usesTransactional))
+                    .should()
+                    .resideInAPackage("..service..")
+                    .because("트랜잭션 경계는 service 계층에만 둔다");
+
+    public static final ArchRule TRANSACTIONAL_METHODS_PROXYABLE =
+            methods()
+                    .that()
+                    .areAnnotatedWith(SPRING_TRANSACTIONAL)
+                    .should(
+                            check(
+                                    "be overridable by the proxy (not private, final or static)",
+                                    m ->
+                                            !m.getModifiers().contains(JavaModifier.PRIVATE)
+                                                    && !m.getModifiers()
+                                                            .contains(JavaModifier.FINAL)
+                                                    && !m.getModifiers()
+                                                            .contains(JavaModifier.STATIC),
+                                    JavaMethod::getFullName))
+                    .because("private, final, static 메서드의 @Transactional 은 프록시가 가로채지 못해 무시된다");
+
+    public static final ArchRule NO_SELF_CALL_TO_TRANSACTIONAL =
+            noClasses()
+                    .should()
+                    .callMethodWhere(
+                            describe(
+                                    "the target is an @Transactional method of the same class",
+                                    (JavaMethodCall call) ->
+                                            call.getOriginOwner().equals(call.getTargetOwner())
+                                                    && call.getTarget().resolveMember().stream()
+                                                            .anyMatch(
+                                                                    m ->
+                                                                            m.isAnnotatedWith(
+                                                                                    SPRING_TRANSACTIONAL))))
+                    .because(
+                            "같은 클래스 안에서 부르면 프록시를 거치지 않아 @Transactional 이 무시된다. 다른"
+                                    + " Bean(예: {도메인}Writer) 으로 뺀다");
+
+    public static final ArchRule NO_CLIENT_CALL_IN_TRANSACTION =
+            methods()
+                    .that()
+                    .areAnnotatedWith(SPRING_TRANSACTIONAL)
+                    .should(
+                            check(
+                                    "not call another service through client/ inside the transaction",
+                                    m ->
+                                            m.getMethodCallsFromSelf().stream()
+                                                    .noneMatch(
+                                                            call ->
+                                                                    isInClientPackage(
+                                                                            call.getTargetOwner())),
+                                    JavaMethod::getFullName))
+                    .because(
+                            "다른 서비스 호출을 트랜잭션 안에서 하면 응답을 기다리는 동안 DB 커넥션을 잡는다. 호출은"
+                                    + " 트랜잭션 밖에서 끝내고 저장만 트랜잭션으로 한다");
 
     public static final ArchRule CONTROLLER_NAMING =
             classes()
@@ -1153,6 +1233,13 @@ public final class FactoryFlowRules {
             }
         }
         return false;
+    }
+
+    private static boolean usesTransactional(JavaClass c) {
+        return serviceOf(c) != null
+                && (c.isAnnotatedWith(SPRING_TRANSACTIONAL)
+                        || c.getMethods().stream()
+                                .anyMatch(m -> m.isAnnotatedWith(SPRING_TRANSACTIONAL)));
     }
 
     private static boolean isInClientPackage(JavaClass c) {
