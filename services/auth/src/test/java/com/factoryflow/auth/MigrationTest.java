@@ -42,42 +42,42 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
-    void rejectsDuplicateEmployeeNo() {
-        insertUser("E1001", "a@factoryflow.test");
+    void userAccountHasNoEmployeeNoColumn() {
+        // 로그인 ID 는 이메일이다. 사번은 두지 않는다.
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns"
+                                + " WHERE table_schema = DATABASE()"
+                                + " AND table_name = 'user_account' AND column_name = 'employee_no'",
+                        Integer.class);
 
-        assertThatThrownBy(() -> insertUser("E1001", "b@factoryflow.test"))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_user_account_employee_no");
+        assertThat(count).isZero();
     }
 
     @Test
     void rejectsDuplicateEmail() {
-        insertUser("E2001", "dup@factoryflow.test");
+        insertUser("dup@factoryflow.test", "hash");
 
-        assertThatThrownBy(() -> insertUser("E2002", "dup@factoryflow.test"))
+        assertThatThrownBy(() -> insertUser("dup@factoryflow.test", "hash"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_user_account_email");
     }
 
     @Test
-    void allowsNullPasswordForInvitedAccount() {
-        // 발급(INVITED) 직후엔 비번이 없다. 활성화 때 설정된다.
-        insertUser("E3001", "invited@factoryflow.test");
-
-        var password =
-                jdbc.queryForObject(
-                        "SELECT password FROM user_account WHERE employee_no = 'E3001'",
-                        String.class);
-        assertThat(password).isNull();
+    void rejectsNullPassword() {
+        // 활성화(비번 설정)가 끝난 계정만 저장되므로 비번은 항상 있다.
+        assertThatThrownBy(() -> insertUser("nopw@factoryflow.test", null))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("password");
     }
 
-    private void insertUser(String employeeNo, String email) {
+    private void insertUser(String email, String password) {
         jdbc.update(
-                "INSERT INTO user_account (public_id, employee_no, email, name, role, status,"
+                "INSERT INTO user_account (public_id, email, password, name, role, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (?, ?, ?, '홍길동', 'WORKER', 'INVITED', NOW(6), NOW(6))",
+                        + " VALUES (?, ?, ?, '홍길동', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
                 UUID.randomUUID().toString(),
-                employeeNo,
-                email);
+                email,
+                password);
     }
 }

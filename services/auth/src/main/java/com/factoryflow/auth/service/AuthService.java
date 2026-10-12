@@ -2,20 +2,23 @@ package com.factoryflow.auth.service;
 
 import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.AccountStatus;
+import com.factoryflow.auth.domain.PendingAccount;
 import com.factoryflow.auth.domain.UserAccount;
-import com.factoryflow.auth.dto.request.ActivationRequest;
+import com.factoryflow.auth.dto.request.ActivateAccountRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
-import com.factoryflow.auth.dto.response.IssuedAccountResponse;
-import com.factoryflow.auth.dto.response.TokenResponse;
+import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.exception.AuthErrorCode;
 import com.factoryflow.auth.repository.UserAccountRepository;
 import com.factoryflow.common.web.exception.CustomException;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 계정 발급·활성화·로그인·토큰 (docs/specs/auth-account.md). */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -29,72 +32,67 @@ public class AuthService {
     private final RefreshTokenStore refreshTokenStore;
     private final LoginAttemptGuard loginAttemptGuard;
 
-    /** 관리자 발급: INVITED 계정 생성 후 활성화 토큰을 발행·발송한다. */
-    @Transactional
-    public IssuedAccountResponse issue(IssueAccountRequest request) {
-        validateEmailDomain(request.email());
-        if (repository.existsByEmployeeNo(request.employeeNo())) {
-            throw new CustomException(AuthErrorCode.DUPLICATE_EMPLOYEE_NO);
-        }
-        if (repository.existsByEmail(request.email())) {
+    /** 관리자 발급: DB 에 저장하지 않고 Redis 에 대기시킨 뒤 활성화 링크를 보낸다. 같은 이메일 대기 건은 덮어쓴다. */
+    public IssueAccountResponse issue(IssueAccountRequest request) {
+        String email = normalize(request.email());
+        validateEmailDomain(email);
+        if (repository.existsByEmail(email)) {
             throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
         }
-
-        UserAccount account =
-                repository.save(
-                        UserAccount.invite(
-                                request.employeeNo(),
-                                request.email(),
-                                request.name(),
-                                request.role()));
-        String token = activationTokenStore.issue(account.getId());
-        notifier.sendActivationLink(account.getEmail(), token);
-        return IssuedAccountResponse.from(account);
+        var pending = new PendingAccount(email, request.name(), request.role());
+        String token = activationTokenStore.issue(pending);
+        notifier.sendActivationLink(email, token);
+        return IssueAccountResponse.from(pending);
     }
 
-    /** 사원 활성화: 토큰을 소비해 계정을 찾고 비번 설정 후 ACTIVE 로 전환한다. */
-    @Transactional
-    public void activate(ActivationRequest request) {
-        Long userId = activationTokenStore.consume(request.token());
-        if (userId == null) {
+    /**
+     * 직원 활성화: 토큰을 소비해 대기 정보를 꺼내고, 비번을 설정한 ACTIVE 계정으로 처음 저장한다. 트랜잭션을 걸지 않는다 — save 한 번뿐이고, 유니크 위반을
+     * 여기서 잡아 409 로 바꾸려면 바깥 트랜잭션이 rollback-only 로 표시되면 안 된다.
+     */
+    public void activate(ActivateAccountRequest request) {
+        PendingAccount pending = activationTokenStore.consume(request.token());
+        if (pending == null) {
             throw new CustomException(AuthErrorCode.INVALID_ACTIVATION_TOKEN);
         }
-        UserAccount account =
-                repository
-                        .findById(userId)
-                        .orElseThrow(
-                                () -> new CustomException(AuthErrorCode.INVALID_ACTIVATION_TOKEN));
-        account.activate(passwordEncoder.encode(request.password()));
+        if (repository.existsByEmail(pending.email())) {
+            throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
+        }
+        try {
+            repository.save(
+                    UserAccount.create(
+                            pending.email(),
+                            pending.name(),
+                            pending.role(),
+                            passwordEncoder.encode(request.password())));
+        } catch (DataIntegrityViolationException e) {
+            // 확인과 저장 사이에 같은 이메일이 먼저 저장된 경우 (거의 동시의 두 번째 발급)
+            throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
+        }
     }
 
-    /** 로그인: 사번+비번 검증 후 Access/Refresh 발급. 실패는 세어 임계치 초과 시 잠근다. */
+    /** 로그인: 이메일+비번 검증 후 Access/Refresh 발급. 실패는 세어 임계치 초과 시 잠근다. */
     @Transactional(readOnly = true)
-    public TokenResponse login(LoginRequest request) {
-        String employeeNo = request.employeeNo();
-        if (loginAttemptGuard.isLocked(employeeNo)) {
+    public IssuedTokens login(LoginRequest request) {
+        String email = normalize(request.email());
+        if (loginAttemptGuard.isLocked(email)) {
             throw new CustomException(AuthErrorCode.ACCOUNT_LOCKED);
         }
-
-        UserAccount account = repository.findByEmployeeNo(employeeNo).orElse(null);
-        if (account == null) {
-            loginAttemptGuard.recordFailure(employeeNo);
+        UserAccount account = repository.findByEmail(email).orElse(null);
+        if (account == null
+                || !passwordEncoder.matches(request.password(), account.getPassword())) {
+            loginAttemptGuard.recordFailure(email);
             throw new CustomException(AuthErrorCode.LOGIN_FAILED);
         }
         if (account.getStatus() != AccountStatus.ACTIVE) {
             throw new CustomException(AuthErrorCode.ACCOUNT_NOT_ACTIVE);
         }
-        if (!passwordEncoder.matches(request.password(), account.getPassword())) {
-            loginAttemptGuard.recordFailure(employeeNo);
-            throw new CustomException(AuthErrorCode.LOGIN_FAILED);
-        }
-
-        loginAttemptGuard.reset(employeeNo);
+        loginAttemptGuard.reset(email);
         return issueTokens(account);
     }
 
     /** 재발급: Refresh(쿠키에서 읽음)를 소비(회전)하고 새 Access/Refresh 를 발급한다. */
     @Transactional(readOnly = true)
-    public TokenResponse refresh(String refreshToken) {
+    public IssuedTokens refresh(String refreshToken) {
         if (refreshToken == null) {
             throw new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -120,16 +118,21 @@ public class AuthService {
         }
     }
 
-    private TokenResponse issueTokens(UserAccount account) {
+    private IssuedTokens issueTokens(UserAccount account) {
         String accessToken = jwtProvider.createAccessToken(account);
         String refreshToken = refreshTokenStore.issue(account.getPublicId());
-        return new TokenResponse(accessToken, refreshToken);
+        return new IssuedTokens(accessToken, refreshToken);
     }
 
     private void validateEmailDomain(String email) {
         String domain = properties.allowedEmailDomain();
-        if (domain != null && !email.endsWith("@" + domain)) {
+        if (domain != null && !email.endsWith("@" + domain.toLowerCase(Locale.ROOT))) {
             throw new CustomException(AuthErrorCode.INVALID_EMAIL_DOMAIN);
         }
+    }
+
+    /** 이메일은 앞뒤 공백 제거 + 소문자로 저장·비교한다. */
+    private static String normalize(String email) {
+        return email.strip().toLowerCase(Locale.ROOT);
     }
 }

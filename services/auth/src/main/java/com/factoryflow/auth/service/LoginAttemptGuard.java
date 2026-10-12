@@ -15,20 +15,20 @@ public class LoginAttemptGuard {
     private final StringRedisTemplate redis;
     private final AuthProperties properties;
 
-    public boolean isLocked(String employeeNo) {
-        String count = redis.opsForValue().get(PREFIX + employeeNo);
+    public boolean isLocked(String email) {
+        String count = redis.opsForValue().get(PREFIX + email);
         return count != null && Integer.parseInt(count) >= properties.maxLoginAttempts();
     }
 
-    public void recordFailure(String employeeNo) {
-        String key = PREFIX + employeeNo;
+    public void recordFailure(String email) {
+        String key = PREFIX + email;
         Long count = redis.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redis.expire(key, properties.loginLockWindow());
         }
     }
 
-    public void reset(String employeeNo) {
-        redis.delete(PREFIX + employeeNo);
+    public void reset(String email) {
+        redis.delete(PREFIX + email);
     }
 }

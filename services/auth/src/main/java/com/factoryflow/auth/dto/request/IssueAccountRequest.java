@@ -7,7 +7,4 @@ import jakarta.validation.constraints.NotNull;
 
 /** 관리자 계정 발급 요청. */
 public record IssueAccountRequest(
-        @NotBlank String employeeNo,
-        @NotBlank @Email String email,
-        @NotBlank String name,
-        @NotNull Role role) {}
+        @NotBlank @Email String email, @NotBlank String name, @NotNull Role role) {}

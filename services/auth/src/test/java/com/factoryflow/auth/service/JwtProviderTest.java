@@ -7,11 +7,11 @@ import com.factoryflow.auth.domain.Role;
 import com.factoryflow.auth.domain.UserAccount;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.SignedJWT;
 import java.time.Duration;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class JwtProviderTest {
 
@@ -23,12 +23,19 @@ class JwtProviderTest {
                     Duration.ofDays(14),
                     5,
                     Duration.ofMinutes(15));
-    private final JwtProvider provider = new JwtProvider(properties);
+    private final JwtProvider provider = new JwtProvider(properties, rsaKey());
+
+    private static RSAKey rsaKey() {
+        try {
+            return new RSAKeyGenerator(2048).generate();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @Test
     void accessTokenIsSignedWithPublicKeyAndCarriesClaims() throws Exception {
-        var account = UserAccount.invite("E1001", "a@gmail.com", "홍길동", Role.WORKER);
-        ReflectionTestUtils.setField(account, "id", 7L);
+        var account = UserAccount.create("a@gmail.com", "홍길동", Role.WORKER, "hash");
 
         String token = provider.createAccessToken(account);
 
@@ -38,9 +45,10 @@ class JwtProviderTest {
 
         var claims = jwt.getJWTClaimsSet();
         assertThat(claims.getSubject()).isEqualTo(account.getPublicId());
-        assertThat(claims.getStringClaim("employeeNo")).isEqualTo("E1001");
         assertThat(claims.getStringClaim("role")).isEqualTo("WORKER");
         assertThat(claims.getExpirationTime()).isAfter(new Date());
+        // 이메일(개인정보)은 토큰에 넣지 않는다
+        assertThat(claims.getClaims()).doesNotContainKeys("email", "employeeNo");
     }
 
     @Test

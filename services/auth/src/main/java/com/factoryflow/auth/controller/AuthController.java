@@ -1,13 +1,13 @@
 package com.factoryflow.auth.controller;
 
 import com.factoryflow.auth.config.RefreshCookieFactory;
-import com.factoryflow.auth.dto.request.ActivationRequest;
+import com.factoryflow.auth.dto.request.ActivateAccountRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
 import com.factoryflow.auth.dto.response.AccessTokenResponse;
-import com.factoryflow.auth.dto.response.IssuedAccountResponse;
-import com.factoryflow.auth.dto.response.TokenResponse;
+import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.service.AuthService;
+import com.factoryflow.auth.service.IssuedTokens;
 import com.factoryflow.common.web.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,26 +29,28 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshCookieFactory refreshCookieFactory;
 
-    /** 관리자 계정 발급. (역할=ADMIN 접근 제어는 Phase 4) */
+    /** 관리자 계정 발급. DB 에 저장하지 않고 Redis 에 대기시킨다. ADMIN 확인은 AdminRoleInterceptor. */
     @PostMapping("/admin/users")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<IssuedAccountResponse> issue(
+    public ApiResponse<IssueAccountResponse> issue(
             @Valid @RequestBody IssueAccountRequest request) {
-        return ApiResponse.created(authService.issue(request));
+        IssueAccountResponse response = authService.issue(request);
+        return ApiResponse.created(response);
     }
 
-    /** 사원 활성화(메일의 토큰 + 비밀번호). */
+    /** 직원 활성화(메일의 토큰 + 비밀번호). 이때 계정이 DB 에 처음 저장된다. */
     @PostMapping("/activation")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void activate(@Valid @RequestBody ActivationRequest request) {
+    public void activate(@Valid @RequestBody ActivateAccountRequest request) {
         authService.activate(request);
     }
 
-    /** 로그인(사번 + 비밀번호) → Access 는 바디, Refresh 는 httpOnly 쿠키. */
+    /** 로그인(이메일 + 비밀번호) → Access 는 바디, Refresh 는 httpOnly 쿠키. */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AccessTokenResponse>> login(
             @Valid @RequestBody LoginRequest request) {
-        return withRefreshCookie(authService.login(request));
+        IssuedTokens tokens = authService.login(request);
+        return withRefreshCookie(tokens);
     }
 
     /** Access 토큰 재발급(쿠키의 Refresh 를 회전). */
@@ -56,7 +58,8 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AccessTokenResponse>> refresh(
             @CookieValue(name = RefreshCookieFactory.COOKIE_NAME, required = false)
                     String refreshToken) {
-        return withRefreshCookie(authService.refresh(refreshToken));
+        IssuedTokens tokens = authService.refresh(refreshToken);
+        return withRefreshCookie(tokens);
     }
 
     /** 로그아웃(쿠키의 Refresh 폐기 + 쿠키 만료). */
@@ -71,11 +74,11 @@ public class AuthController {
     }
 
     private ResponseEntity<ApiResponse<AccessTokenResponse>> withRefreshCookie(
-            TokenResponse tokens) {
+            IssuedTokens tokens) {
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.SET_COOKIE,
                         refreshCookieFactory.create(tokens.refreshToken()).toString())
-                .body(ApiResponse.ok(new AccessTokenResponse(tokens.accessToken())));
+                .body(ApiResponse.ok(AccessTokenResponse.from(tokens)));
     }
 }
