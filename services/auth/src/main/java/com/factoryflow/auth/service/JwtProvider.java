@@ -44,7 +44,7 @@ public class JwtProvider {
         Instant now = Instant.now();
         JWTClaimsSet claims =
                 new JWTClaimsSet.Builder()
-                        .subject(String.valueOf(account.getId()))
+                        .subject(account.getPublicId())
                         .claim("employeeNo", account.getEmployeeNo())
                         .claim("role", account.getRole().name())
                         .issueTime(Date.from(now))

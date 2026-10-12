@@ -14,8 +14,6 @@ import com.factoryflow.auth.domain.UserAccount;
 import com.factoryflow.auth.dto.request.ActivationRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
-import com.factoryflow.auth.dto.request.LogoutRequest;
-import com.factoryflow.auth.dto.request.RefreshRequest;
 import com.factoryflow.auth.dto.response.TokenResponse;
 import com.factoryflow.auth.exception.AuthErrorCode;
 import com.factoryflow.auth.repository.UserAccountRepository;
@@ -187,7 +185,7 @@ class AuthServiceTest {
         when(repository.findByEmployeeNo("E1001")).thenReturn(Optional.of(account));
         when(passwordEncoder.matches("pw", "hash")).thenReturn(true);
         when(jwtProvider.createAccessToken(account)).thenReturn("access-jwt");
-        when(refreshTokenStore.issue(7L)).thenReturn("refresh-tok");
+        when(refreshTokenStore.issue(account.getPublicId())).thenReturn("refresh-tok");
 
         TokenResponse response = authService.login(new LoginRequest("E1001", "pw"));
 
@@ -249,12 +247,12 @@ class AuthServiceTest {
     @Test
     void refresh_rotatesTokens() {
         var account = activeAccount(7L);
-        when(refreshTokenStore.consume("old-ref")).thenReturn(7L);
-        when(repository.findById(7L)).thenReturn(Optional.of(account));
+        when(refreshTokenStore.consume("old-ref")).thenReturn(account.getPublicId());
+        when(repository.findByPublicId(account.getPublicId())).thenReturn(Optional.of(account));
         when(jwtProvider.createAccessToken(account)).thenReturn("access2");
-        when(refreshTokenStore.issue(7L)).thenReturn("new-ref");
+        when(refreshTokenStore.issue(account.getPublicId())).thenReturn("new-ref");
 
-        TokenResponse response = authService.refresh(new RefreshRequest("old-ref"));
+        TokenResponse response = authService.refresh("old-ref");
 
         assertThat(response).isEqualTo(new TokenResponse("access2", "new-ref"));
     }
@@ -263,7 +261,15 @@ class AuthServiceTest {
     void refresh_rejectsInvalidToken() {
         when(refreshTokenStore.consume("bad")).thenReturn(null);
 
-        assertThatThrownBy(() -> authService.refresh(new RefreshRequest("bad")))
+        assertThatThrownBy(() -> authService.refresh("bad"))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(AuthErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void refresh_rejectsMissingCookie() {
+        assertThatThrownBy(() -> authService.refresh(null))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(AuthErrorCode.INVALID_REFRESH_TOKEN);
@@ -271,7 +277,7 @@ class AuthServiceTest {
 
     @Test
     void logout_revokesRefreshToken() {
-        authService.logout(new LogoutRequest("ref-tok"));
+        authService.logout("ref-tok");
 
         verify(refreshTokenStore).revoke("ref-tok");
     }

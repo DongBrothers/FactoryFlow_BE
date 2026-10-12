@@ -18,6 +18,9 @@ auth:
   refresh-token-ttl: 14d
   max-login-attempts: 5
   login-lock-window: 15m
+  cookie:
+    secure: false      # 로컬 http. 운영(HTTPS)은 true
+    same-site: Lax
 
 management:
   endpoints:

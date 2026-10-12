@@ -3,6 +3,7 @@ package com.factoryflow.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,11 +32,25 @@ class MigrationTest {
     }
 
     @Test
-    void createsUserAccountAndDropsPlaceholderTables() {
+    void createsUserAccountAndDropsAdminButKeepsCustomer() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
-        assertThat(tables).contains("user_account");
-        assertThat(tables).doesNotContain("customer", "admin");
+        // admin 은 user_account 로 대체되어 사라지고, customer 는 데이터 테이블로 남는다.
+        assertThat(tables).contains("user_account", "customer");
+        assertThat(tables).doesNotContain("admin");
+    }
+
+    @Test
+    void customerHasNoPasswordColumn() {
+        // 고객은 로그인하지 않으므로 비밀번호 컬럼이 제거되어 있다.
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns"
+                                + " WHERE table_schema = DATABASE()"
+                                + " AND table_name = 'customer' AND column_name = 'password'",
+                        Integer.class);
+
+        assertThat(count).isZero();
     }
 
     @Test
@@ -70,8 +85,10 @@ class MigrationTest {
 
     private void insertUser(String employeeNo, String email) {
         jdbc.update(
-                "INSERT INTO user_account (employee_no, email, name, role, status, created_at,"
-                        + " updated_at) VALUES (?, ?, '홍길동', 'WORKER', 'INVITED', NOW(6), NOW(6))",
+                "INSERT INTO user_account (public_id, employee_no, email, name, role, status,"
+                        + " created_at, updated_at)"
+                        + " VALUES (?, ?, ?, '홍길동', 'WORKER', 'INVITED', NOW(6), NOW(6))",
+                UUID.randomUUID().toString(),
                 employeeNo,
                 email);
     }

@@ -37,7 +37,7 @@ class JwtProviderTest {
         assertThat(jwt.verify(new RSASSAVerifier(publicKey))).isTrue();
 
         var claims = jwt.getJWTClaimsSet();
-        assertThat(claims.getSubject()).isEqualTo("7");
+        assertThat(claims.getSubject()).isEqualTo(account.getPublicId());
         assertThat(claims.getStringClaim("employeeNo")).isEqualTo("E1001");
         assertThat(claims.getStringClaim("role")).isEqualTo("WORKER");
         assertThat(claims.getExpirationTime()).isAfter(new Date());

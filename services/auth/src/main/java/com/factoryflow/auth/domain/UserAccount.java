@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,6 +29,10 @@ public class UserAccount extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** 외부·토큰(sub) 식별용 UUID. 내부 참조·조인은 id 를 쓴다. */
+    @Column(name = "public_id", nullable = false, length = 36, updatable = false)
+    private String publicId;
 
     @Column(name = "employee_no", nullable = false, length = 20)
     private String employeeNo;
@@ -51,6 +56,7 @@ public class UserAccount extends BaseEntity {
     private AccountStatus status;
 
     private UserAccount(String employeeNo, String email, String name, Role role) {
+        this.publicId = UUID.randomUUID().toString();
         this.employeeNo = employeeNo;
         this.email = email;
         this.name = name;
