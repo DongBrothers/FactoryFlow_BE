@@ -1,14 +1,18 @@
 package com.factoryflow.common.event;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 수신 멱등 처리. processed_event 에 eventId 를 기록하고, 처음 받은 이벤트일 때만 action 을 같은 트랜잭션에서 실행한다. */
 public class ProcessedEventGuard {
+
+    private static final int DUPLICATE_ENTRY = 1062;
 
     private final EntityManager entityManager;
     private final Clock clock;
@@ -23,7 +27,8 @@ public class ProcessedEventGuard {
      */
     @Transactional
     public boolean runOnce(UUID eventId, Runnable action) {
-        // 중복이면 오류 대신 0줄. 오류가 없으니 트랜잭션이 롤백 전용이 되지 않아 바깥 트랜잭션 안에서도 그대로 커밋된다
+        // 중복이면 오류 대신 0줄. 오류가 없으니 트랜잭션이 롤백 전용이 되지 않아 바깥 트랜잭션 안에서도 그대로 커밋된다.
+        // INSERT IGNORE 는 중복이 아닌 오류(값 잘림 등)도 경고로 바꾸므로, 중복 경고(1062) 외의 경고가 있으면 실패로 본다
         int inserted =
                 entityManager
                         .createNativeQuery(
@@ -33,10 +38,24 @@ public class ProcessedEventGuard {
                         .setParameter(
                                 2, LocalDateTime.ofInstant(clock.instant(), ZoneId.systemDefault()))
                         .executeUpdate();
+        List<String> otherWarnings = warningsExceptDuplicate();
+        if (!otherWarnings.isEmpty()) {
+            throw new IllegalStateException("processed_event 기록 실패: " + otherWarnings);
+        }
         if (inserted == 0) {
             return false;
         }
         action.run();
         return true;
+    }
+
+    private List<String> warningsExceptDuplicate() {
+        List<?> warnings =
+                entityManager.createNativeQuery("SHOW WARNINGS", Tuple.class).getResultList();
+        return warnings.stream()
+                .map(Tuple.class::cast)
+                .filter(w -> w.get("Code", Number.class).intValue() != DUPLICATE_ENTRY)
+                .map(w -> w.get("Code") + " " + w.get("Message"))
+                .toList();
     }
 }

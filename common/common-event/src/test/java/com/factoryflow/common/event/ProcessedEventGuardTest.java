@@ -38,6 +38,22 @@ class ProcessedEventGuardTest extends EventIntegrationTest {
     }
 
     @Test
+    void 중복이_아닌_오류는_이미_처리한_것으로_넘기지_않고_예외를_낸다() {
+        // event_id 를 줄여 UUID(36자)가 잘리게 한다. INSERT IGNORE 는 이를 오류 대신 경고로 바꾼다
+        jdbcTemplate.execute("ALTER TABLE processed_event MODIFY event_id CHAR(10) NOT NULL");
+        try {
+            AtomicInteger handled = new AtomicInteger();
+
+            assertThatThrownBy(() -> guard.runOnce(UUID.randomUUID(), handled::incrementAndGet))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(handled).hasValue(0);
+        } finally {
+            jdbcTemplate.update("DELETE FROM processed_event");
+            jdbcTemplate.execute("ALTER TABLE processed_event MODIFY event_id CHAR(36) NOT NULL");
+        }
+    }
+
+    @Test
     void 처리_중_실패하면_처리기록도_롤백되어_재수신시_다시_처리한다() {
         UUID eventId = UUID.randomUUID();
         AtomicInteger handled = new AtomicInteger();
