@@ -6,6 +6,10 @@ import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.PendingAccount;
 import com.factoryflow.auth.domain.Role;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -93,5 +97,25 @@ class ActivationTokenStoreTest {
 
         assertThat(shortLived.consume(token)).isNull();
         assertThat(redisTemplate.hasKey("auth:pending:kim@gmail.com")).isFalse();
+    }
+
+    @Test
+    void concurrentIssueForSameEmailLeavesOnlyOneValidToken() throws Exception {
+        // 같은 이메일로 동시에 발급해도 "덮어쓰기" 가 지켜진다: 유효한 토큰은 auth:pending 이 가리키는 하나뿐
+        var pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Callable<String>> calls =
+                    IntStream.range(0, 8)
+                            .mapToObj(i -> (Callable<String>) () -> store.issue(KIM))
+                            .toList();
+            pool.invokeAll(calls);
+        } finally {
+            pool.shutdown();
+        }
+
+        String current = redisTemplate.opsForValue().get("auth:pending:kim@gmail.com");
+        assertThat(redisTemplate.keys("auth:activation:*"))
+                .containsExactly("auth:activation:" + current);
+        assertThat(redisTemplate.getExpire("auth:activation:" + current)).isPositive();
     }
 }

@@ -3,6 +3,7 @@ package com.factoryflow.auth.service;
 import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.PendingAccount;
 import com.factoryflow.auth.domain.Role;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -29,25 +30,18 @@ public class ActivationTokenStore {
     private final StringRedisTemplate redis;
     private final AuthProperties properties;
 
-    /** 대기 계정을 저장하고 새 토큰을 반환한다. 같은 이메일의 옛 토큰은 무효가 된다(덮어쓰기). */
+    /** 대기 계정을 저장하고 새 토큰을 반환한다. 같은 이메일의 옛 토큰은 무효가 된다(덮어쓰기). 한 번에 처리해 동시 발급에도 토큰은 하나만 남는다. */
     public String issue(PendingAccount pending) {
-        String emailKey = EMAIL_PREFIX + pending.email();
-        String oldToken = redis.opsForValue().get(emailKey);
-        if (oldToken != null) {
-            redis.delete(TOKEN_PREFIX + oldToken);
-        }
-
         String token = UUID.randomUUID().toString();
-        String tokenKey = TOKEN_PREFIX + token;
-        redis.opsForHash()
-                .putAll(
-                        tokenKey,
-                        Map.of(
-                                "email", pending.email(),
-                                "name", pending.name(),
-                                "role", pending.role().name()));
-        redis.expire(tokenKey, properties.activationTokenTtl());
-        redis.opsForValue().set(emailKey, token, properties.activationTokenTtl());
+        redis.execute(
+                RedisScripts.ISSUE_ACTIVATION,
+                List.of(EMAIL_PREFIX + pending.email(), TOKEN_PREFIX + token),
+                TOKEN_PREFIX,
+                pending.email(),
+                pending.name(),
+                pending.role().name(),
+                String.valueOf(properties.activationTokenTtl().toMillis()),
+                token);
         return token;
     }
 
@@ -64,10 +58,8 @@ public class ActivationTokenStore {
                         (String) fields.get("email"),
                         (String) fields.get("name"),
                         Role.valueOf((String) fields.get("role")));
-        String emailKey = EMAIL_PREFIX + pending.email();
-        if (token.equals(redis.opsForValue().get(emailKey))) {
-            redis.delete(emailKey);
-        }
+        redis.execute(
+                RedisScripts.DELETE_IF_EQUALS, List.of(EMAIL_PREFIX + pending.email()), token);
         return pending;
     }
 }

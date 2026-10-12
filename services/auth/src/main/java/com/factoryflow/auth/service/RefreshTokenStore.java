@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,13 +16,6 @@ import org.springframework.stereotype.Component;
 public class RefreshTokenStore {
 
     private static final String PREFIX = "auth:refresh:"; // + publicId
-
-    /** 저장된 값이 ARGV[1] 과 같을 때만 지운다(1 = 지움). 조회와 삭제를 한 번에 해 동시 요청 중 하나만 통과한다. */
-    private static final RedisScript<Long> DELETE_IF_EQUALS =
-            RedisScript.of(
-                    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1])"
-                            + " else return 0 end",
-                    Long.class);
 
     private final StringRedisTemplate redis;
     private final AuthProperties properties;
@@ -53,7 +45,8 @@ public class RefreshTokenStore {
     }
 
     private boolean deleteIfCurrent(String publicId, String token) {
-        Long deleted = redis.execute(DELETE_IF_EQUALS, List.of(PREFIX + publicId), token);
+        Long deleted =
+                redis.execute(RedisScripts.DELETE_IF_EQUALS, List.of(PREFIX + publicId), token);
         return deleted != null && deleted == 1L;
     }
 

@@ -182,6 +182,13 @@
   헤더를 **반드시 버리고(strip)** 검증된 JWT 로 다시 채워야 한다.
 - `X-User-Id` 의 의미: order 의 주문 생성은 `X-User-Id` 를 고객 번호(Long)로 쓰고, 직원 JWT 의 `sub` 는
   `public_id`(UUID)다. gateway 배선 때 order 담당과 맞춘다.
+- gateway CORS: 프론트(다른 origin)가 gateway 를 부르려면 필요하다. 라우트가 없어 쓸 곳이 없으므로 이 PR 에서는
+  뺐고(PR #30 AI 리뷰 [spec]), gateway 배선 명세에 넣고 테스트와 함께 다시 만든다. 뺀 설정은 다음과 같았다.
+  - 허용 origin 은 설정값 `app.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, 기본 `https://factoryflow.dev`)
+  - 메서드 GET, POST, PUT, PATCH, DELETE, OPTIONS / 헤더 전부 / 경로 `/**`
+  - **allowCredentials = true 필수**: Refresh 토큰이 httpOnly 쿠키라, 없으면 브라우저가 재발급·로그아웃 요청에
+    쿠키를 싣지 않는다. 이때 허용 origin 에 `*` 는 쓸 수 없다(정확한 origin 목록)
+  - Spring Security(WebFlux) 에서는 `http.cors(...)` 에 `CorsConfigurationSource` 를 연결해야 preflight 가 인증 전에 통과한다
 - `customer` 는 로그인하지 않으므로 auth_db 에 비밀번호 없이 남아 있다. 제자리는 order 소유 데이터다.
 - purchase `requested_by` 의 논리 참조를 `auth_db.admin.id` → **`auth_db.user_account.id`** 로 변경.
   현재 주석: `services/purchase/.../V2__create_purchase_tables.sql`

@@ -16,7 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /** 계정 발급·활성화·로그인·토큰 (docs/specs/auth-account.md). */
 @Service
@@ -65,13 +64,18 @@ public class AuthService {
                             pending.role(),
                             passwordEncoder.encode(request.password())));
         } catch (DataIntegrityViolationException e) {
-            // 확인과 저장 사이에 같은 이메일이 먼저 저장된 경우 (거의 동시의 두 번째 발급)
-            throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
+            // 확인과 저장 사이에 같은 이메일이 먼저 저장된 경우 (거의 동시의 두 번째 발급)만 409. 그 밖의 무결성 오류는 그대로 던진다
+            if (repository.existsByEmail(pending.email())) {
+                throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
+            }
+            throw e;
         }
     }
 
-    /** 로그인: 이메일+비번 검증 후 Access/Refresh 발급. 실패는 세어 임계치 초과 시 잠근다. */
-    @Transactional(readOnly = true)
+    /**
+     * 로그인: 이메일+비번 검증 후 Access/Refresh 발급. 실패는 세어 임계치 초과 시 잠근다. 트랜잭션을 걸지 않는다 — 느린 bcrypt 검증 동안 DB
+     * 커넥션을 쥐지 않도록 조회만 repository 에 맡긴다.
+     */
     public IssuedTokens login(LoginRequest request) {
         String email = normalize(request.email());
         if (loginAttemptGuard.isLocked(email)) {
@@ -90,8 +94,7 @@ public class AuthService {
         return issueTokens(account);
     }
 
-    /** 재발급: Refresh(쿠키에서 읽음)를 소비(회전)하고 새 Access/Refresh 를 발급한다. */
-    @Transactional(readOnly = true)
+    /** 재발급: Refresh(쿠키에서 읽음)를 소비(회전)하고 새 Access/Refresh 를 발급한다. 조회 한 번뿐이라 트랜잭션을 걸지 않는다. */
     public IssuedTokens refresh(String refreshToken) {
         if (refreshToken == null) {
             throw new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN);

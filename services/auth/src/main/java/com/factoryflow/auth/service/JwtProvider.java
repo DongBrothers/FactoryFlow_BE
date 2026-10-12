@@ -15,12 +15,14 @@ import com.nimbusds.jwt.SignedJWT;
 import java.time.Instant;
 import java.util.Date;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
  * Access 토큰(JWT, RS256)을 개인키로 서명하고, 공개키를 JWKS 로 노출한다. 검증 측(gateway)은 공개키만 가진다. 키쌍은 AuthConfig 가
  * 만든다. (docs/specs/auth-account.md)
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtProvider {
@@ -45,6 +47,8 @@ public class JwtProvider {
         try {
             jwt.sign(new RSASSASigner(rsaKey));
         } catch (JOSEException e) {
+            // 원인(키 오류 등)은 남기고, 토큰·claim 값은 남기지 않는다
+            log.error("[auth] Access 토큰 서명 실패", e);
             throw new CustomException(AuthErrorCode.TOKEN_SIGNING_FAILED);
         }
         return jwt.serialize();

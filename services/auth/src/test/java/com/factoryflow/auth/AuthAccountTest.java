@@ -96,6 +96,26 @@ class AuthAccountTest {
     }
 
     @Test
+    void issueRejectsNameLongerThanColumn() throws Exception {
+        // user_account.name 은 50자. 발급 때 막지 않으면 활성화 때 저장이 실패한다
+        String name = "가".repeat(51);
+        mockMvc.perform(
+                        post("/api/auth/admin/users")
+                                .header("X-User-Role", "ADMIN")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"email\":\""
+                                                + EMAIL
+                                                + "\",\"name\":\""
+                                                + name
+                                                + "\",\"role\":\"SALES\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        assertThat(redis.keys("auth:*")).isEmpty();
+    }
+
+    @Test
     void issueRejectsNonAdmin() throws Exception {
         mockMvc.perform(
                         post("/api/auth/admin/users")
