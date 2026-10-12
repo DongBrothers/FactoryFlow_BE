@@ -39,180 +39,182 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), is_deleted = FALSE;
 INSERT INTO bom (product_id, part_id, qty_per_unit, created_at, updated_at)
 SELECT p.id, b.part_id, b.qty, NOW(6), NOW(6)
 FROM product p
-JOIN (    SELECT 'AVANTE' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'AVANTE' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1002 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1010 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'AVANTE-N' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1002 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SONATA-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1002 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'GRANDEUR-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'CASPER-EV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'VENUE' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'KONA-EV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'TUCSON-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1002 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'SANTAFE-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1003 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1014 AS part_id, 2 AS qty
-          UNION ALL SELECT 'PALISADE' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1001 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1005 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1014 AS part_id, 2 AS qty
-          UNION ALL SELECT 'PALISADE-HEV' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1006 AS part_id, 2 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ5-N' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1015 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ6' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1006 AS part_id, 2 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1013 AS part_id, 4 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1014 AS part_id, 2 AS qty
-          UNION ALL SELECT 'IONIQ9' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1008 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1016 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'NEXO' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1003 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1017 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1014 AS part_id, 2 AS qty
-          UNION ALL SELECT 'STARIA' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1003 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1012 AS part_id, 4 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1017 AS part_id, 1 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1014 AS part_id, 2 AS qty
-          UNION ALL SELECT 'STARIA-LOUNGE' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1004 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1009 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1017 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2' AS code, 1018 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1006 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1007 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1011 AS part_id, 4 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1017 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1014 AS part_id, 1 AS qty
-          UNION ALL SELECT 'PORTER2-EV' AS code, 1018 AS part_id, 1 AS qty) b ON b.code = p.code
+JOIN (VALUES
+    ROW('AVANTE', 1001, 1),
+    ROW('AVANTE', 1009, 1),
+    ROW('AVANTE', 1011, 4),
+    ROW('AVANTE', 1015, 1),
+    ROW('AVANTE', 1014, 1),
+    ROW('AVANTE', 1018, 1),
+    ROW('AVANTE-HEV', 1001, 1),
+    ROW('AVANTE-HEV', 1005, 1),
+    ROW('AVANTE-HEV', 1009, 1),
+    ROW('AVANTE-HEV', 1011, 4),
+    ROW('AVANTE-HEV', 1015, 1),
+    ROW('AVANTE-HEV', 1014, 1),
+    ROW('AVANTE-HEV', 1018, 1),
+    ROW('AVANTE-N', 1002, 1),
+    ROW('AVANTE-N', 1010, 1),
+    ROW('AVANTE-N', 1012, 4),
+    ROW('AVANTE-N', 1015, 1),
+    ROW('AVANTE-N', 1014, 1),
+    ROW('AVANTE-N', 1018, 1),
+    ROW('SONATA', 1002, 1),
+    ROW('SONATA', 1009, 1),
+    ROW('SONATA', 1012, 4),
+    ROW('SONATA', 1015, 1),
+    ROW('SONATA', 1014, 1),
+    ROW('SONATA', 1018, 1),
+    ROW('SONATA-HEV', 1001, 1),
+    ROW('SONATA-HEV', 1005, 1),
+    ROW('SONATA-HEV', 1009, 1),
+    ROW('SONATA-HEV', 1012, 4),
+    ROW('SONATA-HEV', 1015, 1),
+    ROW('SONATA-HEV', 1014, 1),
+    ROW('SONATA-HEV', 1018, 1),
+    ROW('GRANDEUR', 1002, 1),
+    ROW('GRANDEUR', 1009, 1),
+    ROW('GRANDEUR', 1012, 4),
+    ROW('GRANDEUR', 1015, 1),
+    ROW('GRANDEUR', 1014, 1),
+    ROW('GRANDEUR', 1018, 1),
+    ROW('GRANDEUR-HEV', 1001, 1),
+    ROW('GRANDEUR-HEV', 1005, 1),
+    ROW('GRANDEUR-HEV', 1009, 1),
+    ROW('GRANDEUR-HEV', 1012, 4),
+    ROW('GRANDEUR-HEV', 1015, 1),
+    ROW('GRANDEUR-HEV', 1014, 1),
+    ROW('GRANDEUR-HEV', 1018, 1),
+    ROW('CASPER', 1001, 1),
+    ROW('CASPER', 1009, 1),
+    ROW('CASPER', 1011, 4),
+    ROW('CASPER', 1016, 1),
+    ROW('CASPER', 1014, 1),
+    ROW('CASPER', 1018, 1),
+    ROW('CASPER-EV', 1006, 1),
+    ROW('CASPER-EV', 1007, 1),
+    ROW('CASPER-EV', 1011, 4),
+    ROW('CASPER-EV', 1016, 1),
+    ROW('CASPER-EV', 1014, 1),
+    ROW('CASPER-EV', 1018, 1),
+    ROW('VENUE', 1001, 1),
+    ROW('VENUE', 1009, 1),
+    ROW('VENUE', 1011, 4),
+    ROW('VENUE', 1016, 1),
+    ROW('VENUE', 1014, 1),
+    ROW('VENUE', 1018, 1),
+    ROW('KONA', 1001, 1),
+    ROW('KONA', 1009, 1),
+    ROW('KONA', 1012, 4),
+    ROW('KONA', 1016, 1),
+    ROW('KONA', 1014, 1),
+    ROW('KONA', 1018, 1),
+    ROW('KONA-HEV', 1001, 1),
+    ROW('KONA-HEV', 1005, 1),
+    ROW('KONA-HEV', 1009, 1),
+    ROW('KONA-HEV', 1012, 4),
+    ROW('KONA-HEV', 1016, 1),
+    ROW('KONA-HEV', 1014, 1),
+    ROW('KONA-HEV', 1018, 1),
+    ROW('KONA-EV', 1006, 1),
+    ROW('KONA-EV', 1007, 1),
+    ROW('KONA-EV', 1012, 4),
+    ROW('KONA-EV', 1016, 1),
+    ROW('KONA-EV', 1014, 1),
+    ROW('KONA-EV', 1018, 1),
+    ROW('TUCSON', 1001, 1),
+    ROW('TUCSON', 1009, 1),
+    ROW('TUCSON', 1012, 4),
+    ROW('TUCSON', 1016, 1),
+    ROW('TUCSON', 1014, 1),
+    ROW('TUCSON', 1018, 1),
+    ROW('TUCSON-HEV', 1001, 1),
+    ROW('TUCSON-HEV', 1005, 1),
+    ROW('TUCSON-HEV', 1009, 1),
+    ROW('TUCSON-HEV', 1012, 4),
+    ROW('TUCSON-HEV', 1016, 1),
+    ROW('TUCSON-HEV', 1014, 1),
+    ROW('TUCSON-HEV', 1018, 1),
+    ROW('SANTAFE', 1002, 1),
+    ROW('SANTAFE', 1009, 1),
+    ROW('SANTAFE', 1013, 4),
+    ROW('SANTAFE', 1016, 1),
+    ROW('SANTAFE', 1014, 1),
+    ROW('SANTAFE', 1018, 1),
+    ROW('SANTAFE-HEV', 1001, 1),
+    ROW('SANTAFE-HEV', 1005, 1),
+    ROW('SANTAFE-HEV', 1009, 1),
+    ROW('SANTAFE-HEV', 1013, 4),
+    ROW('SANTAFE-HEV', 1016, 1),
+    ROW('SANTAFE-HEV', 1014, 1),
+    ROW('SANTAFE-HEV', 1018, 1),
+    ROW('PALISADE', 1003, 1),
+    ROW('PALISADE', 1009, 1),
+    ROW('PALISADE', 1013, 4),
+    ROW('PALISADE', 1016, 1),
+    ROW('PALISADE', 1014, 2),
+    ROW('PALISADE', 1018, 1),
+    ROW('PALISADE-HEV', 1001, 1),
+    ROW('PALISADE-HEV', 1005, 1),
+    ROW('PALISADE-HEV', 1009, 1),
+    ROW('PALISADE-HEV', 1013, 4),
+    ROW('PALISADE-HEV', 1016, 1),
+    ROW('PALISADE-HEV', 1014, 2),
+    ROW('PALISADE-HEV', 1018, 1),
+    ROW('IONIQ5', 1006, 1),
+    ROW('IONIQ5', 1007, 1),
+    ROW('IONIQ5', 1013, 4),
+    ROW('IONIQ5', 1016, 1),
+    ROW('IONIQ5', 1014, 1),
+    ROW('IONIQ5', 1018, 1),
+    ROW('IONIQ5-N', 1006, 2),
+    ROW('IONIQ5-N', 1007, 1),
+    ROW('IONIQ5-N', 1013, 4),
+    ROW('IONIQ5-N', 1016, 1),
+    ROW('IONIQ5-N', 1014, 1),
+    ROW('IONIQ5-N', 1018, 1),
+    ROW('IONIQ6', 1006, 1),
+    ROW('IONIQ6', 1007, 1),
+    ROW('IONIQ6', 1013, 4),
+    ROW('IONIQ6', 1015, 1),
+    ROW('IONIQ6', 1014, 1),
+    ROW('IONIQ6', 1018, 1),
+    ROW('IONIQ9', 1006, 2),
+    ROW('IONIQ9', 1007, 1),
+    ROW('IONIQ9', 1013, 4),
+    ROW('IONIQ9', 1016, 1),
+    ROW('IONIQ9', 1014, 2),
+    ROW('IONIQ9', 1018, 1),
+    ROW('NEXO', 1008, 1),
+    ROW('NEXO', 1006, 1),
+    ROW('NEXO', 1007, 1),
+    ROW('NEXO', 1012, 4),
+    ROW('NEXO', 1016, 1),
+    ROW('NEXO', 1014, 1),
+    ROW('NEXO', 1018, 1),
+    ROW('STARIA', 1003, 1),
+    ROW('STARIA', 1009, 1),
+    ROW('STARIA', 1012, 4),
+    ROW('STARIA', 1017, 1),
+    ROW('STARIA', 1014, 2),
+    ROW('STARIA', 1018, 1),
+    ROW('STARIA-LOUNGE', 1003, 1),
+    ROW('STARIA-LOUNGE', 1009, 1),
+    ROW('STARIA-LOUNGE', 1012, 4),
+    ROW('STARIA-LOUNGE', 1017, 1),
+    ROW('STARIA-LOUNGE', 1014, 2),
+    ROW('STARIA-LOUNGE', 1018, 1),
+    ROW('PORTER2', 1004, 1),
+    ROW('PORTER2', 1009, 1),
+    ROW('PORTER2', 1011, 4),
+    ROW('PORTER2', 1017, 1),
+    ROW('PORTER2', 1014, 1),
+    ROW('PORTER2', 1018, 1),
+    ROW('PORTER2-EV', 1006, 1),
+    ROW('PORTER2-EV', 1007, 1),
+    ROW('PORTER2-EV', 1011, 4),
+    ROW('PORTER2-EV', 1017, 1),
+    ROW('PORTER2-EV', 1014, 1),
+    ROW('PORTER2-EV', 1018, 1)
+) AS b (code, part_id, qty) ON b.code = p.code
 ON DUPLICATE KEY UPDATE qty_per_unit = b.qty, is_deleted = FALSE;
