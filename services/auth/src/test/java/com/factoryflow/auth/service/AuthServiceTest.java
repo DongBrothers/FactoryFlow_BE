@@ -242,6 +242,19 @@ class AuthServiceTest {
                 .isEqualTo(AuthErrorCode.ACCOUNT_NOT_ACTIVE);
     }
 
+    @Test
+    void login_rejectsDisabledAccount() {
+        var account = activeAccount(7L);
+        ReflectionTestUtils.setField(account, "status", AccountStatus.DISABLED);
+        when(loginAttemptGuard.isLocked("E1001")).thenReturn(false);
+        when(repository.findByEmployeeNo("E1001")).thenReturn(Optional.of(account));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest("E1001", "pw")))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(AuthErrorCode.ACCOUNT_NOT_ACTIVE);
+    }
+
     // --- 재발급 / 로그아웃 ---
 
     @Test
