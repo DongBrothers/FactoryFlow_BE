@@ -12,4 +12,6 @@ import com.tngtech.archunit.lang.ArchRule;
 class ArchitectureTest {
     @ArchTest
     static final ArchRule transactionalOnly = FactoryFlowRules.TRANSACTIONAL_ANNOTATION_ONLY;
+
+    @ArchTest static final ArchRule noJdbc = FactoryFlowRules.NO_JDBC;
 }

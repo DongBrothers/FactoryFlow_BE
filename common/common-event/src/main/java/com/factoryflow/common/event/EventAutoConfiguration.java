@@ -1,5 +1,7 @@
 package com.factoryflow.common.event;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import java.time.Clock;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -10,7 +12,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.jpa.SharedEntityManagerCreator;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -36,24 +38,37 @@ public class EventAutoConfiguration {
 
     @Bean
     EventPublisher eventPublisher(
-            JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ObjectProvider<Clock> clock) {
+            EntityManagerFactory entityManagerFactory,
+            ObjectMapper objectMapper,
+            ObjectProvider<Clock> clock) {
         return new EventPublisher(
-                jdbcTemplate, objectMapper, clock.getIfAvailable(Clock::systemUTC));
+                sharedEntityManager(entityManagerFactory),
+                objectMapper,
+                clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean
     OutboxRelay outboxRelay(
-            JdbcTemplate jdbcTemplate,
+            EntityManagerFactory entityManagerFactory,
             RabbitTemplate rabbitTemplate,
             EventProperties properties,
             ObjectProvider<Clock> clock) {
         return new OutboxRelay(
-                jdbcTemplate, rabbitTemplate, properties, clock.getIfAvailable(Clock::systemUTC));
+                sharedEntityManager(entityManagerFactory),
+                rabbitTemplate,
+                properties,
+                clock.getIfAvailable(Clock::systemUTC));
     }
 
     @Bean
     ProcessedEventGuard processedEventGuard(
-            JdbcTemplate jdbcTemplate, ObjectProvider<Clock> clock) {
-        return new ProcessedEventGuard(jdbcTemplate, clock.getIfAvailable(Clock::systemUTC));
+            EntityManagerFactory entityManagerFactory, ObjectProvider<Clock> clock) {
+        return new ProcessedEventGuard(
+                sharedEntityManager(entityManagerFactory), clock.getIfAvailable(Clock::systemUTC));
+    }
+
+    // 현재 트랜잭션의 EntityManager 를 쓰는 프록시 (서비스의 JPA 저장과 같은 트랜잭션)
+    private static EntityManager sharedEntityManager(EntityManagerFactory entityManagerFactory) {
+        return SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory);
     }
 }

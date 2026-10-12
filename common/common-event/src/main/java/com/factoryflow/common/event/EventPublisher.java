@@ -1,11 +1,12 @@
 package com.factoryflow.common.event;
 
-import java.sql.Timestamp;
+import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 import org.slf4j.MDC;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -15,12 +16,12 @@ public class EventPublisher {
 
     static final String TRACE_ID_MDC_KEY = "traceId";
 
-    private final JdbcTemplate jdbcTemplate;
+    private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public EventPublisher(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, Clock clock) {
-        this.jdbcTemplate = jdbcTemplate;
+    public EventPublisher(EntityManager entityManager, ObjectMapper objectMapper, Clock clock) {
+        this.entityManager = entityManager;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -37,12 +38,15 @@ public class EventPublisher {
                         now,
                         objectMapper.valueToTree(event));
 
-        jdbcTemplate.update(
-                "INSERT INTO outbox (event_id, event_name, payload, created_at) VALUES (?, ?, ?, ?)",
-                envelope.eventId().toString(),
-                envelope.eventName(),
-                objectMapper.writeValueAsString(envelope),
-                Timestamp.from(now));
+        entityManager
+                .createNativeQuery(
+                        "INSERT INTO outbox (event_id, event_name, payload, created_at)"
+                                + " VALUES (?1, ?2, ?3, ?4)")
+                .setParameter(1, envelope.eventId().toString())
+                .setParameter(2, envelope.eventName())
+                .setParameter(3, objectMapper.writeValueAsString(envelope))
+                .setParameter(4, LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+                .executeUpdate();
         return envelope;
     }
 

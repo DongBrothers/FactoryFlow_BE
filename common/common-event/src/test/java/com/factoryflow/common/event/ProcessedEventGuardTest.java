@@ -26,6 +26,18 @@ class ProcessedEventGuardTest extends EventIntegrationTest {
     }
 
     @Test
+    void 바깥_트랜잭션_안에서_중복을_받아도_건너뛰고_바깥_트랜잭션은_커밋된다() {
+        UUID eventId = UUID.randomUUID();
+        AtomicInteger handled = new AtomicInteger();
+        guard.runOnce(eventId, handled::incrementAndGet);
+
+        boolean second = inTransaction.call(() -> guard.runOnce(eventId, handled::incrementAndGet));
+
+        assertThat(second).isFalse();
+        assertThat(handled).hasValue(1);
+    }
+
+    @Test
     void 처리_중_실패하면_처리기록도_롤백되어_재수신시_다시_처리한다() {
         UUID eventId = UUID.randomUUID();
         AtomicInteger handled = new AtomicInteger();
