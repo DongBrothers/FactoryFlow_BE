@@ -39,9 +39,9 @@ public class AuthController {
 
     /** 사원 활성화(메일의 토큰 + 비밀번호). */
     @PostMapping("/activation")
-    public ApiResponse<Void> activate(@Valid @RequestBody ActivationRequest request) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void activate(@Valid @RequestBody ActivationRequest request) {
         authService.activate(request);
-        return ApiResponse.noContent();
     }
 
     /** 로그인(사번 + 비밀번호) → Access 는 바디, Refresh 는 httpOnly 쿠키. */
@@ -61,13 +61,13 @@ public class AuthController {
 
     /** 로그아웃(쿠키의 Refresh 폐기 + 쿠키 만료). */
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(
+    public ResponseEntity<Void> logout(
             @CookieValue(name = RefreshCookieFactory.COOKIE_NAME, required = false)
                     String refreshToken) {
         authService.logout(refreshToken);
-        return ResponseEntity.ok()
+        return ResponseEntity.noContent()
                 .header(HttpHeaders.SET_COOKIE, refreshCookieFactory.expired().toString())
-                .body(ApiResponse.noContent());
+                .build();
     }
 
     private ResponseEntity<ApiResponse<AccessTokenResponse>> withRefreshCookie(
