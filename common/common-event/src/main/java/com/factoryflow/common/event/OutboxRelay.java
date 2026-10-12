@@ -1,8 +1,11 @@
 package com.factoryflow.common.event;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
 import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -16,7 +19,6 @@ import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,13 +30,13 @@ public class OutboxRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
 
-    private final JdbcTemplate jdbcTemplate;
+    private final EntityManager entityManager;
     private final RabbitTemplate rabbitTemplate;
     private final EventProperties properties;
     private final Clock clock;
 
     public OutboxRelay(
-            JdbcTemplate jdbcTemplate,
+            EntityManager entityManager,
             RabbitTemplate rabbitTemplate,
             EventProperties properties,
             Clock clock) {
@@ -42,7 +44,7 @@ public class OutboxRelay {
             throw new IllegalStateException(
                     "OutboxRelay 는 publisher confirm 이 필요하다: spring.rabbitmq.publisher-confirm-type=correlated");
         }
-        this.jdbcTemplate = jdbcTemplate;
+        this.entityManager = entityManager;
         this.rabbitTemplate = rabbitTemplate;
         this.properties = properties;
         this.clock = clock;
@@ -51,15 +53,26 @@ public class OutboxRelay {
     @Scheduled(fixedDelayString = "${factoryflow.events.relay-interval:1s}")
     @Transactional
     public void relay() {
+        List<?> result =
+                entityManager
+                        .createNativeQuery(
+                                "SELECT id, event_id, event_name, payload FROM outbox"
+                                        + " WHERE published_at IS NULL ORDER BY id LIMIT ?1"
+                                        + " FOR UPDATE SKIP LOCKED",
+                                Tuple.class)
+                        .setParameter(1, properties.relayBatchSize())
+                        .getResultList();
         List<OutboxRow> rows =
-                jdbcTemplate.query(
-                        "SELECT id, event_id, event_name, payload FROM outbox"
-                                + " WHERE published_at IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
-                        (rs, i) ->
-                                new OutboxRow(
-                                        rs.getLong("id"), rs.getString("event_id"),
-                                        rs.getString("event_name"), rs.getString("payload")),
-                        properties.relayBatchSize());
+                result.stream()
+                        .map(Tuple.class::cast)
+                        .map(
+                                t ->
+                                        new OutboxRow(
+                                                t.get("id", Number.class).longValue(),
+                                                t.get("event_id", String.class),
+                                                t.get("event_name", String.class),
+                                                t.get("payload", String.class)))
+                        .toList();
 
         List<Sent> sent = new ArrayList<>();
         for (OutboxRow row : rows) {
@@ -74,11 +87,14 @@ public class OutboxRelay {
             sent.add(new Sent(row, correlation));
         }
 
-        Timestamp now = Timestamp.from(clock.instant());
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneId.systemDefault());
         for (Sent s : sent) {
             if (isAcked(s)) {
-                jdbcTemplate.update(
-                        "UPDATE outbox SET published_at = ? WHERE id = ?", now, s.row().id());
+                entityManager
+                        .createNativeQuery("UPDATE outbox SET published_at = ?1 WHERE id = ?2")
+                        .setParameter(1, now)
+                        .setParameter(2, s.row().id())
+                        .executeUpdate();
             }
         }
     }
