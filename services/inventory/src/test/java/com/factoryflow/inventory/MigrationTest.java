@@ -25,7 +25,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void devSeedAddsPartsWithFixedIdsAndIsRepeatable() throws Exception {
-        var dataSource = migrateWithDevSeed("inventory_seed");
+        var dataSource = migrateWithDevSeed();
         var db = new JdbcTemplate(dataSource);
 
         assertSeed(db);
@@ -44,13 +44,14 @@ class MigrationTest extends MigrationTestSupport {
                 .isZero();
     }
 
-    /** 빈 DB 를 하나 더 만들어 마이그레이션과 dev 시드(db/seed-dev)를 적용한다. */
-    static DriverManagerDataSource migrateWithDevSeed(String database) {
+    /** 빈 DB(inventory_seed) 를 하나 더 만들어 마이그레이션과 dev 시드(db/seed-dev)를 적용한다. */
+    static DriverManagerDataSource migrateWithDevSeed() {
         var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
-        new JdbcTemplate(root).execute("CREATE DATABASE " + database);
+        new JdbcTemplate(root).execute("CREATE DATABASE inventory_seed");
         var dataSource =
                 new DriverManagerDataSource(
-                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/" + database),
+                        mysql.getJdbcUrl()
+                                .replace("/" + mysql.getDatabaseName(), "/inventory_seed"),
                         "root",
                         mysql.getPassword());
         Flyway.configure()
