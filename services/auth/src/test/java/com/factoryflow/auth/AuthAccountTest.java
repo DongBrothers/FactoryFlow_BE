@@ -331,6 +331,18 @@ class AuthAccountTest {
     }
 
     @Test
+    void refreshRejectsDisabledAccount() throws Exception {
+        // 로그인 뒤 비활성화된 계정은 유효한 Refresh 가 있어도 재발급되지 않는다
+        activateNewAccount(EMAIL);
+        Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
+        jdbc.update("UPDATE user_account SET status = 'DISABLED'");
+
+        mockMvc.perform(post("/api/auth/token/refresh").cookie(refresh))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("AUTH-007"));
+    }
+
+    @Test
     void logoutRevokesRefreshAndExpiresCookie() throws Exception {
         activateNewAccount(EMAIL);
         Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
