@@ -1,0 +1,15 @@
+package com.factoryflow.common.event;
+
+import com.factoryflow.test.arch.FactoryFlowRules;
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+@AnalyzeClasses(
+        packages = "com.factoryflow.common.event",
+        importOptions = ImportOption.DoNotIncludeTests.class)
+class ArchitectureTest {
+    @ArchTest
+    static final ArchRule transactionalOnly = FactoryFlowRules.TRANSACTIONAL_ANNOTATION_ONLY;
+}

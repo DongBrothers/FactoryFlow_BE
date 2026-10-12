@@ -14,8 +14,18 @@ spring:
 server:
   port: 8080
 
+# 서비스 간 호출 주소. 환경별 파일이나 환경 변수로 바꾼다. 기본값은 local 프로필의 production 포트(8084)
+clients:
+  production:
+    url: ${PRODUCTION_URL:http://localhost:8084}
+    timeout: 3s
+
 management:
   endpoints:
     web:
       exposure:
         include: health
+
+# Swagger: 공통 예외 핸들러의 응답을 모든 API 에 자동으로 붙이지 않는다 (API 마다 @ApiResponse 로 적는다)
+springdoc:
+  override-with-generic-response: false

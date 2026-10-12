@@ -1,5 +1,6 @@
 package com.factoryflow.common.web.exception;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,6 +11,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -22,7 +26,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerValidationTest {
+
+    static final String SECRET = "SECRET-TOKEN-7731";
 
     MockMvc mockMvc;
 
@@ -70,6 +77,62 @@ class GlobalExceptionHandlerValidationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").value("X-User-Id 헤더가 필요합니다."));
+    }
+
+    @Test
+    void missingRequestParamIs400() throws Exception {
+        mockMvc.perform(get("/samples"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("size 파라미터가 필요합니다."));
+    }
+
+    @Test
+    void wrongParamTypeIs400() throws Exception {
+        mockMvc.perform(get("/samples").param("size", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("size 값의 형식이 올바르지 않습니다."));
+    }
+
+    @Test
+    void malformedJsonBodyIs400() throws Exception {
+        mockMvc.perform(
+                        post("/samples")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"qty\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("요청 본문을 읽을 수 없습니다."));
+    }
+
+    @Test
+    void wrongParamTypeDoesNotLogTheSentValue(CapturedOutput output) throws Exception {
+        mockMvc.perform(get("/samples").param("size", SECRET)).andExpect(status().isBadRequest());
+
+        assertThat(output).contains("파라미터 형식 오류").doesNotContain(SECRET);
+    }
+
+    @Test
+    void unreadableBodyDoesNotLogTheSentValue(CapturedOutput output) throws Exception {
+        mockMvc.perform(
+                        post("/samples")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"qty\": \"" + SECRET + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(output).contains("요청 본문 읽기 실패").doesNotContain(SECRET);
+    }
+
+    @Test
+    void invalidBodyDoesNotLogTheRejectedValue(CapturedOutput output) throws Exception {
+        mockMvc.perform(
+                        post("/samples")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"qty\": -7731}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(output).contains("유효성 검사 실패").doesNotContain("7731");
     }
 
     record SampleRequest(@NotNull @Positive(message = "qty 는 1 이상이어야 합니다.") Integer qty) {}

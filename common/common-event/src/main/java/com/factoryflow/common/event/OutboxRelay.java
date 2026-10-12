@@ -18,7 +18,7 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 미발행 outbox 행을 주기적으로 RabbitMQ에 발행한다. 브로커의 publisher confirm(ack)을 받은 행만 발행 완료로 기록하고, 나머지는 다음 주기에
@@ -30,14 +30,12 @@ public class OutboxRelay {
 
     private final JdbcTemplate jdbcTemplate;
     private final RabbitTemplate rabbitTemplate;
-    private final TransactionTemplate transactionTemplate;
     private final EventProperties properties;
     private final Clock clock;
 
     public OutboxRelay(
             JdbcTemplate jdbcTemplate,
             RabbitTemplate rabbitTemplate,
-            TransactionTemplate transactionTemplate,
             EventProperties properties,
             Clock clock) {
         if (!rabbitTemplate.getConnectionFactory().isPublisherConfirms()) {
@@ -46,52 +44,43 @@ public class OutboxRelay {
         }
         this.jdbcTemplate = jdbcTemplate;
         this.rabbitTemplate = rabbitTemplate;
-        this.transactionTemplate = transactionTemplate;
         this.properties = properties;
         this.clock = clock;
     }
 
     @Scheduled(fixedDelayString = "${factoryflow.events.relay-interval:1s}")
+    @Transactional
     public void relay() {
-        transactionTemplate.executeWithoutResult(
-                status -> {
-                    List<OutboxRow> rows =
-                            jdbcTemplate.query(
-                                    "SELECT id, event_id, event_name, payload FROM outbox"
-                                            + " WHERE published_at IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
-                                    (rs, i) ->
-                                            new OutboxRow(
-                                                    rs.getLong("id"), rs.getString("event_id"),
-                                                    rs.getString("event_name"),
-                                                            rs.getString("payload")),
-                                    properties.relayBatchSize());
+        List<OutboxRow> rows =
+                jdbcTemplate.query(
+                        "SELECT id, event_id, event_name, payload FROM outbox"
+                                + " WHERE published_at IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED",
+                        (rs, i) ->
+                                new OutboxRow(
+                                        rs.getLong("id"), rs.getString("event_id"),
+                                        rs.getString("event_name"), rs.getString("payload")),
+                        properties.relayBatchSize());
 
-                    List<Sent> sent = new ArrayList<>();
-                    for (OutboxRow row : rows) {
-                        CorrelationData correlation = new CorrelationData(row.eventId());
-                        try {
-                            rabbitTemplate.send(
-                                    properties.exchange(),
-                                    row.eventName(),
-                                    toMessage(row),
-                                    correlation);
-                        } catch (AmqpException e) {
-                            log.warn("outbox 발행 실패, 다음 주기에 재시도: eventId={}", row.eventId(), e);
-                            break;
-                        }
-                        sent.add(new Sent(row, correlation));
-                    }
+        List<Sent> sent = new ArrayList<>();
+        for (OutboxRow row : rows) {
+            CorrelationData correlation = new CorrelationData(row.eventId());
+            try {
+                rabbitTemplate.send(
+                        properties.exchange(), row.eventName(), toMessage(row), correlation);
+            } catch (AmqpException e) {
+                log.warn("outbox 발행 실패, 다음 주기에 재시도: eventId={}", row.eventId(), e);
+                break;
+            }
+            sent.add(new Sent(row, correlation));
+        }
 
-                    Timestamp now = Timestamp.from(clock.instant());
-                    for (Sent s : sent) {
-                        if (isAcked(s)) {
-                            jdbcTemplate.update(
-                                    "UPDATE outbox SET published_at = ? WHERE id = ?",
-                                    now,
-                                    s.row().id());
-                        }
-                    }
-                });
+        Timestamp now = Timestamp.from(clock.instant());
+        for (Sent s : sent) {
+            if (isAcked(s)) {
+                jdbcTemplate.update(
+                        "UPDATE outbox SET published_at = ? WHERE id = ?", now, s.row().id());
+            }
+        }
     }
 
     private boolean isAcked(Sent s) {

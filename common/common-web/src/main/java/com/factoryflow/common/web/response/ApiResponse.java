@@ -21,8 +21,4 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> created(T data) {
         return new ApiResponse<>(data, 201, "CREATED");
     }
-
-    public static ApiResponse<Void> noContent() {
-        return new ApiResponse<>(null, 204, "NO_CONTENT");
-    }
 }

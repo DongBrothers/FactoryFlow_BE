@@ -3,31 +3,45 @@ package com.factoryflow.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.factoryflow.test.db.MigrationTestSupport;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
 
-@Testcontainers
-class MigrationTest {
-
-    @Container static final MySQLContainer mysql = new MySQLContainer("mysql:8.4");
+class MigrationTest extends MigrationTestSupport {
 
     static JdbcTemplate jdbc;
 
     @BeforeAll
     static void migrate() {
-        var dataSource =
+        jdbc = migrateTo("3");
+    }
+
+    @Test
+    void v3FillsUniqueOrderNoForExistingOrders() {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE order_upgrade");
+        var upgrade =
                 new DriverManagerDataSource(
-                        mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
-        var result = Flyway.configure().dataSource(dataSource).load().migrate();
-        assertThat(result.targetSchemaVersion).isEqualTo("2");
-        jdbc = new JdbcTemplate(dataSource);
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/order_upgrade"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("2").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        for (int i = 0; i < 2; i++) {
+            db.update(
+                    "INSERT INTO customer_order (customer_id, status, created_at, updated_at)"
+                            + " VALUES (7, 'RECEIVED', NOW(6), NOW(6))");
+        }
+
+        var result = Flyway.configure().dataSource(upgrade).load().migrate();
+
+        assertThat(result.targetSchemaVersion).isEqualTo("3");
+        var orderNos = db.queryForList("SELECT order_no FROM customer_order", String.class);
+        assertThat(orderNos).hasSize(2).doesNotHaveDuplicates().allMatch(no -> no.length() == 36);
     }
 
     @Test
@@ -69,6 +83,23 @@ class MigrationTest {
         assertThatThrownBy(() -> insertProcessedEvent(eventId))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_processed_event_event_id");
+    }
+
+    @Test
+    void rejectsDuplicateOrderNo() {
+        var orderNo = "550e8400-e29b-41d4-a716-446655440000";
+        insertOrder(orderNo);
+
+        assertThatThrownBy(() -> insertOrder(orderNo))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_customer_order_order_no");
+    }
+
+    private void insertOrder(String orderNo) {
+        jdbc.update(
+                "INSERT INTO customer_order (order_no, customer_id, status, created_at, updated_at)"
+                        + " VALUES (?, 1, 'RECEIVED', NOW(6), NOW(6))",
+                orderNo);
     }
 
     private void insertItem(long orderId, long productId, int qty) {
