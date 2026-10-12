@@ -59,7 +59,8 @@ class ActivationTokenStoreTest {
     @Test
     void rejectsExpiredToken() throws InterruptedException {
         // TTL 로 만료된 토큰은 거절된다 (짧은 TTL 로 실증)
-        var shortLived = new ActivationTokenStore(redisTemplate, properties(Duration.ofMillis(300)));
+        var shortLived =
+                new ActivationTokenStore(redisTemplate, properties(Duration.ofMillis(300)));
         String token = shortLived.issue(99L);
 
         Thread.sleep(500);
