@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,8 +34,22 @@ public class ActivationTokenStore {
     /** 대기 계정을 저장하고 새 토큰을 반환한다. 같은 이메일의 옛 토큰은 무효가 된다(덮어쓰기). 한 번에 처리해 동시 발급에도 토큰은 하나만 남는다. */
     public String issue(PendingAccount pending) {
         String token = UUID.randomUUID().toString();
+        save(RedisScripts.ISSUE_ACTIVATION, token, pending);
+        return token;
+    }
+
+    /**
+     * 소비한 토큰을 되돌린다(활성화 저장이 실패했을 때). 그 사이 같은 이메일로 다시 발급됐으면 되돌리지 않는다.
+     *
+     * <p>ponytail: TTL 을 남은 시간이 아니라 처음부터 다시 건다(최대 24시간 연장). 드문 장애 복구라 단순하게 둔다.
+     */
+    public void restore(String token, PendingAccount pending) {
+        save(RedisScripts.RESTORE_ACTIVATION, token, pending);
+    }
+
+    private void save(RedisScript<Long> script, String token, PendingAccount pending) {
         redis.execute(
-                RedisScripts.ISSUE_ACTIVATION,
+                script,
                 List.of(EMAIL_PREFIX + pending.email(), TOKEN_PREFIX + token),
                 TOKEN_PREFIX,
                 pending.email(),
@@ -42,7 +57,6 @@ public class ActivationTokenStore {
                 pending.role().name(),
                 String.valueOf(properties.activationTokenTtl().toMillis()),
                 token);
-        return token;
     }
 
     /** 토큰을 소비한다(조회 후 두 키 삭제). 없거나 만료·이미 쓴 토큰이면 null. */

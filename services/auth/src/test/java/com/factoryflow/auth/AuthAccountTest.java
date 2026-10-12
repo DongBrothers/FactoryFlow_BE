@@ -208,6 +208,24 @@ class AuthAccountTest {
         assertThat(userCount()).isEqualTo(1);
     }
 
+    @Test
+    void activateKeepsTokenWhenSaveFails() throws Exception {
+        // 중복이 아닌 이유로 저장이 실패하면(여기서는 컬럼 길이 초과로 재현) 토큰을 되돌려, 직원이 같은 링크로 다시 시도할 수 있다
+        String token = "restore-test-token";
+        redis.opsForHash()
+                .putAll(
+                        "auth:activation:" + token,
+                        Map.of("email", EMAIL, "name", "가".repeat(60), "role", "SALES"));
+        redis.expire("auth:activation:" + token, Duration.ofHours(24));
+        redis.opsForValue().set("auth:pending:" + EMAIL, token, Duration.ofHours(24));
+
+        activate(token).andExpect(status().isInternalServerError());
+
+        assertThat(userCount()).isZero();
+        assertThat(redis.hasKey("auth:activation:" + token)).isTrue();
+        assertThat(pendingToken(EMAIL)).isEqualTo(token);
+    }
+
     // --- 로그인 ---
 
     @Test

@@ -28,5 +28,20 @@ final class RedisScripts {
                     """,
                     Long.class);
 
+    /**
+     * 활성화 대기 되돌리기. KEYS 와 ARGV 는 ISSUE_ACTIVATION 과 같다. 그 사이 같은 이메일로 다시 발급됐으면(auth:pending 이 있으면) 새
+     * 링크가 유효하므로 아무것도 하지 않는다. 되돌리면 1, 아니면 0.
+     */
+    static final RedisScript<Long> RESTORE_ACTIVATION =
+            RedisScript.of(
+                    """
+                    if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+                    redis.call('HSET', KEYS[2], 'email', ARGV[2], 'name', ARGV[3], 'role', ARGV[4])
+                    redis.call('PEXPIRE', KEYS[2], ARGV[5])
+                    redis.call('SET', KEYS[1], ARGV[6], 'PX', ARGV[5])
+                    return 1
+                    """,
+                    Long.class);
+
     private RedisScripts() {}
 }

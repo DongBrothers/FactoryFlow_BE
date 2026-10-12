@@ -118,4 +118,30 @@ class ActivationTokenStoreTest {
                 .containsExactly("auth:activation:" + current);
         assertThat(redisTemplate.getExpire("auth:activation:" + current)).isPositive();
     }
+
+    @Test
+    void restorePutsConsumedTokenBack() {
+        // 활성화 저장이 실패하면 꺼낸 토큰을 되돌려 같은 링크로 다시 시도할 수 있다
+        String token = store.issue(KIM);
+        store.consume(token);
+
+        store.restore(token, KIM);
+
+        assertThat(redisTemplate.opsForValue().get("auth:pending:kim@gmail.com")).isEqualTo(token);
+        assertThat(redisTemplate.getExpire("auth:activation:" + token)).isPositive();
+        assertThat(store.consume(token)).isEqualTo(KIM);
+    }
+
+    @Test
+    void restoreDoesNotOverrideNewerIssue() {
+        // 되돌리기 전에 관리자가 다시 발급했다면 새 링크만 유효하다 (덮어쓰기 규칙)
+        String oldToken = store.issue(KIM);
+        store.consume(oldToken);
+        String newToken = store.issue(KIM);
+
+        store.restore(oldToken, KIM);
+
+        assertThat(store.consume(oldToken)).isNull();
+        assertThat(store.consume(newToken)).isEqualTo(KIM);
+    }
 }

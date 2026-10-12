@@ -53,21 +53,26 @@ public class AuthService {
         if (pending == null) {
             throw new CustomException(AuthErrorCode.INVALID_ACTIVATION_TOKEN);
         }
-        if (repository.existsByEmail(pending.email())) {
-            throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
-        }
         try {
+            if (repository.existsByEmail(pending.email())) {
+                throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
+            }
             repository.save(
                     UserAccount.create(
                             pending.email(),
                             pending.name(),
                             pending.role(),
                             passwordEncoder.encode(request.password())));
-        } catch (DataIntegrityViolationException e) {
-            // 확인과 저장 사이에 같은 이메일이 먼저 저장된 경우 (거의 동시의 두 번째 발급)만 409. 그 밖의 무결성 오류는 그대로 던진다
-            if (repository.existsByEmail(pending.email())) {
+        } catch (CustomException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            // 확인과 저장 사이에 같은 이메일이 먼저 저장된 경우 (거의 동시의 두 번째 발급)만 409
+            if (e instanceof DataIntegrityViolationException
+                    && repository.existsByEmail(pending.email())) {
                 throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
             }
+            // 그 밖의 실패(DB 장애 등)는 꺼낸 토큰을 되돌려 직원이 같은 링크로 다시 시도할 수 있게 하고, 오류는 그대로 던진다
+            activationTokenStore.restore(request.token(), pending);
             throw e;
         }
     }
