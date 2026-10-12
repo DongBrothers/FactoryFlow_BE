@@ -57,7 +57,6 @@ class OutboxRelayTest extends EventIntegrationTest {
                 new OutboxRelay(
                         jdbcTemplate,
                         rabbitTemplate,
-                        transactionTemplate,
                         new EventProperties("missing.exchange", 100, Duration.ofSeconds(5)),
                         Clock.systemUTC());
 

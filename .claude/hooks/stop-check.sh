@@ -27,8 +27,12 @@ changed=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard
 # 1) 테스트 무력화 차단
 git diff --name-only --diff-filter=D HEAD | grep 'src/test/' >/dev/null \
   && fail TEST_DELETED "테스트 파일 삭제 금지. 테스트가 틀렸다면 이유를 말하고 멈춰라."
-git diff -U0 HEAD -- '*.java' | grep -E '^\+.*@Disabled' >/dev/null \
-  && fail TEST_DISABLED "@Disabled 추가 금지."
+# 테스트 코드에서 줄 첫머리에 붙은 @Disabled*, @Enabled* (DisabledIf, EnabledIf, EnabledOnOs 등, 전체 이름 포함)만 잡는다 (문자열, 주석 안의 글자는 제외)
+disabled_re='^[[:space:]]*@([a-z][A-Za-z0-9_]*\.)*(Disabled|Enabled)[A-Za-z]*([[:space:](]|$)'
+{ git diff -U0 HEAD -- '*/src/test/*.java' | grep -E '^\+[^+]' | sed 's/^+//'
+  git ls-files --others --exclude-standard -- '*/src/test/*.java' | xargs -I{} cat {}
+} | grep -E "$disabled_re" >/dev/null \
+  && fail TEST_DISABLED "@Disabled*, @Enabled* (DisabledIf, EnabledIf 등) 로 테스트 끄기 금지."
 git diff -U0 HEAD -- '*.java' | grep -E '^\+.*assertTrue\(true\)' >/dev/null \
   && fail FAKE_ASSERT "의미 없는 assert 금지."
 

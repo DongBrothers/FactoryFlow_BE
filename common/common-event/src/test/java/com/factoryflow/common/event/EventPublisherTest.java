@@ -58,8 +58,8 @@ class EventPublisherTest extends EventIntegrationTest {
     void 트랜잭션이_롤백되면_outbox도_롤백된다() {
         assertThatThrownBy(
                         () ->
-                                transactionTemplate.executeWithoutResult(
-                                        status -> {
+                                inTransaction.run(
+                                        () -> {
                                             eventPublisher.publish(new TestEvent(1L));
                                             throw new IllegalStateException("업무 처리 실패");
                                         }))

@@ -14,6 +14,11 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
 @Import(EventTestApplication.Containers.class)
 class EventTestApplication {
 
+    @Bean
+    InTransaction inTransaction() {
+        return new InTransaction();
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class Containers {
 
