@@ -1,5 +1,6 @@
 package com.factoryflow.auth.config;
 
+import com.factoryflow.auth.domain.Role;
 import com.factoryflow.auth.exception.AuthErrorCode;
 import com.factoryflow.common.web.exception.CustomException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,7 +20,7 @@ public class AdminRoleInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(
             HttpServletRequest request, HttpServletResponse response, Object handler) {
-        if (!"ADMIN".equals(request.getHeader(ROLE_HEADER))) {
+        if (!Role.ADMIN.name().equals(request.getHeader(ROLE_HEADER))) {
             throw new CustomException(AuthErrorCode.FORBIDDEN);
         }
         return true;

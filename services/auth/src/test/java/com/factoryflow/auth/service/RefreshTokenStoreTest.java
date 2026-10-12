@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.factoryflow.auth.config.AuthProperties;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -70,5 +74,34 @@ class RefreshTokenStoreTest {
     void rejectsMalformedOrNullToken() {
         assertThat(store.consume("no-user-prefix")).isNull();
         assertThat(store.consume(null)).isNull();
+    }
+
+    @Test
+    void consumeSucceedsOnlyOnceEvenWhenConcurrent() throws Exception {
+        // 회전: 같은 Refresh 로 동시에 여러 요청이 와도 한 요청만 통과한다
+        String token = store.issue("user-7");
+        var pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Callable<String>> calls =
+                    IntStream.range(0, 8)
+                            .mapToObj(i -> (Callable<String>) () -> store.consume(token))
+                            .toList();
+            long succeeded =
+                    pool.invokeAll(calls).stream()
+                            .map(
+                                    f -> {
+                                        try {
+                                            return f.get();
+                                        } catch (Exception e) {
+                                            throw new IllegalStateException(e);
+                                        }
+                                    })
+                            .filter(id -> id != null)
+                            .count();
+            assertThat(succeeded).isEqualTo(1);
+        } finally {
+            pool.shutdown();
+        }
+        assertThat(store.consume(token)).isNull();
     }
 }

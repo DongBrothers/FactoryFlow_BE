@@ -19,6 +19,7 @@ class LoginAttemptGuardTest {
     static final GenericContainer<?> redis =
             new GenericContainer<>("redis:7.4").withExposedPorts(6379);
 
+    StringRedisTemplate redisTemplate;
     LoginAttemptGuard guard;
 
     @BeforeEach
@@ -26,7 +27,7 @@ class LoginAttemptGuardTest {
         var connectionFactory =
                 new LettuceConnectionFactory(redis.getHost(), redis.getMappedPort(6379));
         connectionFactory.afterPropertiesSet();
-        var redisTemplate = new StringRedisTemplate(connectionFactory);
+        redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
         // 임계치 3회, 잠금 창 1분
         guard =
@@ -66,5 +67,16 @@ class LoginAttemptGuardTest {
         guard.reset("emp-reset");
 
         assertThat(guard.isLocked("emp-reset")).isFalse();
+    }
+
+    @Test
+    void everyFailureKeepsCounterExpiring() {
+        // 카운터에 만료가 빠진 채 남아도(증가와 만료 사이 실패 등) 다음 실패 때 다시 만료가 걸려 영구 잠금이 되지 않는다
+        guard.recordFailure("emp-ttl");
+        redisTemplate.persist("auth:login-fail:emp-ttl");
+
+        guard.recordFailure("emp-ttl");
+
+        assertThat(redisTemplate.getExpire("auth:login-fail:emp-ttl")).isPositive();
     }
 }

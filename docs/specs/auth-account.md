@@ -97,10 +97,10 @@
 
 | 키 | 값 | TTL | 용도 |
 |---|---|---|---|
-| `auth:activation:{token}` | 대기 정보 JSON (`email`, `name`, `role`) | 24시간 | 링크의 토큰으로 대기 정보 찾기 |
+| `auth:activation:{token}` | 대기 정보 hash (`email`, `name`, `role`) | 24시간 | 링크의 토큰으로 대기 정보 찾기 |
 | `auth:pending:{email}` | token | 24시간 | 같은 이메일 재발급 시 옛 토큰 찾아 지우기 |
-| `auth:refresh:{publicId}` | Refresh 토큰 | 14일 | 사용자당 Refresh 1개 (단일 세션) |
-| `auth:login-fail:{email}` | 실패 횟수 | 15분 | 로그인 실패 잠금 |
+| `auth:refresh:{publicId}` | Refresh 토큰 | 14일 | 사용자당 Refresh 1개 (단일 세션). 재발급·로그아웃 때 값이 같을 때만 지운다(조회와 삭제를 한 번에, 동시 요청 중 하나만 통과) |
+| `auth:login-fail:{email}` | 실패 횟수 | 마지막 실패부터 15분 | 로그인 실패 잠금 |
 
 - 링크에는 토큰만 담는다. 이메일을 링크에 넣지 않는다 (URL·로그·브라우저 기록에 개인정보가 남음)
 

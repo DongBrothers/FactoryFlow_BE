@@ -20,12 +20,11 @@ public class LoginAttemptGuard {
         return count != null && Integer.parseInt(count) >= properties.maxLoginAttempts();
     }
 
+    /** 실패마다 만료를 다시 건다. 만료가 빠진 카운터가 남아 영구 잠금이 되는 일을 막는다(잠금은 마지막 실패부터 잠금 창 동안). */
     public void recordFailure(String email) {
         String key = PREFIX + email;
-        Long count = redis.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redis.expire(key, properties.loginLockWindow());
-        }
+        redis.opsForValue().increment(key);
+        redis.expire(key, properties.loginLockWindow());
     }
 
     public void reset(String email) {
