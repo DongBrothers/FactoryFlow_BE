@@ -19,7 +19,7 @@ auth:
   max-login-attempts: 5
   login-lock-window: 15m
   cookie:
-    secure: false      # 로컬 http. 운영(HTTPS)은 true
+    secure: true       # 운영(HTTPS) 기본값. 로컬(http)은 application-local.yml 에서 false 로 덮어쓴다
     same-site: Lax
 
 management:
