@@ -1,4 +1,4 @@
-package com.factoryflow.auth.service;
+package com.factoryflow.auth.service.redis;
 
 import org.springframework.data.redis.core.script.RedisScript;
 

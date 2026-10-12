@@ -1,4 +1,4 @@
-package com.factoryflow.auth.service;
+package com.factoryflow.auth.service.mail;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

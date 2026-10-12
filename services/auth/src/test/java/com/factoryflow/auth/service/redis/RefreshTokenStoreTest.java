@@ -1,4 +1,4 @@
-package com.factoryflow.auth.service;
+package com.factoryflow.auth.service.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

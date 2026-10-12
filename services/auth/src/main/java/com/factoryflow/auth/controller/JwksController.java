@@ -1,6 +1,6 @@
 package com.factoryflow.auth.controller;
 
-import com.factoryflow.auth.service.JwtProvider;
+import com.factoryflow.auth.service.jwt.JwtProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;

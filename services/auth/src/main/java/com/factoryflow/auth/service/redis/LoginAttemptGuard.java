@@ -1,4 +1,4 @@
-package com.factoryflow.auth.service;
+package com.factoryflow.auth.service.redis;
 
 import com.factoryflow.auth.config.AuthProperties;
 import lombok.RequiredArgsConstructor;
