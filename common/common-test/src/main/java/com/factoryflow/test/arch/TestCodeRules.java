@@ -11,5 +11,8 @@ public final class TestCodeRules {
     @ArchTest static final ArchRule inlineMocks = FactoryFlowRules.NO_INLINE_MOCK_OF_OUR_CODE;
     @ArchTest static final ArchRule testcontainers = FactoryFlowRules.TESTS_USE_TESTCONTAINERS;
 
+    @ArchTest
+    static final ArchRule transactionalOnly = FactoryFlowRules.TRANSACTIONAL_ANNOTATION_ONLY;
+
     private TestCodeRules() {}
 }
