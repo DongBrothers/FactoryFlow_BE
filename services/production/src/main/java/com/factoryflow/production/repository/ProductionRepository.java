@@ -1,9 +1,11 @@
 package com.factoryflow.production.repository;
 
 import com.factoryflow.production.domain.Production;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProductionRepository extends JpaRepository<Production, Long> {
 
-    boolean existsByOrderIdAndProductId(Long orderId, Long productId);
+    List<Production> findAllByOrderIdAndProductIdIn(Long orderId, Collection<Long> productIds);
 }

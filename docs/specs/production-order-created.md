@@ -21,6 +21,7 @@ inventory 에 `production.material-requested` 로 부품 예약을 요청한다.
 | 상황 | 처리 |
 |---|---|
 | 같은 이벤트를 두 번 받음 | 두 번째는 건너뛴다 (ProcessedEventGuard). 생산 건과 이벤트가 한 번만 생긴다 |
+| 한 이벤트에 같은 제품이 여러 줄 | 수량을 합쳐 생산 건 하나로 만든다 (order 는 같은 제품 중복을 400 으로 막지만, 받는 쪽에서도 버리지 않는다) |
 | 같은 주문·제품의 생산 건이 이미 있음 (`uk_production_order_product`) | 새로 만들지 않는다. eventId 가 다른 재발행이어도 생산 건은 하나다 |
 | 처리 중 오류 (DB 등) | 트랜잭션 전체 롤백 (처리 기록 포함). 1s, 2s, 4s 간격으로 최대 3번 다시 처리한다. 그래도 실패하면 `EVENT_DROPPED queue=… eventId=… reason=…` ERROR 로그를 남기고 버린다 (DLQ 는 이후 작업) |
 | JSON 이 깨진 메시지 | 다시 처리하지 않고 버린다 |
@@ -41,6 +42,7 @@ inventory 에 `production.material-requested` 로 부품 예약을 요청한다.
 - [ ] material-requested 의 부품 수량은 BOM.qty_per_unit × 생산 건 qty 이고, 삭제된 BOM 은 빠진다
 - [ ] 같은 이벤트를 두 번 받으면 생산 건과 outbox 가 한 번만 생긴다
 - [ ] 같은 주문·제품으로 다른 eventId 가 와도 생산 건이 하나다
+- [ ] 한 이벤트에 같은 제품이 두 줄이면 수량을 합친 생산 건 하나와 그 수량의 부품 요청이 생긴다
 - [ ] RabbitMQ 로 실제 `order.created` 를 보내면 리스너가 받아 생산 건이 생긴다 (Testcontainers)
 - [ ] 처리가 계속 실패하는 메시지는 4번 시도한 뒤 EVENT_DROPPED 로그를 남기고 버려지며, 아무것도 저장되지 않는다
 - [ ] 제품 2종 중 하나의 BOM 이 사라졌으면 나머지 하나만 생산 건과 material-requested 가 생긴다

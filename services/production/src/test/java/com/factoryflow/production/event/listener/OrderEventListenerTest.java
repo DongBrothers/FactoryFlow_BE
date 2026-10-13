@@ -109,6 +109,19 @@ class OrderEventListenerTest {
     }
 
     @Test
+    void sameProductTwiceInOneEventIsMergedIntoOneProduction() {
+        listener.onOrderCreated(
+                orderCreated(
+                        UUID.randomUUID(), 10L, List.of(List.of(carA, 1L), List.of(carA, 2L))));
+
+        assertThat(productions())
+                .extracting(r -> r.get("product_id"), r -> r.get("qty"))
+                .containsExactly(tuple(carA, 3));
+        assertThat(parts(materialRequestsByProductionId().get(productionIdOf(carA))))
+                .containsExactlyInAnyOrderEntriesOf(Map.of(1001, 3, 1011, 12));
+    }
+
+    @Test
     void productWithoutBomIsSkippedAndOthersAreCreated() {
         jdbc.update("UPDATE bom SET is_deleted = TRUE WHERE product_id = ?", carB);
 
@@ -186,12 +199,19 @@ class OrderEventListenerTest {
 
     private EventEnvelope orderCreated(
             UUID eventId, long orderId, Map<Long, Integer> qtyByProductId) {
-        List<Map<String, Object>> products =
+        return orderCreated(
+                eventId,
+                orderId,
                 qtyByProductId.entrySet().stream()
-                        .map(
-                                e ->
-                                        Map.<String, Object>of(
-                                                "productId", e.getKey(), "qty", e.getValue()))
+                        .map(e -> List.of(e.getKey(), (long) e.getValue()))
+                        .toList());
+    }
+
+    /** products 는 [productId, qty] 쌍의 목록. 같은 제품을 여러 줄 넣을 수 있다. */
+    private EventEnvelope orderCreated(UUID eventId, long orderId, List<List<Long>> products) {
+        List<Map<String, Object>> lines =
+                products.stream()
+                        .map(p -> Map.<String, Object>of("productId", p.get(0), "qty", p.get(1)))
                         .toList();
         return new EventEnvelope(
                 eventId,
@@ -199,7 +219,7 @@ class OrderEventListenerTest {
                 UUID.randomUUID().toString(),
                 1,
                 Instant.now(),
-                objectMapper.valueToTree(Map.of("orderId", orderId, "products", products)));
+                objectMapper.valueToTree(Map.of("orderId", orderId, "products", lines)));
     }
 
     private List<Map<String, Object>> productions() {
