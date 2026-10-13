@@ -199,10 +199,6 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] `X-User-Id` 의미 맞추기 (order 담당과). gateway 는 로그인한 **직원**의 public_id(UUID) 를 넣는데, order 의
       `POST /orders` 는 이 헤더를 **고객 번호(Long)** 로 읽는다. 고객은 로그인하지 않으므로 고객 번호는 요청 본문
       (`customerId`) 으로 받고, `X-User-Id` 는 필요하면 "주문을 입력한 직원" 으로 쓰는 방향
-- [ ] (선택) 서비스 간 동기 호출을 모두 `client/` 로 통일할지 논의. JWKS 는 지금 gateway 의 Spring Security 가
-      `jwk-set-uri` 로 받아 오고(캐시, 키 교체 시 재조회 포함), 라우팅도 설정으로 한다. 예외로 둘지 정해 CLAUDE.md 에 적는다
-- [ ] (운영 전) JWT 서명 키를 기동 시 생성 → 시크릿의 고정 키로. 지금은 auth 를 재시작하면 모든 로그인이 풀리고,
-      auth 를 여러 대 띄우면 서로 키가 달라 검증이 실패한다
 
 ### 그 밖의 후속 변경
 
