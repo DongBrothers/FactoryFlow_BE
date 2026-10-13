@@ -35,7 +35,9 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(
         properties = {
             "spring.rabbitmq.listener.simple.retry.initial-interval=100ms",
-            "spring.rabbitmq.listener.simple.retry.max-interval=200ms"
+            "spring.rabbitmq.listener.simple.retry.max-interval=200ms",
+            // 재시도마다 "Retry attempt for operation" 를 남겨 시도 횟수를 셀 수 있게 한다
+            "logging.level.org.springframework.core.retry=DEBUG"
         })
 @Import(TestContainersConfig.class)
 @ExtendWith(OutputCaptureExtension.class)
@@ -200,6 +202,12 @@ class OrderEventListenerTest {
         Message dead = awaitDeadLetter();
         assertThat(dead.getMessageProperties().getMessageId()).isEqualTo(messageId);
         assertThat(new String(dead.getBody(), StandardCharsets.UTF_8)).isEqualTo("{ not json");
+        // 변환 실패도 재시도 대상: 처음 1번 + 재시도 3번
+        assertThat(countLines(output.getOut(), "Retry attempt for operation", "StatelessRetry"))
+                .isEqualTo(3);
+        assertThat(output.getOut())
+                .contains(
+                        "EVENT_DEAD_LETTERED queue=production.order-created eventId=" + messageId);
         assertThat(productions()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
                 .isZero();
