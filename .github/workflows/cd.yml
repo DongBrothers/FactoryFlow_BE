@@ -51,6 +51,8 @@ jobs:
           else
             files=$(git diff --name-only "$BEFORE" ${{ github.sha }})
           fi
+          # common-test 는 테스트에서만 쓰여 서비스 이미지에 들어가지 않으므로 배포 판단에서 뺀다
+          files=$(echo "$files" | grep -vE '^common/common-test/' || true)
           if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
             list="$ALL"
           else
