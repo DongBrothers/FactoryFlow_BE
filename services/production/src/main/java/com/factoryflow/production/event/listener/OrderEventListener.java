@@ -4,6 +4,8 @@ import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.production.config.EventQueueConfig;
 import com.factoryflow.production.service.ProductionService;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -21,13 +23,13 @@ public class OrderEventListener {
     @RabbitListener(queues = EventQueueConfig.ORDER_CREATED_QUEUE)
     public void onOrderCreated(EventEnvelope envelope) {
         OrderCreated event = objectMapper.treeToValue(envelope.payload(), OrderCreated.class);
+        Map<Long, Integer> qtyByProductId =
+                event.products().stream()
+                        .collect(
+                                Collectors.toMap(
+                                        OrderCreatedProduct::productId, OrderCreatedProduct::qty));
         processedEventGuard.runOnce(
                 envelope.eventId(),
-                () ->
-                        event.products()
-                                .forEach(
-                                        p ->
-                                                productionService.plan(
-                                                        event.orderId(), p.productId(), p.qty())));
+                () -> productionService.planAll(event.orderId(), qtyByProductId));
     }
 }

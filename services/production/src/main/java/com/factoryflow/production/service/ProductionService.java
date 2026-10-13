@@ -9,6 +9,7 @@ import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,11 +26,15 @@ public class ProductionService {
     private final EventPublisher eventPublisher;
 
     /**
-     * 주문 속 제품 1종의 생산 건(PLANNED)을 만들고 필요한 부품을 production.material-requested 로 요청한다. 같은 주문·제품의 생산 건이
-     * 이미 있거나, 제품이나 BOM 이 주문 이후 사라졌으면 만들지 않는다.
+     * 주문 속 제품마다 생산 건(PLANNED)을 만들고 필요한 부품을 production.material-requested 로 요청한다. 같은 주문·제품의 생산 건이 이미
+     * 있거나, 제품이나 BOM 이 주문 이후 사라졌으면 그 제품은 만들지 않는다.
      */
     @Transactional
-    public void plan(Long orderId, Long productId, int qty) {
+    public void planAll(Long orderId, Map<Long, Integer> qtyByProductId) {
+        qtyByProductId.forEach((productId, qty) -> plan(orderId, productId, qty));
+    }
+
+    private void plan(Long orderId, Long productId, int qty) {
         if (productionRepository.existsByOrderIdAndProductId(orderId, productId)) {
             log.info("생산 건이 이미 있어 건너뜀: orderId={} productId={}", orderId, productId);
             return;
