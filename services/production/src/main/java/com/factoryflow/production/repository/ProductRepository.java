@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findAllByIdInAndIsDeletedFalse(Collection<Long> ids);
+
+    boolean existsByIdAndIsDeletedFalse(Long id);
 }
