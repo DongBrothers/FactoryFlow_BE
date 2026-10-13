@@ -28,7 +28,7 @@ inventory 에 `production.material-requested` 로 부품 예약을 요청한다.
 
 - 주문 생성 때 제품과 BOM 을 이미 확인하므로(SAGA 0. 입구 검증) 정상 흐름에서는 생기지 않는다. 주문과 수신 사이에 삭제된 경우만 해당한다
 - 전체를 실패로 두지 않는 이유: 다시 처리해도 계속 실패해, 재시도를 다 쓰면 메시지가 버려지고 같은 주문의 다른 제품까지 생산 건이 생기지 않는다
-- 리스너(`event/listener/OrderEventListener`)는 service 만 부른다. 생산 건 저장과 이벤트 발행은 `ProductionService` 가 한다
+- 리스너(`event/listener/OrderEventListener`)는 `ProcessedEventGuard` 로 중복을 거르고 `ProductionService` 를 부른다 (/add-event 수신 규칙). Repository 는 직접 쓰지 않고, 생산 건 저장과 이벤트 발행은 `ProductionService` 가 한다
 
 ## 관련 이벤트 (events.md 참조)
 | 이벤트 | 발행 → 수신 | payload |
