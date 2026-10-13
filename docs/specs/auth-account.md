@@ -180,17 +180,32 @@
 
 ## 다른 서비스에 필요한 후속 변경 (auth 범위 밖, 추후 상의 필요)
 
-- gateway 배선: 라우트 테이블(5개 서비스) + **신원 헤더 전달**. 이때 gateway 는 들어온 `X-User-*`
-  헤더를 **반드시 버리고(strip)** 검증된 JWT 로 다시 채워야 한다.
-- `X-User-Id` 의 의미: order 의 주문 생성은 `X-User-Id` 를 고객 번호(Long)로 쓰고, 직원 JWT 의 `sub` 는
-  `public_id`(UUID)다. gateway 배선 때 order 담당과 맞춘다.
-- gateway CORS: 프론트(다른 origin)가 gateway 를 부르려면 필요하다. 라우트가 없어 쓸 곳이 없으므로 이 PR 에서는
-  뺐고(PR #30 AI 리뷰 [spec]), gateway 배선 명세에 넣고 테스트와 함께 다시 만든다. 뺀 설정은 다음과 같았다.
+### gateway 배선 PR 체크리스트
+
+gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 gateway 가 넣어 준 `X-User-*` 헤더를 믿는다.
+이 구조는 아래 **보안 필수** 두 가지가 모두 갖춰져야 안전하다 (둘 중 하나라도 빠지면 헤더를 위조해 우회할 수 있다.
+"규칙 / 예외 > X-User-Role 신뢰 전제" 참고).
+
+- [ ] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 로 `X-User-Id`(sub = public_id),
+      `X-User-Role`(role) 을 다시 채운다
+- [ ] (보안 필수) 서비스는 gateway 를 통해서만 접근되는지 확인 (dev ECS 보안그룹에서 서비스 포트의 외부 접속 차단)
+- [ ] dev auth 라우트의 `StripPrefix=1` 제거. auth 컨트롤러는 `/api/auth/**` 를 받으므로 지금은 gateway 를 거치면 404
+- [ ] CORS 다시 만들기. PR #30 에서 명세 밖이라 뺐다(AI 리뷰 [spec]). 뺀 설정은 다음과 같았다
   - 허용 origin 은 설정값 `app.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, 기본 `https://factoryflow.dev`)
   - 메서드 GET, POST, PUT, PATCH, DELETE, OPTIONS / 헤더 전부 / 경로 `/**`
   - **allowCredentials = true 필수**: Refresh 토큰이 httpOnly 쿠키라, 없으면 브라우저가 재발급·로그아웃 요청에
     쿠키를 싣지 않는다. 이때 허용 origin 에 `*` 는 쓸 수 없다(정확한 origin 목록)
   - Spring Security(WebFlux) 에서는 `http.cors(...)` 에 `CorsConfigurationSource` 를 연결해야 preflight 가 인증 전에 통과한다
+- [ ] `X-User-Id` 의미 맞추기 (order 담당과). gateway 는 로그인한 **직원**의 public_id(UUID) 를 넣는데, order 의
+      `POST /orders` 는 이 헤더를 **고객 번호(Long)** 로 읽는다. 고객은 로그인하지 않으므로 고객 번호는 요청 본문
+      (`customerId`) 으로 받고, `X-User-Id` 는 필요하면 "주문을 입력한 직원" 으로 쓰는 방향
+- [ ] (선택) 서비스 간 동기 호출을 모두 `client/` 로 통일할지 논의. JWKS 는 지금 gateway 의 Spring Security 가
+      `jwk-set-uri` 로 받아 오고(캐시, 키 교체 시 재조회 포함), 라우팅도 설정으로 한다. 예외로 둘지 정해 CLAUDE.md 에 적는다
+- [ ] (운영 전) JWT 서명 키를 기동 시 생성 → 시크릿의 고정 키로. 지금은 auth 를 재시작하면 모든 로그인이 풀리고,
+      auth 를 여러 대 띄우면 서로 키가 달라 검증이 실패한다
+
+### 그 밖의 후속 변경
+
 - `customer` 는 로그인하지 않으므로 auth_db 에 비밀번호 없이 남아 있다. 제자리는 order 소유 데이터다.
 - purchase `requested_by` 의 논리 참조를 `auth_db.admin.id` → **`auth_db.user_account.id`** 로 변경.
   현재 주석: `services/purchase/.../V2__create_purchase_tables.sql`
