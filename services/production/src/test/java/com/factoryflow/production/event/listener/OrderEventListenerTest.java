@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -34,11 +35,15 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(
         properties = {
             "spring.rabbitmq.listener.simple.retry.initial-interval=100ms",
-            "spring.rabbitmq.listener.simple.retry.max-interval=200ms"
+            "spring.rabbitmq.listener.simple.retry.max-interval=200ms",
+            // 재시도마다 "Retry attempt for operation" 를 남겨 시도 횟수를 셀 수 있게 한다
+            "logging.level.org.springframework.core.retry=DEBUG"
         })
 @Import(TestContainersConfig.class)
 @ExtendWith(OutputCaptureExtension.class)
 class OrderEventListenerTest {
+
+    static final String DLQ = "production.order-created.dlq";
 
     @Autowired OrderEventListener listener;
     @Autowired JdbcTemplate jdbc;
@@ -65,6 +70,7 @@ class OrderEventListenerTest {
                 "UPDATE bom SET is_deleted = TRUE WHERE product_id = ? AND part_id = 1018", carA);
         insertBom(carB, 1001, 1);
         insertBom(carB, 1012, 4);
+        amqpAdmin.purgeQueue(DLQ, false);
     }
 
     @Test
@@ -156,14 +162,19 @@ class OrderEventListenerTest {
     }
 
     @Test
-    void failingMessageIsRetriedThenDropped(CapturedOutput output) {
+    void failingMessageIsRetriedThenDeadLettered(CapturedOutput output) {
         // qty 0 은 production 의 CHECK (qty > 0) 에 걸려 처리할 때마다 DB 오류가 난다
         EventEnvelope event = orderCreated(UUID.randomUUID(), 30L, Map.of(carA, 0));
 
         sendToRabbit(event);
 
-        String dropped = "EVENT_DROPPED queue=production.order-created eventId=" + event.eventId();
-        await().atMost(Duration.ofSeconds(10)).until(() -> output.getOut().contains(dropped));
+        Message dead = awaitDeadLetter();
+        assertThat(dead.getMessageProperties().getMessageId())
+                .isEqualTo(event.eventId().toString());
+        assertThat(output.getOut())
+                .contains(
+                        "EVENT_DEAD_LETTERED queue=production.order-created eventId="
+                                + event.eventId());
         assertThat(
                         countLines(
                                 output.getOut(),
@@ -175,6 +186,37 @@ class OrderEventListenerTest {
                 .isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
         assertThat(amqpAdmin.getQueueInfo("production.order-created").getMessageCount()).isZero();
+    }
+
+    @Test
+    void brokenJsonIsDeadLettered(CapturedOutput output) {
+        String messageId = UUID.randomUUID().toString();
+        rabbitTemplate.send(
+                "factoryflow.events",
+                "order.created",
+                MessageBuilder.withBody("{ not json".getBytes(StandardCharsets.UTF_8))
+                        .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+                        .setMessageId(messageId)
+                        .build());
+
+        Message dead = awaitDeadLetter();
+        assertThat(dead.getMessageProperties().getMessageId()).isEqualTo(messageId);
+        assertThat(new String(dead.getBody(), StandardCharsets.UTF_8)).isEqualTo("{ not json");
+        // 변환 실패도 재시도 대상: 처음 1번 + 재시도 3번
+        assertThat(countLines(output.getOut(), "Retry attempt for operation", "StatelessRetry"))
+                .isEqualTo(3);
+        assertThat(output.getOut())
+                .contains(
+                        "EVENT_DEAD_LETTERED queue=production.order-created eventId=" + messageId);
+        assertThat(productions()).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
+                .isZero();
+    }
+
+    private Message awaitDeadLetter() {
+        await().atMost(Duration.ofSeconds(10))
+                .until(() -> amqpAdmin.getQueueInfo(DLQ).getMessageCount() == 1);
+        return rabbitTemplate.receive(DLQ);
     }
 
     private void sendToRabbit(EventEnvelope event) {
