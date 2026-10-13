@@ -17,8 +17,9 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import reactor.core.publisher.Mono;
 
 /**
- * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 role 클레임으로 접근을 제어한다. 로그인·활성화·재발급·JWKS 는 공개,
- * /api/auth/admin/** 은 ADMIN 만. (docs/specs/auth-account.md)
+ * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 role 클레임으로 접근을 제어한다. 로그인·활성화·재발급·로그아웃은 공개,
+ * /api/auth/admin/** 은 ADMIN 만. JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
+ * (docs/specs/auth-account.md)
  */
 @Configuration
 @EnableWebFluxSecurity
@@ -29,7 +30,7 @@ public class SecurityConfig {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(
                         exchange ->
-                                exchange.pathMatchers("/actuator/health", "/.well-known/jwks.json")
+                                exchange.pathMatchers("/actuator/health")
                                         .permitAll()
                                         .pathMatchers(
                                                 HttpMethod.POST,

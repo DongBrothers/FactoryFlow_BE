@@ -391,13 +391,9 @@ class AuthAccountTest {
         assertResponseCodes(docs, "/api/auth/login", "200", "400", "401", "403", "429");
         assertResponseCodes(docs, "/api/auth/token/refresh", "200", "401", "403");
         assertResponseCodes(docs, "/api/auth/logout", "204");
-        assertThat(JsonPath.<Object>read(docs, "$.paths['/.well-known/jwks.json'].get.summary"))
-                .isNotNull();
-        assertThat(
-                        JsonPath.<Map<String, Object>>read(
-                                        docs, "$.paths['/.well-known/jwks.json'].get.responses")
-                                .keySet())
-                .containsExactly("200");
+        // 서버끼리만 쓰는 JWKS 는 문서에 나오지 않는다
+        assertThat(JsonPath.<Map<String, Object>>read(docs, "$.paths"))
+                .doesNotContainKey("/.well-known/jwks.json");
 
         assertThat(
                         JsonPath.<String>read(

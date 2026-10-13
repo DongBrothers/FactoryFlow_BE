@@ -128,7 +128,7 @@
 | 재발급 | 쿠키 없음, 옛·위조·만료 토큰, 계정 없음 (INVALID_REFRESH_TOKEN) | 401 |
 | 재발급 | `DISABLED` 계정 (ACCOUNT_NOT_ACTIVE) | 403 |
 | 로그아웃 | 항상 (쿠키가 없거나 옛 토큰이어도) | 204 |
-| JWKS | 항상 | 200 (JWKS 표준 형식, 공통 ApiResponse 로 감싸지 않음) |
+| JWKS | 항상 | 200 (JWKS 표준 형식, 공통 ApiResponse 로 감싸지 않음). 서버끼리만 쓴다: API 문서에서 숨기고 gateway 로 노출하지 않음 |
 
 ### 계정·토큰
 
@@ -211,4 +211,4 @@
 - [ ] `X-User-Role` 이 ADMIN 이 아니면 admin API 403
 - [ ] 비번은 해시로 저장되고, 비번·토큰·이메일이 로그에 남지 않는다
 - [ ] `user_account` 에 `employee_no` 컬럼이 없고, `email` 은 UNIQUE, `password` 는 NOT NULL
-- [ ] `/v3/api-docs` 에 6개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나온다
+- [ ] `/v3/api-docs` 에 5개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 나오지 않는다

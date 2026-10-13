@@ -12,14 +12,9 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
 
 /**
- * 발급된 대기 계정을 Redis 에 두 키로 보관한다. (docs/specs/auth-account.md "Redis 키")
- *
- * <ul>
- *   <li>auth:activation:{token} → 대기 정보(hash). 링크의 토큰으로 찾는다
- *   <li>auth:pending:{email} → token. 같은 이메일 재발급 때 옛 토큰을 지운다
- * </ul>
- *
- * 둘 다 TTL 로 만료되고, consume 시 삭제되어 1회만 쓸 수 있다.
+ * 발급된 대기 계정을 Redis 에 두 키로 보관한다 (docs/specs/auth-account.md "Redis 키"). auth:activation:{token} 에는
+ * 대기 정보(hash)를 두어 링크의 토큰으로 찾고, auth:pending:{email} 에는 token 을 두어 같은 이메일 재발급 때 옛 토큰을 지운다. 둘 다 TTL 로
+ * 만료되고, consume 시 삭제되어 1회만 쓸 수 있다.
  */
 @Component
 @RequiredArgsConstructor
