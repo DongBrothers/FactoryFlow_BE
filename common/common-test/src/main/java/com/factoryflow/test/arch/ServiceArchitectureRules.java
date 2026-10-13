@@ -58,7 +58,7 @@ public final class ServiceArchitectureRules {
 
     @ArchTest static final ArchRule dtoRecords = FactoryFlowRules.DTOS_ARE_RECORDS;
     @ArchTest static final ArchRule responseNaming = FactoryFlowRules.RESPONSE_NAMING;
-    @ArchTest static final ArchRule records = FactoryFlowRules.NO_RECORD_INSIDE_RECORD;
+    @ArchTest static final ArchRule nested = FactoryFlowRules.NO_NESTED_CLASSES;
     @ArchTest static final ArchRule responseFactory = FactoryFlowRules.RESPONSE_STATIC_FACTORY;
     @ArchTest static final ArchRule responseNew = FactoryFlowRules.NO_RESPONSE_CONSTRUCTOR_OUTSIDE;
 
