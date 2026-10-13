@@ -79,4 +79,17 @@ class LoginAttemptGuardTest {
 
         assertThat(redisTemplate.getExpire("auth:login-fail:emp-ttl")).isPositive();
     }
+
+    @Test
+    void lockedCounterAlwaysExpires() {
+        // 잠금에 걸린 카운터에도 만료가 있어야 잠금 창이 지나면 풀린다 (증가와 만료를 한 번에 처리)
+        guard.recordFailure("emp-lock-ttl");
+        guard.recordFailure("emp-lock-ttl");
+        guard.recordFailure("emp-lock-ttl");
+
+        assertThat(guard.isLocked("emp-lock-ttl")).isTrue();
+        assertThat(redisTemplate.getExpire("auth:login-fail:emp-lock-ttl"))
+                .isPositive()
+                .isLessThanOrEqualTo(60L);
+    }
 }

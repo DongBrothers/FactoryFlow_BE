@@ -43,5 +43,12 @@ final class RedisScripts {
                     """,
                     Long.class);
 
+    /** KEYS[1] 을 1 늘리고 만료(ARGV[1], ms)를 다시 건다. 둘을 한 번에 해 만료 없는 카운터가 남지 않는다. 늘린 값을 돌려준다. */
+    static final RedisScript<Long> INCREMENT_WITH_EXPIRE =
+            RedisScript.of(
+                    "local count = redis.call('INCR', KEYS[1]) redis.call('PEXPIRE', KEYS[1], ARGV[1])"
+                            + " return count",
+                    Long.class);
+
     private RedisScripts() {}
 }

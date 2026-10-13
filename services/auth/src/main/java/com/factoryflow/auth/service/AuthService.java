@@ -18,11 +18,13 @@ import com.factoryflow.auth.service.redis.RefreshTokenStore;
 import com.factoryflow.common.web.exception.CustomException;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /** 계정 발급·활성화·로그인·토큰 (docs/specs/auth-account.md). */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -77,8 +79,17 @@ public class AuthService {
                 throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
             }
             // 그 밖의 실패(DB 장애 등)는 꺼낸 토큰을 되돌려 직원이 같은 링크로 다시 시도할 수 있게 하고, 오류는 그대로 던진다
-            activationTokenStore.restore(request.token(), pending);
+            restoreQuietly(request.token(), pending);
             throw e;
+        }
+    }
+
+    /** 꺼낸 토큰을 되돌린다. 되돌리기가 실패해도(Redis 장애 등) 원래 오류를 가리지 않도록 로그만 남긴다. */
+    private void restoreQuietly(String token, PendingAccount pending) {
+        try {
+            activationTokenStore.restore(token, pending);
+        } catch (RuntimeException restoreFailure) {
+            log.error("[auth] 활성화 토큰 되돌리기 실패", restoreFailure);
         }
     }
 

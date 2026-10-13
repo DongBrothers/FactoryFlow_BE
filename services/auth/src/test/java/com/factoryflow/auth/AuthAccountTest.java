@@ -270,6 +270,23 @@ class AuthAccountTest {
     }
 
     @Test
+    void loginIgnoresSurroundingSpacesInEmail() throws Exception {
+        activateNewAccount(EMAIL);
+
+        login("  " + EMAIL + " ", PASSWORD).andExpect(status().isOk());
+    }
+
+    @Test
+    void issueRejectsEmailWithSurroundingSpaces() throws Exception {
+        // 발급은 이메일 형식 검사(@Email)를 먼저 하므로 앞뒤 공백이 있으면 형식 오류로 알려 준다
+        issue(" " + EMAIL + " ")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        assertThat(redis.keys("auth:*")).isEmpty();
+    }
+
+    @Test
     void loginRejectsWrongPasswordOrUnknownEmail() throws Exception {
         activateNewAccount(EMAIL);
 

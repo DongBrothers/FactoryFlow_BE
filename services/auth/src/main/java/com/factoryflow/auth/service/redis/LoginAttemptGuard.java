@@ -1,6 +1,7 @@
 package com.factoryflow.auth.service.redis;
 
 import com.factoryflow.auth.config.AuthProperties;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -20,11 +21,15 @@ public class LoginAttemptGuard {
         return count != null && Integer.parseInt(count) >= properties.maxLoginAttempts();
     }
 
-    /** 실패마다 만료를 다시 건다. 만료가 빠진 카운터가 남아 영구 잠금이 되는 일을 막는다(잠금은 마지막 실패부터 잠금 창 동안). */
+    /**
+     * 실패 횟수를 늘리고 만료(잠금 창)를 다시 건다. 증가와 만료를 한 번에 처리해, 만료 없는 카운터가 남아 영구 잠금되는 일이 없다(잠금은 마지막 실패부터 잠금 창
+     * 동안).
+     */
     public void recordFailure(String email) {
-        String key = PREFIX + email;
-        redis.opsForValue().increment(key);
-        redis.expire(key, properties.loginLockWindow());
+        redis.execute(
+                RedisScripts.INCREMENT_WITH_EXPIRE,
+                List.of(PREFIX + email),
+                String.valueOf(properties.loginLockWindow().toMillis()));
     }
 
     public void reset(String email) {
