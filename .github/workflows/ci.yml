@@ -100,9 +100,10 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD)
-          if echo "$files" | grep -qE 'db/migration/|^common/common-event/|^docs/specs/events.md|^services/auth/|^services/gateway/.*/security/|/reservation/'; then
+          # 되돌리기 어려운 변경만 one-way-door 라벨을 붙인다. 기준은 .github/scripts/is-one-way-door.sh
+          if reasons=$(bash .github/scripts/is-one-way-door.sh ${{ github.event.pull_request.base.sha }} HEAD); then
+            echo "$reasons"
             gh pr edit ${{ github.event.pull_request.number }} --add-label one-way-door
           else
-            gh pr edit ${{ github.event.pull_request.number }} --add-label two-way-door
+            echo "two-way-door: revert 로 되돌릴 수 있는 변경"
           fi
