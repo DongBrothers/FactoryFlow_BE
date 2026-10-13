@@ -23,12 +23,12 @@ inventory 에 `production.material-requested` 로 부품 예약을 요청한다.
 | 같은 이벤트를 두 번 받음 | 두 번째는 건너뛴다 (ProcessedEventGuard). 생산 건과 이벤트가 한 번만 생긴다 |
 | 한 이벤트에 같은 제품이 여러 줄 | 수량을 합쳐 생산 건 하나로 만든다 (order 는 같은 제품 중복을 400 으로 막지만, 받는 쪽에서도 버리지 않는다) |
 | 같은 주문·제품의 생산 건이 이미 있음 (`uk_production_order_product`) | 새로 만들지 않는다. eventId 가 다른 재발행이어도 생산 건은 하나다 |
-| 처리 중 오류 (DB 등) | 트랜잭션 전체 롤백 (처리 기록 포함). 1s, 2s, 4s 간격으로 최대 3번 다시 처리한다. 그래도 실패하면 `EVENT_DROPPED queue=… eventId=… reason=…` ERROR 로그를 남기고 버린다 (DLQ 는 이후 작업) |
-| JSON 이 깨진 메시지 | 다시 처리하지 않고 버린다 |
+| 처리 중 오류 (DB 등) | 트랜잭션 전체 롤백 (처리 기록 포함). 1s, 2s, 4s 간격으로 최대 3번 다시 처리한다. 그래도 실패하면 `EVENT_DEAD_LETTERED queue=… eventId=… reason=…` ERROR 로그를 남기고 `production.order-created.dlq` 에 보관한다 (dead letter exchange `factoryflow.events.dlx`) |
+| JSON 이 깨진 메시지 | 처리 중 오류와 같다. 4번 시도한 뒤 DLQ 에 보관한다 (변환 실패도 재시도 대상) |
 | 제품이 없거나 BOM 이 없음 (주문 이후 삭제) | 그 제품만 건너뛰고 ERROR 로그 `SAGA_SKIPPED orderId=… productId=… reason=…` 를 남긴다. 나머지 제품은 생산 건을 만든다 (건너뛴 주문 품목은 RECEIVED 에 머문다) |
 
 - 주문 생성 때 제품과 BOM 을 이미 확인하므로(SAGA 0. 입구 검증) 정상 흐름에서는 생기지 않는다. 주문과 수신 사이에 삭제된 경우만 해당한다
-- 전체를 실패로 두지 않는 이유: 다시 처리해도 계속 실패해, 재시도를 다 쓰면 메시지가 버려지고 같은 주문의 다른 제품까지 생산 건이 생기지 않는다
+- 전체를 실패로 두지 않는 이유: 다시 처리해도 계속 실패해, 재시도를 다 쓰면 메시지가 DLQ 로 가고 같은 주문의 다른 제품까지 생산 건이 생기지 않는다
 - 리스너(`event/listener/OrderEventListener`)는 `ProcessedEventGuard` 로 중복을 거르고 `ProductionService` 를 부른다 (/add-event 수신 규칙). Repository 는 직접 쓰지 않고, 생산 건 저장과 이벤트 발행은 `ProductionService` 가 한다
 
 ## 관련 이벤트 (events.md 참조)
@@ -44,5 +44,6 @@ inventory 에 `production.material-requested` 로 부품 예약을 요청한다.
 - [ ] 같은 주문·제품으로 다른 eventId 가 와도 생산 건이 하나다
 - [ ] 한 이벤트에 같은 제품이 두 줄이면 수량을 합친 생산 건 하나와 그 수량의 부품 요청이 생긴다
 - [ ] RabbitMQ 로 실제 `order.created` 를 보내면 리스너가 받아 생산 건이 생긴다 (Testcontainers)
-- [ ] 처리가 계속 실패하는 메시지는 4번 시도한 뒤 EVENT_DROPPED 로그를 남기고 버려지며, 아무것도 저장되지 않는다
+- [ ] 처리가 계속 실패하는 메시지는 4번 시도한 뒤 EVENT_DEAD_LETTERED 로그를 남기고 DLQ 에 보관되며, 아무것도 저장되지 않는다
+- [ ] JSON 이 깨진 메시지도 DLQ 에 원래 본문 그대로 보관된다
 - [ ] 제품 2종 중 하나의 BOM 이 사라졌으면 나머지 하나만 생산 건과 material-requested 가 생긴다
