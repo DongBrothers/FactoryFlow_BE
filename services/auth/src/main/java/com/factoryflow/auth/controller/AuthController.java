@@ -37,7 +37,7 @@ public class AuthController {
             summary = "직원 계정 발급 (관리자)",
             description =
                     "이메일·이름·역할로 계정을 발급한다. DB 에 저장하지 않고 Redis 에 24시간 대기시킨 뒤 활성화 링크를 보낸다. 같은 이메일의"
-                            + " 대기 건이 있으면 덮어써 옛 링크는 무효가 된다. X-User-Role 이 ADMIN 이어야 한다.")
+                            + " 대기 건이 있으면 덮어써 옛 링크는 무효가 된다. ADMIN 확인은 gateway 가 JWT 의 role 로 한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "201",
@@ -45,9 +45,6 @@ public class AuthController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "요청 형식 오류, 허용되지 않은 이메일 도메인 (AUTH-003)"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "403",
-                description = "ADMIN 이 아님 (AUTH-010)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description = "이미 활성화된 이메일 (AUTH-002)")

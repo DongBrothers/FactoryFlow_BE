@@ -62,7 +62,7 @@ public class ActivationTokenStore {
         if (fields.isEmpty() || !Boolean.TRUE.equals(redis.delete(tokenKey))) {
             return null;
         }
-        var pending =
+        PendingAccount pending =
                 new PendingAccount(
                         (String) fields.get("email"),
                         (String) fields.get("name"),

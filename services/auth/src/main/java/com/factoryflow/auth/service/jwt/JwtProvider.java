@@ -54,7 +54,7 @@ public class JwtProvider {
         return jwt.serialize();
     }
 
-    /** 공개키 JWK 집합. /.well-known/jwks.json 으로 노출된다. */
+    /** 공개키 JWK 집합. 내부 API /internal/jwks 로 gateway 에 준다. */
     public JWKSet publicJwkSet() {
         return new JWKSet(rsaKey.toPublicJWK());
     }

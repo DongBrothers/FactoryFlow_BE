@@ -91,9 +91,9 @@
 
 ### 5. 검증 (gateway·서비스)
 
-- gateway 가 auth 의 **JWKS 엔드포인트(`GET /.well-known/jwks.json`)에서 공개키를 받아 캐시**하고,
+- gateway 가 auth 의 **내부 API JWKS 엔드포인트(`GET /internal/jwks`)에서 공개키를 받아 캐시**하고,
   Access 토큰 서명을 공개키로 검증한다 (auth 에 매 요청 묻지 않음). 키 교체 시 JWKS 만 갱신
-- admin 전용 API 는 `role = ADMIN` 인지 gateway 와 auth 서비스에서 함께 확인
+- admin 전용 API 는 gateway 가 JWT 의 `role = ADMIN` 인지 확인한다. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
 
 ## Redis 키
 
@@ -114,7 +114,7 @@
 |---|---|---|
 | 발급 | 성공 (같은 이메일 대기 건이 있으면 덮어쓰고 성공) | 201 |
 | 발급 | 형식 오류 (이메일 형식·빈 값·role 없음), 허용 도메인 아님 (INVALID_EMAIL_DOMAIN) | 400 |
-| 발급 | ADMIN 이 아님 (FORBIDDEN) | 403 |
+| 발급 | ADMIN 이 아님 (gateway 가 JWT role 로 막음, auth 까지 오지 않음) | 403 |
 | 발급 | 이미 활성화된 이메일 (DUPLICATE_EMAIL) | 409 |
 | 활성화 | 성공 | 204 |
 | 활성화 | 형식 오류, 없거나 만료·재사용된 토큰 (INVALID_ACTIVATION_TOKEN) | 400 |
@@ -128,7 +128,7 @@
 | 재발급 | 쿠키 없음, 옛·위조·만료 토큰, 계정 없음 (INVALID_REFRESH_TOKEN) | 401 |
 | 재발급 | `DISABLED` 계정 (ACCOUNT_NOT_ACTIVE) | 403 |
 | 로그아웃 | 항상 (쿠키가 없거나 옛 토큰이어도) | 204 |
-| JWKS | 항상 | 200 (JWKS 표준 형식, 공통 ApiResponse 로 감싸지 않음). 서버끼리만 쓴다: API 문서에서 숨기고 gateway 로 노출하지 않음 |
+| JWKS `GET /internal/jwks` | 항상 | 200 (JWKS 표준 형식, 공통 ApiResponse 로 감싸지 않음). 서버끼리만 쓰는 내부 API: 다른 내부 API 처럼 `InternalJwksController`, 문서에 "인증 (내부)" 로 표시, gateway 로 노출하지 않음 |
 
 ### 계정·토큰
 
@@ -155,8 +155,9 @@
 - **로그에 남기지 않는 것**: 비밀번호(평문·해시), 활성화·Refresh 토큰, 이메일 (개인정보, 기획서 10.1)
 - springdoc OpenAPI 로 문서화한다. auth 는 `/v3/api-docs` 와 Swagger UI 를 연다. 응답 코드는 API 마다 `@ApiResponse` 로
   위 표의 코드를 전부 적고, 공통 예외 핸들러 응답을 자동으로 붙이지 않는다 (`springdoc.override-with-generic-response: false`)
-- **X-User-Role 신뢰 전제 (보안)**: auth 는 gateway 가 넘기는 `X-User-Role` 헤더로 ADMIN 여부를
-  한 번 더 확인한다(방어 심층). 이 신뢰는 다음 두 가지가 모두 성립할 때만 유효하다.
+- **권한 확인과 헤더 신뢰 전제 (보안)**: JWT 는 gateway 만 검증한다. ADMIN 확인도 gateway 가 JWT 의 role 로 하고,
+  role 은 헤더로 넘기지 않는다 (헤더 role 과 JWT role 을 따로 맞출 필요가 없게. 2026-10-14 리뷰). 뒤 서비스가 믿는
+  `X-User-Id` 같은 헤더는 다음 두 가지가 모두 성립할 때만 유효하다.
   1. 서비스는 gateway 를 통해서만 접근 가능(네트워크 격리: ECS 보안그룹에서 인터넷 직접 접속 차단).
   2. gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 **버리고(strip), 검증된 JWT 로 다시 채운다**.
   둘 중 하나라도 빠지면 클라이언트가 헤더를 위조해 우회할 수 있다.
@@ -178,6 +179,10 @@
 7. **같은 이메일 재발급**: 덮어쓰기. 메일을 잃어버린 직원을 관리자가 다시 발급해 구제할 수 있다 (2026-10-12).
 8. **V2 마이그레이션 직접 수정**: V2 는 main 에 올라간 적이 없어 V3 를 만들지 않고 고친다.
    로컬 DB 는 `docker compose down -v` 로 한 번 초기화한다.
+9. **ADMIN 확인은 gateway 한 곳**: auth 가 `X-User-Role` 헤더로 다시 확인하던 것을 뺐다. role 을 헤더로 넘기면 헤더를
+   따로 관리하고 JWT role 과 같은지 맞춰야 해서다 (2026-10-14, PR #30 리뷰).
+10. **JWKS 는 내부 API**: `/internal/jwks`, `InternalJwksController`. 다른 내부 API 와 같은 규칙으로 두어 외부 API 와
+    서버끼리 쓰는 API 를 경로·이름으로 구분한다 (2026-10-14, PR #30 리뷰).
 
 ## 다른 서비스에 필요한 후속 변경 (auth 범위 밖, 추후 상의 필요)
 
@@ -185,10 +190,10 @@
 
 gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 gateway 가 넣어 준 `X-User-*` 헤더를 믿는다.
 이 구조는 아래 **보안 필수** 두 가지가 모두 갖춰져야 안전하다 (둘 중 하나라도 빠지면 헤더를 위조해 우회할 수 있다.
-"규칙 / 예외 > X-User-Role 신뢰 전제" 참고).
+"규칙 / 예외 > 권한 확인과 헤더 신뢰 전제" 참고).
 
-- [ ] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 로 `X-User-Id`(sub = public_id),
-      `X-User-Role`(role) 을 다시 채운다
+- [ ] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 의 sub(public_id) 로 `X-User-Id` 를
+      다시 채운다. role 은 넘기지 않는다 (권한은 gateway 가 JWT 로 확인)
 - [ ] (보안 필수) 서비스는 gateway 를 통해서만 접근되는지 확인 (dev ECS 보안그룹에서 서비스 포트의 외부 접속 차단)
 - [ ] dev auth 라우트의 `StripPrefix=1` 제거. auth 컨트롤러는 `/api/auth/**` 를 받으므로 지금은 gateway 를 거치면 404
 - [ ] CORS 다시 만들기. PR #30 에서 명세 밖이라 뺐다(AI 리뷰 [spec]). 뺀 설정은 다음과 같았다
@@ -220,7 +225,7 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] 틀린 비번·없는 이메일 401, `DISABLED` 403, N회 실패 시 429
 - [ ] Refresh 재발급 시 새 쌍 발급 + 옛 Refresh 무효(회전), 로그아웃 시 Refresh 무효
 - [ ] 공개키로 Access 서명 검증 성공
-- [ ] `X-User-Role` 이 ADMIN 이 아니면 admin API 403
+- [ ] gateway 에서 ADMIN 이 아닌 JWT 로 admin API 를 부르면 403, 토큰이 없으면 401
 - [ ] 비번은 해시로 저장되고, 비번·토큰·이메일이 로그에 남지 않는다
 - [ ] `user_account` 에 `employee_no` 컬럼이 없고, `email` 은 UNIQUE, `password` 는 NOT NULL
-- [ ] `/v3/api-docs` 에 5개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 나오지 않는다
+- [ ] `/v3/api-docs` 에 5개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 `/internal/jwks` 내부 API 로 나온다

@@ -88,7 +88,6 @@ class AuthAccountTest {
     void issueRejectsInvalidRequest() throws Exception {
         mockMvc.perform(
                         post("/api/auth/admin/users")
-                                .header("X-User-Role", "ADMIN")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"not-an-email\",\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -101,7 +100,6 @@ class AuthAccountTest {
         String name = "가".repeat(51);
         mockMvc.perform(
                         post("/api/auth/admin/users")
-                                .header("X-User-Role", "ADMIN")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         "{\"email\":\""
@@ -111,19 +109,6 @@ class AuthAccountTest {
                                                 + "\",\"role\":\"SALES\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-
-        assertThat(redis.keys("auth:*")).isEmpty();
-    }
-
-    @Test
-    void issueRejectsNonAdmin() throws Exception {
-        mockMvc.perform(
-                        post("/api/auth/admin/users")
-                                .header("X-User-Role", "SALES")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(issueBody(EMAIL)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("AUTH-010"));
 
         assertThat(redis.keys("auth:*")).isEmpty();
     }
@@ -243,7 +228,7 @@ class AuthAccountTest {
 
         SignedJWT jwt = SignedJWT.parse(JsonPath.read(body, "$.data.accessToken"));
         String jwks =
-                mockMvc.perform(get("/.well-known/jwks.json"))
+                mockMvc.perform(get("/internal/jwks"))
                         .andExpect(status().isOk())
                         .andReturn()
                         .getResponse()
@@ -403,14 +388,14 @@ class AuthAccountTest {
                         .getContentAsString();
 
         // 명세 "API 별 응답" 표의 코드만 나오고, 공통 핸들러의 500 은 자동으로 붙지 않는다
-        assertResponseCodes(docs, "/api/auth/admin/users", "201", "400", "403", "409");
+        assertResponseCodes(docs, "/api/auth/admin/users", "201", "400", "409");
         assertResponseCodes(docs, "/api/auth/activation", "204", "400", "409");
         assertResponseCodes(docs, "/api/auth/login", "200", "400", "401", "403", "429");
         assertResponseCodes(docs, "/api/auth/token/refresh", "200", "401", "403");
         assertResponseCodes(docs, "/api/auth/logout", "204");
-        // 서버끼리만 쓰는 JWKS 는 문서에 나오지 않는다
-        assertThat(JsonPath.<Map<String, Object>>read(docs, "$.paths"))
-                .doesNotContainKey("/.well-known/jwks.json");
+        // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 /internal 아래에 (내부) 로 나온다
+        assertThat(JsonPath.<String>read(docs, "$.paths['/internal/jwks'].get.summary"))
+                .isNotBlank();
 
         assertThat(
                         JsonPath.<String>read(
@@ -437,7 +422,6 @@ class AuthAccountTest {
     private ResultActions issue(String email) throws Exception {
         return mockMvc.perform(
                 post("/api/auth/admin/users")
-                        .header("X-User-Role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(issueBody(email)));
     }

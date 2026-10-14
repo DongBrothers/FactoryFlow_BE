@@ -45,7 +45,7 @@ public class AuthService {
         if (repository.existsByEmail(email)) {
             throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
         }
-        var pending = new PendingAccount(email, request.name(), request.role());
+        PendingAccount pending = new PendingAccount(email, request.name(), request.role());
         String token = activationTokenStore.issue(pending);
         notifier.sendActivationLink(email, token);
         return IssueAccountResponse.from(pending);
