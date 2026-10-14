@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.factoryflow.test.db.MigrationTestSupport;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
@@ -15,71 +16,68 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("1");
+        jdbc = migrateTo("2");
     }
 
     @Test
-    void createsSeparateCustomerAndAdminTables() {
+    void createsUserAccountAndDropsAdminButKeepsCustomer() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
-        assertThat(tables).contains("customer", "admin");
+        // admin 은 user_account 로 대체되어 사라지고, customer 는 데이터 테이블로 남는다.
+        assertThat(tables).contains("user_account", "customer");
+        assertThat(tables).doesNotContain("admin");
     }
 
     @Test
-    void rejectsDuplicateCustomerEmail() {
-        insertCustomer("dup@factoryflow.test");
+    void customerHasNoPasswordColumn() {
+        // 고객은 로그인하지 않으므로 비밀번호 컬럼이 제거되어 있다.
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns"
+                                + " WHERE table_schema = DATABASE()"
+                                + " AND table_name = 'customer' AND column_name = 'password'",
+                        Integer.class);
 
-        assertThatThrownBy(() -> insertCustomer("dup@factoryflow.test"))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_customer_email");
+        assertThat(count).isZero();
     }
 
     @Test
-    void rejectsDuplicateAdminEmail() {
-        insertAdmin("admin-dup@factoryflow.test");
+    void userAccountHasNoEmployeeNoColumn() {
+        // 로그인 ID 는 이메일이다. 사번은 두지 않는다.
+        Integer count =
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns"
+                                + " WHERE table_schema = DATABASE()"
+                                + " AND table_name = 'user_account' AND column_name = 'employee_no'",
+                        Integer.class);
 
-        assertThatThrownBy(() -> insertAdmin("admin-dup@factoryflow.test"))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_admin_email");
+        assertThat(count).isZero();
     }
 
     @Test
-    void adminRequiresDepartment() {
-        assertThatThrownBy(
-                        () ->
-                                jdbc.update(
-                                        "INSERT INTO admin (email, password, name, position,"
-                                                + " created_at, updated_at)"
-                                                + " VALUES ('no-dept@factoryflow.test', 'hash',"
-                                                + " '관리자', '과장', NOW(6), NOW(6))"))
+    void rejectsDuplicateEmail() {
+        insertUser("dup@factoryflow.test", "hash");
+
+        assertThatThrownBy(() -> insertUser("dup@factoryflow.test", "hash"))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("department");
+                .hasMessageContaining("uk_user_account_email");
     }
 
     @Test
-    void adminRequiresPosition() {
-        assertThatThrownBy(
-                        () ->
-                                jdbc.update(
-                                        "INSERT INTO admin (email, password, name, department,"
-                                                + " created_at, updated_at)"
-                                                + " VALUES ('no-position@factoryflow.test', 'hash',"
-                                                + " '관리자', '구매팀', NOW(6), NOW(6))"))
+    void rejectsNullPassword() {
+        // 활성화(비번 설정)가 끝난 계정만 저장되므로 비번은 항상 있다.
+        assertThatThrownBy(() -> insertUser("nopw@factoryflow.test", null))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("position");
+                .hasMessageContaining("password");
     }
 
-    private void insertCustomer(String email) {
+    private void insertUser(String email, String password) {
         jdbc.update(
-                "INSERT INTO customer (email, password, name, created_at, updated_at)"
-                        + " VALUES (?, 'hash', '고객', NOW(6), NOW(6))",
-                email);
-    }
-
-    private void insertAdmin(String email) {
-        jdbc.update(
-                "INSERT INTO admin (email, password, name, department, position, created_at,"
-                        + " updated_at) VALUES (?, 'hash', '관리자', '구매팀', '과장', NOW(6), NOW(6))",
-                email);
+                "INSERT INTO user_account (public_id, email, password, name, role, status,"
+                        + " created_at, updated_at)"
+                        + " VALUES (?, ?, ?, '홍길동', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
+                UUID.randomUUID().toString(),
+                email,
+                password);
     }
 }

@@ -11,6 +11,21 @@ spring:
 server:
   port: 8080
 
+auth:
+  allowed-email-domain: gmail.com   # 로컬·데모용 placeholder. 운영은 회사 도메인
+  activation-token-ttl: 24h
+  access-token-ttl: 15m
+  refresh-token-ttl: 14d
+  max-login-attempts: 5
+  login-lock-window: 15m
+  cookie:
+    secure: true       # 운영(HTTPS) 기본값. 로컬(http)은 application-local.yml 에서 false 로 덮어쓴다
+    same-site: Lax
+
+# Swagger: 공통 예외 핸들러의 응답을 모든 API 에 자동으로 붙이지 않는다 (API 마다 @ApiResponse 로 적는다)
+springdoc:
+  override-with-generic-response: false
+
 management:
   endpoints:
     web:
