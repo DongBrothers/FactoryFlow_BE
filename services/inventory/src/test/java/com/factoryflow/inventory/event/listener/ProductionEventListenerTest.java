@@ -151,6 +151,22 @@ class ProductionEventListenerTest {
     }
 
     @Test
+    void everyRequestedPartBumpsItsVersionSoConcurrentRequestsConflict() {
+        // WAITING 경로는 Part 를 바꾸지 않아도 version 이 올라야 한다. 그래야 동시에 같은 부품을 처리한 다른 요청이
+        // 커밋에서 충돌하고, 재시도 때 이 WAITING 줄을 보고 뒤에 선다
+        long engineBefore = version(engine);
+        long tireBefore = version(tire);
+
+        listener.onMaterialRequested(
+                materialRequested(100L, List.of(line(engine, 4), line(tire, 5))));
+
+        assertThat(statusOf(100L, tire)).isEqualTo("WAITING");
+        // 값이 바뀐 엔진은 변경과 강제 증가로 두 번 오를 수 있다. 충돌 감지에는 "올랐는지" 만 중요하다
+        assertThat(version(engine)).isGreaterThan(engineBefore);
+        assertThat(version(tire)).isGreaterThan(tireBefore);
+    }
+
+    @Test
     void samePartTwiceInOneEventIsMergedIntoOneLine() {
         listener.onMaterialRequested(
                 materialRequested(100L, List.of(line(engine, 1), line(engine, 2))));
@@ -274,6 +290,10 @@ class ProductionEventListenerTest {
                         productionId,
                         partId);
         return status.isEmpty() ? null : status.get(0);
+    }
+
+    private long version(long partId) {
+        return jdbc.queryForObject("SELECT version FROM part WHERE id = ?", Long.class, partId);
     }
 
     private Map<String, Object> stock(long partId) {
