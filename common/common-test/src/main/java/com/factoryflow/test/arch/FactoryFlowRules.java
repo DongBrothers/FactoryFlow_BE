@@ -1071,13 +1071,15 @@ public final class FactoryFlowRules {
                         || c.getName().equals("com.factoryflow.common.event.EventPublisher"));
     }
 
-    // service 메서드 호출 바로 다음 명령이 지역 변수 저장, 반환, 버리기가 아니면 다른 식 안에서 바로 쓴 것이다
     /**
-     * class 파일의 줄 번호로 메서드의 첫 줄부터 마지막 줄까지 센다. 생성자, static 초기화, 람다·브리지 같은 synthetic 메서드는 뺀다. 람다 본문은
-     * 감싼 메서드의 길이에 들어간다 (소스에서 보이는 길이).
+     * class 파일의 줄 번호로 메서드의 첫 줄부터 마지막 줄까지 센다. 생성자, static 초기화, 브리지 메서드는 뺀다. 람다 본문은 javac 가 따로 만든
+     * synthetic 메서드(lambda${감싼 메서드}$n)에 들어가므로, 그 줄 범위를 감싼 메서드에 합쳐 소스에서 보이는 길이로 센다.
      */
     private static List<String> longMethods(JavaClass c) {
-        List<String> violations = new ArrayList<>();
+        List<String> methodNames = new ArrayList<>();
+        List<int[]> methodLines = new ArrayList<>();
+        List<String> lambdaOwners = new ArrayList<>();
+        List<int[]> lambdaLines = new ArrayList<>();
         URI source =
                 c.getSource()
                         .orElseThrow(
@@ -1096,34 +1098,26 @@ public final class FactoryFlowRules {
                                         String descriptor,
                                         String signature,
                                         String[] exceptions) {
-                                    if ((access & Opcodes.ACC_SYNTHETIC) != 0
-                                            || name.startsWith("<")) {
+                                    boolean synthetic = (access & Opcodes.ACC_SYNTHETIC) != 0;
+                                    boolean lambda = synthetic && name.startsWith("lambda$");
+                                    if (name.startsWith("<")
+                                            || (access & Opcodes.ACC_BRIDGE) != 0
+                                            || (synthetic && !lambda)) {
                                         return null;
                                     }
+                                    int[] lines = {Integer.MAX_VALUE, Integer.MIN_VALUE};
+                                    if (lambda) {
+                                        lambdaOwners.add(name.split("\\$")[1]);
+                                        lambdaLines.add(lines);
+                                    } else {
+                                        methodNames.add(name);
+                                        methodLines.add(lines);
+                                    }
                                     return new MethodVisitor(Opcodes.ASM9) {
-                                        private int first = Integer.MAX_VALUE;
-                                        private int last = Integer.MIN_VALUE;
-
                                         @Override
                                         public void visitLineNumber(int line, Label start) {
-                                            first = Math.min(first, line);
-                                            last = Math.max(last, line);
-                                        }
-
-                                        @Override
-                                        public void visitEnd() {
-                                            int lines = last - first + 1;
-                                            if (first <= last && lines > MAX_METHOD_LINES) {
-                                                violations.add(
-                                                        c.getSimpleName()
-                                                                + "."
-                                                                + name
-                                                                + " 는 "
-                                                                + lines
-                                                                + "줄이다 (최대 "
-                                                                + MAX_METHOD_LINES
-                                                                + "줄)");
-                                            }
+                                            lines[0] = Math.min(lines[0], line);
+                                            lines[1] = Math.max(lines[1], line);
                                         }
                                     };
                                 }
@@ -1132,9 +1126,42 @@ public final class FactoryFlowRules {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+        // 람다는 이름이 같고 람다보다 앞에서 시작하는 메서드 중 가장 가까운 것에 붙인다 (오버로드 구분)
+        for (int k = 0; k < lambdaOwners.size(); k++) {
+            int[] lambda = lambdaLines.get(k);
+            int owner = -1;
+            for (int m = 0; m < methodNames.size(); m++) {
+                int[] method = methodLines.get(m);
+                if (methodNames.get(m).equals(lambdaOwners.get(k))
+                        && method[0] <= lambda[0]
+                        && (owner < 0 || method[0] > methodLines.get(owner)[0])) {
+                    owner = m;
+                }
+            }
+            if (owner >= 0) {
+                methodLines.get(owner)[1] = Math.max(methodLines.get(owner)[1], lambda[1]);
+            }
+        }
+        List<String> violations = new ArrayList<>();
+        for (int m = 0; m < methodNames.size(); m++) {
+            int[] method = methodLines.get(m);
+            int lines = method[1] - method[0] + 1;
+            if (method[0] <= method[1] && lines > MAX_METHOD_LINES) {
+                violations.add(
+                        c.getSimpleName()
+                                + "."
+                                + methodNames.get(m)
+                                + " 는 "
+                                + lines
+                                + "줄이다 (최대 "
+                                + MAX_METHOD_LINES
+                                + "줄)");
+            }
+        }
         return violations;
     }
 
+    // service 메서드 호출 바로 다음 명령이 지역 변수 저장, 반환, 버리기가 아니면 다른 식 안에서 바로 쓴 것이다
     private static List<String> inlineServiceCalls(JavaClass controller) {
         List<String> violations = new ArrayList<>();
         URI source =
