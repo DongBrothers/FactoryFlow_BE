@@ -110,6 +110,9 @@
 
 ### API 별 응답
 
+이 문서의 API 경로(`/api/auth/...`)는 밖에서 gateway 로 부르는 주소다. gateway 가 앞의 `/api` 를 떼고(`StripPrefix=1`,
+다른 서비스와 같은 규칙) 넘기므로 auth 컨트롤러는 `/auth/...` 를 받는다. Refresh 쿠키 경로는 브라우저 기준이라 `/api/auth` 다.
+
 | API | 상황 | 응답 |
 |---|---|---|
 | 발급 | 성공 (같은 이메일 대기 건이 있으면 덮어쓰고 성공) | 201 |
@@ -183,6 +186,8 @@
    따로 관리하고 JWT role 과 같은지 맞춰야 해서다 (2026-10-14, PR #30 리뷰).
 10. **JWKS 는 내부 API**: `/internal/jwks`, `InternalJwksController`. 다른 내부 API 와 같은 규칙으로 두어 외부 API 와
     서버끼리 쓰는 API 를 경로·이름으로 구분한다 (2026-10-14, PR #30 리뷰).
+11. **auth 컨트롤러 경로는 `/auth`**: 처음에 외부 주소 `/api/auth` 를 컨트롤러에 그대로 써서, gateway 가 `/api` 를 뗀 뒤
+    dev 에서 모든 auth API 가 404 였다. 다른 서비스(order `/orders`)처럼 `/api` 없이 받는다 (2026-10-14).
 
 ## 다른 서비스에 필요한 후속 변경 (auth 범위 밖, 추후 상의 필요)
 
@@ -195,7 +200,6 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 의 sub(public_id) 로 `X-User-Id` 를
       다시 채운다. role 은 넘기지 않는다 (권한은 gateway 가 JWT 로 확인)
 - [ ] (보안 필수) 서비스는 gateway 를 통해서만 접근되는지 확인 (dev ECS 보안그룹에서 서비스 포트의 외부 접속 차단)
-- [ ] dev auth 라우트의 `StripPrefix=1` 제거. auth 컨트롤러는 `/api/auth/**` 를 받으므로 지금은 gateway 를 거치면 404
 - [ ] CORS 다시 만들기. PR #30 에서 명세 밖이라 뺐다(AI 리뷰 [spec]). 뺀 설정은 다음과 같았다
   - 허용 origin 은 설정값 `app.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, 기본 `https://factoryflow.dev`)
   - 메서드 GET, POST, PUT, PATCH, DELETE, OPTIONS / 헤더 전부 / 경로 `/**`

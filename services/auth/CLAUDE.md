@@ -1,6 +1,7 @@
 # auth 서비스
 - DB: auth_db (Flyway: src/main/resources/db/migration). 테이블: user_account (직원 계정), customer (로그인하지 않는 고객 데이터, 제자리는 order)
 - 계정: 로그인하는 사람은 직원뿐이다. 관리자가 발급하면 Redis 에만 대기하고, 직원이 활성화(비번 설정)할 때 user_account 에 처음 저장한다 (docs/specs/auth-account.md)
+- 경로: 밖에서는 /api/auth/**, gateway 가 /api 를 떼고 넘기므로 컨트롤러는 /auth/** (다른 서비스와 같은 규칙). 내부 API 는 /internal/**
 - 로그인 ID 는 이메일 (trim + 소문자로 저장·비교). 밖으로 나가는 식별자(JWT sub)는 public_id(UUID), 내부 참조는 id
 - Redis 키: auth:activation:{token}, auth:pending:{email}, auth:refresh:{publicId}, auth:login-fail:{email} (명세 "Redis 키" 표)
 - 비밀번호는 해시만 저장한다. 비밀번호·토큰·이메일은 로그에 남기지 않는다. 개인정보 컬럼(전화, 주소 등)을 추가하면 암호화해서 저장한다

@@ -87,7 +87,7 @@ class AuthAccountTest {
     @Test
     void issueRejectsInvalidRequest() throws Exception {
         mockMvc.perform(
-                        post("/api/auth/admin/users")
+                        post("/auth/admin/users")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"email\":\"not-an-email\",\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -99,7 +99,7 @@ class AuthAccountTest {
         // user_account.name 은 50자. 발급 때 막지 않으면 활성화 때 저장이 실패한다
         String name = "가".repeat(51);
         mockMvc.perform(
-                        post("/api/auth/admin/users")
+                        post("/auth/admin/users")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(
                                         "{\"email\":\""
@@ -315,19 +315,19 @@ class AuthAccountTest {
 
         Cookie second =
                 refreshCookie(
-                        mockMvc.perform(post("/api/auth/token/refresh").cookie(first))
+                        mockMvc.perform(post("/auth/token/refresh").cookie(first))
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty()));
 
         assertThat(second.getValue()).isNotEqualTo(first.getValue());
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(first))
+        mockMvc.perform(post("/auth/token/refresh").cookie(first))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH-009"));
     }
 
     @Test
     void refreshRejectsMissingCookie() throws Exception {
-        mockMvc.perform(post("/api/auth/token/refresh"))
+        mockMvc.perform(post("/auth/token/refresh"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH-009"));
     }
@@ -339,7 +339,7 @@ class AuthAccountTest {
         Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
         jdbc.update("UPDATE user_account SET status = 'DISABLED'");
 
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(refresh))
+        mockMvc.perform(post("/auth/token/refresh").cookie(refresh))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("AUTH-007"));
     }
@@ -349,13 +349,13 @@ class AuthAccountTest {
         activateNewAccount(EMAIL);
         Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
 
-        mockMvc.perform(post("/api/auth/logout").cookie(refresh))
+        mockMvc.perform(post("/auth/logout").cookie(refresh))
                 .andExpect(status().isNoContent())
                 .andExpect(cookie().maxAge("refreshToken", 0));
 
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(refresh))
+        mockMvc.perform(post("/auth/token/refresh").cookie(refresh))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/auth/logout")).andExpect(status().isNoContent());
+        mockMvc.perform(post("/auth/logout")).andExpect(status().isNoContent());
     }
 
     // --- 로그 ---
@@ -388,11 +388,11 @@ class AuthAccountTest {
                         .getContentAsString();
 
         // 명세 "API 별 응답" 표의 코드만 나오고, 공통 핸들러의 500 은 자동으로 붙지 않는다
-        assertResponseCodes(docs, "/api/auth/admin/users", "201", "400", "409");
-        assertResponseCodes(docs, "/api/auth/activation", "204", "400", "409");
-        assertResponseCodes(docs, "/api/auth/login", "200", "400", "401", "403", "429");
-        assertResponseCodes(docs, "/api/auth/token/refresh", "200", "401", "403");
-        assertResponseCodes(docs, "/api/auth/logout", "204");
+        assertResponseCodes(docs, "/auth/admin/users", "201", "400", "409");
+        assertResponseCodes(docs, "/auth/activation", "204", "400", "409");
+        assertResponseCodes(docs, "/auth/login", "200", "400", "401", "403", "429");
+        assertResponseCodes(docs, "/auth/token/refresh", "200", "401", "403");
+        assertResponseCodes(docs, "/auth/logout", "204");
         // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 /internal 아래에 (내부) 로 나온다
         assertThat(JsonPath.<String>read(docs, "$.paths['/internal/jwks'].get.summary"))
                 .isNotBlank();
@@ -421,7 +421,7 @@ class AuthAccountTest {
 
     private ResultActions issue(String email) throws Exception {
         return mockMvc.perform(
-                post("/api/auth/admin/users")
+                post("/auth/admin/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(issueBody(email)));
     }
@@ -432,7 +432,7 @@ class AuthAccountTest {
 
     private ResultActions activate(String token) throws Exception {
         return mockMvc.perform(
-                post("/api/auth/activation")
+                post("/auth/activation")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                                 "{\"token\":\"" + token + "\",\"password\":\"" + PASSWORD + "\"}"));
@@ -440,7 +440,7 @@ class AuthAccountTest {
 
     private ResultActions login(String email, String password) throws Exception {
         return mockMvc.perform(
-                post("/api/auth/login")
+                post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                                 "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"));
