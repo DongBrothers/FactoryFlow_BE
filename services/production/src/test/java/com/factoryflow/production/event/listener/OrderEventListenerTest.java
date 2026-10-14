@@ -95,6 +95,19 @@ class OrderEventListenerTest {
     }
 
     @Test
+    void materialRequestKeepsTheTraceIdOfOrderCreated() {
+        EventEnvelope event = orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1));
+
+        listener.onOrderCreated(event);
+
+        List<String> traceIds =
+                materialRequestsByProductionId().values().stream()
+                        .map(p -> JsonPath.<String>read(p, "$.traceId"))
+                        .toList();
+        assertThat(traceIds).hasSize(2).containsOnly(event.traceId());
+    }
+
+    @Test
     void sameEventTwiceCreatesOnce() {
         EventEnvelope event = orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1));
 
