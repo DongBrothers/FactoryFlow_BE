@@ -786,6 +786,25 @@ public final class FactoryFlowRules {
                             "service 호출 결과를 ApiResponse.ok(...) 같은 다른 호출 안에 바로 넣지 않는다."
                                     + " 지역 변수에 먼저 담는다");
 
+    // ---- 메서드 길이 ----
+
+    static final int MAX_METHOD_LINES = 30;
+
+    public static final ArchRule METHOD_LENGTH =
+            classes()
+                    .that(describe("belong to a service", c -> serviceOf(c) != null))
+                    .should(
+                            new ArchCondition<JavaClass>(
+                                    "keep methods at most " + MAX_METHOD_LINES + " lines") {
+                                @Override
+                                public void check(JavaClass c, ConditionEvents events) {
+                                    for (String violation : longMethods(c)) {
+                                        events.add(SimpleConditionEvent.violated(c, violation));
+                                    }
+                                }
+                            })
+                    .because("메서드는 30줄 이하. 길면 단계별 private 메서드로 나눈다");
+
     // ---- 이벤트 ----
 
     public static final ArchRule EVENTS_ARE_PUBLISHER_RECORDS =
@@ -1050,6 +1069,96 @@ public final class FactoryFlowRules {
                 && (c.getSimpleName().endsWith("Repository")
                         || c.getSimpleName().endsWith("Service")
                         || c.getName().equals("com.factoryflow.common.event.EventPublisher"));
+    }
+
+    /**
+     * class 파일의 줄 번호로 메서드의 첫 줄부터 마지막 줄까지 센다. 생성자, static 초기화, 브리지 메서드는 뺀다. 람다 본문은 javac 가 따로 만든
+     * synthetic 메서드(lambda${감싼 메서드}$n)에 들어가므로, 그 줄 범위를 감싼 메서드에 합쳐 소스에서 보이는 길이로 센다.
+     */
+    private static List<String> longMethods(JavaClass c) {
+        List<String> methodNames = new ArrayList<>();
+        List<int[]> methodLines = new ArrayList<>();
+        List<String> lambdaOwners = new ArrayList<>();
+        List<int[]> lambdaLines = new ArrayList<>();
+        URI source =
+                c.getSource()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                c.getName() + " 의 class 파일을 찾을 수 없다"))
+                        .getUri();
+        try (InputStream in = source.toURL().openStream()) {
+            new ClassReader(in)
+                    .accept(
+                            new ClassVisitor(Opcodes.ASM9) {
+                                @Override
+                                public MethodVisitor visitMethod(
+                                        int access,
+                                        String name,
+                                        String descriptor,
+                                        String signature,
+                                        String[] exceptions) {
+                                    boolean synthetic = (access & Opcodes.ACC_SYNTHETIC) != 0;
+                                    boolean lambda = synthetic && name.startsWith("lambda$");
+                                    if (name.startsWith("<")
+                                            || (access & Opcodes.ACC_BRIDGE) != 0
+                                            || (synthetic && !lambda)) {
+                                        return null;
+                                    }
+                                    int[] lines = {Integer.MAX_VALUE, Integer.MIN_VALUE};
+                                    if (lambda) {
+                                        lambdaOwners.add(name.split("\\$")[1]);
+                                        lambdaLines.add(lines);
+                                    } else {
+                                        methodNames.add(name);
+                                        methodLines.add(lines);
+                                    }
+                                    return new MethodVisitor(Opcodes.ASM9) {
+                                        @Override
+                                        public void visitLineNumber(int line, Label start) {
+                                            lines[0] = Math.min(lines[0], line);
+                                            lines[1] = Math.max(lines[1], line);
+                                        }
+                                    };
+                                }
+                            },
+                            ClassReader.SKIP_FRAMES);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        // 람다는 이름이 같고 람다보다 앞에서 시작하는 메서드 중 가장 가까운 것에 붙인다 (오버로드 구분)
+        for (int k = 0; k < lambdaOwners.size(); k++) {
+            int[] lambda = lambdaLines.get(k);
+            int owner = -1;
+            for (int m = 0; m < methodNames.size(); m++) {
+                int[] method = methodLines.get(m);
+                if (methodNames.get(m).equals(lambdaOwners.get(k))
+                        && method[0] <= lambda[0]
+                        && (owner < 0 || method[0] > methodLines.get(owner)[0])) {
+                    owner = m;
+                }
+            }
+            if (owner >= 0) {
+                methodLines.get(owner)[1] = Math.max(methodLines.get(owner)[1], lambda[1]);
+            }
+        }
+        List<String> violations = new ArrayList<>();
+        for (int m = 0; m < methodNames.size(); m++) {
+            int[] method = methodLines.get(m);
+            int lines = method[1] - method[0] + 1;
+            if (method[0] <= method[1] && lines > MAX_METHOD_LINES) {
+                violations.add(
+                        c.getSimpleName()
+                                + "."
+                                + methodNames.get(m)
+                                + " 는 "
+                                + lines
+                                + "줄이다 (최대 "
+                                + MAX_METHOD_LINES
+                                + "줄)");
+            }
+        }
+        return violations;
     }
 
     // service 메서드 호출 바로 다음 명령이 지역 변수 저장, 반환, 버리기가 아니면 다른 식 안에서 바로 쓴 것이다
