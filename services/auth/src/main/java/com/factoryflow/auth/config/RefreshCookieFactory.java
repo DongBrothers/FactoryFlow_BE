@@ -6,7 +6,8 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 /**
- * Refresh 토큰을 httpOnly 쿠키로 만든다. JS 가 읽을 수 없어 XSS 로 탈취되지 않는다. 재발급·로그아웃 경로(/api/auth)에만 전송된다.
+ * Refresh 토큰을 httpOnly 쿠키로 만든다. JS 가 읽을 수 없어 XSS 로 탈취되지 않는다. 재발급·로그아웃 경로(/api/auth)에만 전송된다. 쿠키 경로는
+ * 브라우저가 보는 외부 주소 기준이라 /api 를 붙인다 (gateway 가 /api 를 떼고 auth 의 /auth 로 넘긴다).
  * (docs/specs/auth-account.md)
  */
 @Component
