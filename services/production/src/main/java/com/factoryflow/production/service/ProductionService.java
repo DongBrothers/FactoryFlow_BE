@@ -37,60 +37,81 @@ public class ProductionService {
      */
     @Transactional
     public void planAll(Long orderId, List<OrderCreatedProduct> products) {
-        Map<Long, Integer> qtyByProductId =
-                products.stream()
-                        .collect(
-                                Collectors.toMap(
-                                        OrderCreatedProduct::productId,
-                                        OrderCreatedProduct::qty,
-                                        Integer::sum,
-                                        LinkedHashMap::new));
+        Map<Long, Integer> qtyByProductId = mergeByProductId(products);
         Set<Long> productIds = qtyByProductId.keySet();
-        Set<Long> planned =
-                productionRepository.findAllByOrderIdAndProductIdIn(orderId, productIds).stream()
-                        .map(Production::getProductId)
-                        .collect(Collectors.toSet());
-        Set<Long> existing =
-                productRepository.findAllByIdInAndIsDeletedFalse(productIds).stream()
-                        .map(Product::getId)
-                        .collect(Collectors.toSet());
-        Map<Long, List<Bom>> bomsByProductId =
-                bomRepository.findAllByProductIdInAndIsDeletedFalse(productIds).stream()
-                        .collect(Collectors.groupingBy(Bom::getProductId));
+        Set<Long> planned = plannedProductIds(orderId, productIds);
+        Set<Long> existing = existingProductIds(productIds);
+        Map<Long, List<Bom>> bomsByProductId = bomsByProductId(productIds);
+        qtyByProductId.forEach(
+                (productId, qty) -> {
+                    List<Bom> boms = bomsByProductId.getOrDefault(productId, List.of());
+                    if (shouldPlan(orderId, productId, planned, existing, boms)) {
+                        plan(orderId, productId, qty, boms);
+                    }
+                });
+    }
 
-        for (Map.Entry<Long, Integer> line : qtyByProductId.entrySet()) {
-            Long productId = line.getKey();
-            int qty = line.getValue();
-            if (planned.contains(productId)) {
-                log.info("생산 건이 이미 있어 건너뜀: orderId={} productId={}", orderId, productId);
-                continue;
-            }
-            if (!existing.contains(productId)) {
-                log.error(
-                        "SAGA_SKIPPED orderId={} productId={} reason=PRODUCT_NOT_FOUND",
-                        orderId,
-                        productId);
-                continue;
-            }
-            List<Bom> boms = bomsByProductId.getOrDefault(productId, List.of());
-            if (boms.isEmpty()) {
-                log.error(
-                        "SAGA_SKIPPED orderId={} productId={} reason=BOM_NOT_FOUND",
-                        orderId,
-                        productId);
-                continue;
-            }
-            Production production =
-                    productionRepository.save(Production.plan(orderId, productId, qty));
-            eventPublisher.publish(
-                    new MaterialRequested(
-                            production.getId(),
-                            boms.stream()
-                                    .map(
-                                            b ->
-                                                    new MaterialRequestedPart(
-                                                            b.getPartId(), b.getQtyPerUnit() * qty))
-                                    .toList()));
+    private static Map<Long, Integer> mergeByProductId(List<OrderCreatedProduct> products) {
+        return products.stream()
+                .collect(
+                        Collectors.toMap(
+                                OrderCreatedProduct::productId,
+                                OrderCreatedProduct::qty,
+                                Integer::sum,
+                                LinkedHashMap::new));
+    }
+
+    private Set<Long> plannedProductIds(Long orderId, Set<Long> productIds) {
+        return productionRepository.findAllByOrderIdAndProductIdIn(orderId, productIds).stream()
+                .map(Production::getProductId)
+                .collect(Collectors.toSet());
+    }
+
+    private Set<Long> existingProductIds(Set<Long> productIds) {
+        return productRepository.findAllByIdInAndIsDeletedFalse(productIds).stream()
+                .map(Product::getId)
+                .collect(Collectors.toSet());
+    }
+
+    private Map<Long, List<Bom>> bomsByProductId(Set<Long> productIds) {
+        return bomRepository.findAllByProductIdInAndIsDeletedFalse(productIds).stream()
+                .collect(Collectors.groupingBy(Bom::getProductId));
+    }
+
+    /** 이미 생산 건이 있거나, 제품이나 BOM 이 주문 이후 사라졌으면 false. 건너뛰는 이유를 로그로 남긴다. */
+    private static boolean shouldPlan(
+            Long orderId, Long productId, Set<Long> planned, Set<Long> existing, List<Bom> boms) {
+        if (planned.contains(productId)) {
+            log.info("생산 건이 이미 있어 건너뜀: orderId={} productId={}", orderId, productId);
+            return false;
         }
+        if (!existing.contains(productId)) {
+            log.error(
+                    "SAGA_SKIPPED orderId={} productId={} reason=PRODUCT_NOT_FOUND",
+                    orderId,
+                    productId);
+            return false;
+        }
+        if (boms.isEmpty()) {
+            log.error(
+                    "SAGA_SKIPPED orderId={} productId={} reason=BOM_NOT_FOUND",
+                    orderId,
+                    productId);
+            return false;
+        }
+        return true;
+    }
+
+    private void plan(Long orderId, Long productId, int qty, List<Bom> boms) {
+        Production production = productionRepository.save(Production.plan(orderId, productId, qty));
+        eventPublisher.publish(
+                new MaterialRequested(
+                        production.getId(),
+                        boms.stream()
+                                .map(
+                                        b ->
+                                                new MaterialRequestedPart(
+                                                        b.getPartId(), b.getQtyPerUnit() * qty))
+                                .toList()));
     }
 }
