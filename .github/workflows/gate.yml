@@ -10,9 +10,8 @@ permissions:
   pull-requests: read
   checks: read
 
-concurrency:
-  group: gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+# concurrency 를 두지 않는다. 리뷰가 달릴 때마다(pull_request_review) gate 가 다시 도는데, 같은 그룹이면 진행·대기 중인 실행이 취소되고
+# 그 cancelled 기록이 남아 필수 검사가 막힌다 (cancel-in-progress: false 여도 대기 중인 실행은 취소된다). 읽기만 하는 검사라 동시에 돌아도 된다
 
 jobs:
   # one-way-door 변경은 PR 본문에 롤백 방법을 체크하고 작성해야 통과 (사람 승인 대신)
