@@ -786,6 +786,25 @@ public final class FactoryFlowRules {
                             "service 호출 결과를 ApiResponse.ok(...) 같은 다른 호출 안에 바로 넣지 않는다."
                                     + " 지역 변수에 먼저 담는다");
 
+    // ---- 메서드 길이 ----
+
+    static final int MAX_METHOD_LINES = 30;
+
+    public static final ArchRule METHOD_LENGTH =
+            classes()
+                    .that(describe("belong to a service", c -> serviceOf(c) != null))
+                    .should(
+                            new ArchCondition<JavaClass>(
+                                    "keep methods at most " + MAX_METHOD_LINES + " lines") {
+                                @Override
+                                public void check(JavaClass c, ConditionEvents events) {
+                                    for (String violation : longMethods(c)) {
+                                        events.add(SimpleConditionEvent.violated(c, violation));
+                                    }
+                                }
+                            })
+                    .because("메서드는 30줄 이하. 길면 단계별 private 메서드로 나눈다");
+
     // ---- 이벤트 ----
 
     public static final ArchRule EVENTS_ARE_PUBLISHER_RECORDS =
@@ -1053,6 +1072,69 @@ public final class FactoryFlowRules {
     }
 
     // service 메서드 호출 바로 다음 명령이 지역 변수 저장, 반환, 버리기가 아니면 다른 식 안에서 바로 쓴 것이다
+    /**
+     * class 파일의 줄 번호로 메서드의 첫 줄부터 마지막 줄까지 센다. 생성자, static 초기화, 람다·브리지 같은 synthetic 메서드는 뺀다. 람다 본문은
+     * 감싼 메서드의 길이에 들어간다 (소스에서 보이는 길이).
+     */
+    private static List<String> longMethods(JavaClass c) {
+        List<String> violations = new ArrayList<>();
+        URI source =
+                c.getSource()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                c.getName() + " 의 class 파일을 찾을 수 없다"))
+                        .getUri();
+        try (InputStream in = source.toURL().openStream()) {
+            new ClassReader(in)
+                    .accept(
+                            new ClassVisitor(Opcodes.ASM9) {
+                                @Override
+                                public MethodVisitor visitMethod(
+                                        int access,
+                                        String name,
+                                        String descriptor,
+                                        String signature,
+                                        String[] exceptions) {
+                                    if ((access & Opcodes.ACC_SYNTHETIC) != 0
+                                            || name.startsWith("<")) {
+                                        return null;
+                                    }
+                                    return new MethodVisitor(Opcodes.ASM9) {
+                                        private int first = Integer.MAX_VALUE;
+                                        private int last = Integer.MIN_VALUE;
+
+                                        @Override
+                                        public void visitLineNumber(int line, Label start) {
+                                            first = Math.min(first, line);
+                                            last = Math.max(last, line);
+                                        }
+
+                                        @Override
+                                        public void visitEnd() {
+                                            int lines = last - first + 1;
+                                            if (first <= last && lines > MAX_METHOD_LINES) {
+                                                violations.add(
+                                                        c.getSimpleName()
+                                                                + "."
+                                                                + name
+                                                                + " 는 "
+                                                                + lines
+                                                                + "줄이다 (최대 "
+                                                                + MAX_METHOD_LINES
+                                                                + "줄)");
+                                            }
+                                        }
+                                    };
+                                }
+                            },
+                            ClassReader.SKIP_FRAMES);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return violations;
+    }
+
     private static List<String> inlineServiceCalls(JavaClass controller) {
         List<String> violations = new ArrayList<>();
         URI source =
