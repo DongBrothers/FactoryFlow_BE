@@ -2,7 +2,12 @@ name: cd
 on:
   push:
     branches: [main]
-  workflow_dispatch:   # 수동 실행 시 서비스 전체 배포
+  workflow_dispatch:   # 수동 실행. services 를 비우면 서비스 전체 배포
+    inputs:
+      services:
+        description: "배포할 서비스 (쉼표 구분, 예: gateway,order). 비우면 전체"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -21,7 +26,22 @@ jobs:
       - id: d
         env:
           BEFORE: ${{ github.event.before }}
+          SERVICES_INPUT: ${{ inputs.services }}
         run: |
+          ALL="gateway order inventory purchase production auth simulator"
+          # 수동 실행에서 services 를 지정하면 그 서비스만 배포한다
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$SERVICES_INPUT" ]; then
+            list=""
+            for s in $(echo "$SERVICES_INPUT" | tr ',' ' '); do
+              if echo " $ALL " | grep -q " $s "; then
+                list="$list $s"
+              else
+                echo "::error::모르는 서비스: $s (가능: $ALL)"; exit 1
+              fi
+            done
+            echo "services=$(echo $list | jq -Rc 'split(" ") | map(select(length>0))')" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           # push 전후 비교 (한 번에 여러 커밋이 들어와도 모두 포함)
           # 수동 실행, 첫 push(before=000..), before 커밋을 못 찾으면 → build.gradle 로 간주해 전체 배포
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] \
@@ -31,8 +51,10 @@ jobs:
           else
             files=$(git diff --name-only "$BEFORE" ${{ github.sha }})
           fi
+          # common-test 는 테스트에서만 쓰여 서비스 이미지에 들어가지 않으므로 배포 판단에서 뺀다
+          files=$(echo "$files" | grep -vE '^common/common-test/' || true)
           if echo "$files" | grep -qE '^(common/|build\.gradle|settings\.gradle)'; then
-            list="gateway order inventory purchase production auth simulator"
+            list="$ALL"
           else
             list=$(echo "$files" | grep -oE '^services/[^/]+' | sort -u | sed 's#services/##' | tr '\n' ' ')
           fi
@@ -71,13 +93,16 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      # ECR 레포는 IMMUTABLE: 커밋 sha 태그만 쓰고, 같은 sha 이미지가 이미 있으면 다시 push 하지 않는다
+      # ECR 레포는 IMMUTABLE: 태그는 "커밋 sha-설정 해시". 같은 태그 이미지가 이미 있으면 다시 push 하지 않는다
       # (재실행, 같은 커밋 수동 배포 시 "cannot be overwritten" 방지)
+      # 설정(APP_DEV_YML)은 빌드 때 jar 에 들어가므로, 설정만 바뀌어도 태그가 달라져 새 이미지를 만든다 (#33)
       - id: img
         run: |
-          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:${{ github.sha }}
+          CFG=$(sha256sum services/${{ matrix.svc }}/src/main/resources/application-dev.yml | cut -c1-12)
+          TAG=${{ github.sha }}-$CFG
+          IMG=${{ steps.ecr.outputs.registry }}/ff-${{ matrix.svc }}:$TAG
           if aws ecr describe-images --repository-name ff-${{ matrix.svc }} \
-               --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
+               --image-ids imageTag=$TAG >/dev/null 2>&1; then
             echo "이미 있는 이미지 사용: $IMG"
           else
             docker build -t $IMG services/${{ matrix.svc }}

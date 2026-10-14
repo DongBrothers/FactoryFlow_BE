@@ -2,6 +2,8 @@ package com.factoryflow.common.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.time.Clock;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,8 @@ class OutboxRelayTest extends EventIntegrationTest {
     @Autowired RabbitTemplate rabbitTemplate;
 
     @Autowired RabbitAdmin rabbitAdmin;
+
+    @PersistenceContext EntityManager entityManager;
 
     @Autowired TopicExchange factoryFlowEventsExchange;
 
@@ -55,12 +59,12 @@ class OutboxRelayTest extends EventIntegrationTest {
         publishInTransaction(eventPublisher, new TestEvent(8L));
         OutboxRelay toMissingExchange =
                 new OutboxRelay(
-                        jdbcTemplate,
+                        entityManager,
                         rabbitTemplate,
                         new EventProperties("missing.exchange", 100, Duration.ofSeconds(5)),
                         Clock.systemUTC());
 
-        toMissingExchange.relay();
+        inTransaction.run(toMissingExchange::relay);
 
         assertThat(unpublishedCount()).isEqualTo(1);
     }

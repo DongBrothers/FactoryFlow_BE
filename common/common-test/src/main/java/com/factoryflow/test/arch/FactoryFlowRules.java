@@ -601,12 +601,15 @@ public final class FactoryFlowRules {
                     .areTopLevelClasses()
                     .and()
                     .doNotHaveSimpleName("package-info")
+                    .and(not(RECORDS))
                     .should()
                     .haveNameMatching(
                             SERVICES.stream()
                                     .map(FactoryFlowRules::capitalize)
                                     .collect(Collectors.joining("|", ".*\\.(", ")EventListener")))
-                    .because("수신은 event/listener 의 {발행 서비스}EventListener");
+                    .because(
+                            "수신은 event/listener 의 {발행 서비스}EventListener."
+                                    + " 받은 이벤트 payload record 도 event/listener 에 둔다");
 
     // ---- 요청 검증 ----
 
@@ -650,18 +653,14 @@ public final class FactoryFlowRules {
                     .haveSimpleNameEndingWith("Response")
                     .because("응답 DTO 는 모두 Response 로 끝난다 (client 응답 포함)");
 
-    public static final ArchRule NO_RECORD_INSIDE_RECORD =
+    public static final ArchRule NO_NESTED_CLASSES =
             classes()
-                    .that(RECORDS)
                     .should(
                             check(
-                                    "not be declared inside another record",
-                                    c ->
-                                            c.getEnclosingClass()
-                                                    .filter(FactoryFlowRules::isRecord)
-                                                    .isEmpty(),
+                                    "not be declared inside another class (member or local)",
+                                    c -> !c.isMemberClass() && !c.isLocalClass(),
                                     JavaClass::getName))
-                    .because("record 안에 record 를 두지 않는다. 별도 파일로 뺀다");
+                    .because("클래스 안에 클래스(record, enum, interface 포함)를 두지 않는다. 별도 파일로 뺀다");
 
     public static final ArchRule RESPONSE_STATIC_FACTORY =
             classes()
