@@ -20,6 +20,7 @@ final class StubBackend {
     private final HttpServer server;
     private volatile String lastPath;
     private volatile Map<String, String> lastUserHeaders;
+    private volatile String lastTraceId;
 
     private StubBackend(HttpServer server) {
         this.server = server;
@@ -44,6 +45,7 @@ final class StubBackend {
     void reset() {
         lastPath = null;
         lastUserHeaders = null;
+        lastTraceId = null;
     }
 
     /** 마지막 요청 경로. 요청을 받지 않았으면 null. */
@@ -56,6 +58,11 @@ final class StubBackend {
         return lastUserHeaders;
     }
 
+    /** 마지막 요청의 X-Trace-Id. 요청을 받지 않았거나 헤더가 없으면 null. */
+    String lastTraceId() {
+        return lastTraceId;
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
         Map<String, String> userHeaders = new TreeMap<>();
         exchange.getRequestHeaders()
@@ -66,6 +73,7 @@ final class StubBackend {
                             }
                         });
         lastUserHeaders = userHeaders;
+        lastTraceId = exchange.getRequestHeaders().getFirst("X-Trace-Id");
         lastPath = exchange.getRequestURI().getPath();
         exchange.getRequestBody().readAllBytes();
         if (lastPath.endsWith("/error")) {
