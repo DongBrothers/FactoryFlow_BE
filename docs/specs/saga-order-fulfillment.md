@@ -116,18 +116,18 @@ CANCELLED 품목은 제외하고 남은 품목으로 계산한다. 위에서부�
 ### 추적
 order.created 의 traceId 를 이 주문에서 이어지는 모든 이벤트에 그대로 쓴다. 로그에서 traceId 하나로 SAGA 전체를 본다.
 
-traceId 는 요청 하나(와 거기서 이어지는 이벤트·내부 호출)를 묶는 값이다. 헤더 이름은 `X-Trace-Id` (#67).
+traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 
 | 구간 | 규칙 |
 |---|---|
 | gateway (밖에서 들어온 요청) | **항상 새로 만든다** (UUID). 클라이언트가 보낸 `X-Trace-Id` 는 버린다 (`X-User-*` 와 같은 이유: 밖에서 온 값은 믿지 않는다). 뒤 서비스로 `X-Trace-Id` 를 넘기고, gateway 의 **모든 응답**(gateway 가 만든 401·403·404·5xx 포함)에 `X-Trace-Id` 를 붙인다 |
-| 서비스 입구 | `X-Trace-Id` 가 있으면 그 값을, 없으면 새로 만들어 쓴다 (common-web `TraceIdFilter`, 지금 그대로) |
-| 동기 호출 (client/) | 지금 traceId 를 `X-Trace-Id` 로 실어 보낸다. 받는 서비스는 위 규칙대로 같은 값을 쓴다 |
-| 이벤트 | 발행 때 traceId 를 담고, 받는 쪽은 처리하는 동안 그 값을 쓴다 (`EventPublisher`, `ProcessedEventGuard`, 지금 그대로) |
-| 로그 | 모든 로그 줄에 `[traceId]` 를 찍는다 (`logging.pattern.correlation`). 요청·이벤트 밖(시작, 스케줄러)의 로그는 빈칸이다 |
+| 서비스 입구 | `X-Trace-Id` 가 있으면 그 값을, 없으면 새로 만들어 쓴다 (common-web `TraceIdFilter`, 원래 동작) |
+| 이벤트 | 발행 때 traceId 를 담고, 받는 쪽은 처리하는 동안 그 값을 쓴다 (`EventPublisher`, `ProcessedEventGuard`, 원래 동작) |
 
 - gateway 는 WebFlux 라 로그 MDC 가 스레드를 따라가지 않는다. gateway 가 남기는 로그(오류 처리기)는 traceId 를 메시지에 직접 넣는다
 - traceId 는 추적용일 뿐이다. 권한·업무 판단에 쓰지 않는다
+- **정하지 않은 것**: 서비스끼리의 동기 호출(client/)에 traceId 를 실어 보낼지, 서비스 로그 줄에 traceId 를 찍을지. gateway 만 맡기로 해서
+  서비스(order, production 등)는 바꾸지 않았다. 필요하면 각 서비스에서 새 이슈로 정한다 (2026-10-15, #67)
 
 ## 관련 이벤트 (events.md 참조)
 기존: order.created, order.cancelled, production.material-requested, production.cancelled,
