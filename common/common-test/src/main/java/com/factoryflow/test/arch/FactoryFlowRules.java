@@ -616,7 +616,7 @@ public final class FactoryFlowRules {
                                     .collect(Collectors.joining("|", ".*\\.(", ")EventListener")))
                     .because(
                             "수신은 event/listener 의 {발행 서비스}EventListener."
-                                    + " 받은 이벤트 payload record 도 event/listener 에 둔다");
+                                    + " 받은 이벤트 payload record 는 event/listener/payload 에 둔다");
 
     // ---- 요청 검증 ----
 
@@ -918,9 +918,22 @@ public final class FactoryFlowRules {
                     .that()
                     .implement(DOMAIN_EVENT)
                     .should()
-                    .resideInAPackage("..event.publisher")
+                    .resideInAPackage("..event.publisher.payload")
                     .andShould(beRecords())
-                    .because("발행 payload 는 event/publisher 의 record");
+                    .because("발행 payload 는 event/publisher/payload 의 record");
+
+    public static final ArchRule EVENT_PAYLOAD_PACKAGES =
+            classes()
+                    .that(RECORDS)
+                    .and()
+                    .resideInAPackage("..event..")
+                    .and()
+                    .areTopLevelClasses()
+                    .should()
+                    .resideInAnyPackage("..event.listener.payload", "..event.publisher.payload")
+                    .because(
+                            "이벤트 payload record 는 리스너와 섞지 않고 event/listener/payload(받는 것),"
+                                    + " event/publisher/payload(보내는 것) 에 둔다");
 
     // ---- Swagger ----
 

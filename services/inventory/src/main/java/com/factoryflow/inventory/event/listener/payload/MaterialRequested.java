@@ -1,4 +1,4 @@
-package com.factoryflow.inventory.event.listener;
+package com.factoryflow.inventory.event.listener.payload;
 
 import java.util.List;
 

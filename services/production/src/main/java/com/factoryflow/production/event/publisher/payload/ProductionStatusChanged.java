@@ -1,4 +1,4 @@
-package com.factoryflow.production.event.publisher;
+package com.factoryflow.production.event.publisher.payload;
 
 import com.factoryflow.common.event.DomainEvent;
 import com.factoryflow.production.domain.ProductionStatus;
