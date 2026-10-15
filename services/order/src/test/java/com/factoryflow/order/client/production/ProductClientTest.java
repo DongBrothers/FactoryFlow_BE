@@ -2,6 +2,7 @@ package com.factoryflow.order.client.production;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -14,6 +15,7 @@ import java.net.SocketTimeoutException;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -58,6 +60,28 @@ class ProductClientTest {
                                 MediaType.APPLICATION_JSON));
 
         assertThat(productClient.findProducts(List.of(9L))).isEmpty();
+    }
+
+    /** 동기 호출에도 지금 traceId 를 X-Trace-Id 로 실어, production 이 같은 traceId 를 쓰게 한다 (#67). */
+    @Test
+    void sendsCurrentTraceId() {
+        server.expect(requestTo("http://production/internal/products?ids=9"))
+                .andExpect(header("X-Trace-Id", "trace-1"))
+                .andRespond(
+                        withSuccess(
+                                """
+                                {"data":[],"status":200,"message":"OK"}
+                                """,
+                                MediaType.APPLICATION_JSON));
+
+        MDC.put("traceId", "trace-1");
+        try {
+            productClient.findProducts(List.of(9L));
+        } finally {
+            MDC.remove("traceId");
+        }
+
+        server.verify();
     }
 
     @Test
