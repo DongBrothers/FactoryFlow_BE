@@ -76,6 +76,10 @@ final class StubBackend {
         lastTraceId = exchange.getRequestHeaders().getFirst("X-Trace-Id");
         lastPath = exchange.getRequestURI().getPath();
         exchange.getRequestBody().readAllBytes();
+        if (lastTraceId != null) {
+            // 실제 서비스(TraceIdFilter)처럼 받은 traceId 를 응답에도 넣는다
+            exchange.getResponseHeaders().set("X-Trace-Id", lastTraceId);
+        }
         if (lastPath.endsWith("/error")) {
             sendServiceError(exchange);
             return;
