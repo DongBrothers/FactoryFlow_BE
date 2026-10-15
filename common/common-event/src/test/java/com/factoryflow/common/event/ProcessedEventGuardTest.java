@@ -3,14 +3,44 @@ package com.factoryflow.common.event;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class ProcessedEventGuardTest extends EventIntegrationTest {
 
     @Autowired ProcessedEventGuard guard;
+
+    @Test
+    void 메시지를_처리하는_동안_받은_traceId_를_MDC_에_두고_끝나면_지운다() {
+        EventEnvelope envelope = envelope("trace-abc");
+        AtomicReference<String> seen = new AtomicReference<>();
+
+        guard.runOnce(envelope, () -> seen.set(MDC.get(EventPublisher.TRACE_ID_MDC_KEY)));
+
+        assertThat(seen).hasValue("trace-abc");
+        assertThat(MDC.get(EventPublisher.TRACE_ID_MDC_KEY)).isNull();
+    }
+
+    @Test
+    void 이미_MDC_에_traceId_가_있었으면_끝난_뒤_그_값으로_돌린다() {
+        MDC.put(EventPublisher.TRACE_ID_MDC_KEY, "outer");
+        try {
+            guard.runOnce(envelope("trace-abc"), () -> {});
+
+            assertThat(MDC.get(EventPublisher.TRACE_ID_MDC_KEY)).isEqualTo("outer");
+        } finally {
+            MDC.remove(EventPublisher.TRACE_ID_MDC_KEY);
+        }
+    }
+
+    private static EventEnvelope envelope(String traceId) {
+        return new EventEnvelope(UUID.randomUUID(), "test.event", traceId, 1, Instant.now(), null);
+    }
 
     @Test
     void 같은_이벤트를_두번_받으면_한번만_처리한다() {

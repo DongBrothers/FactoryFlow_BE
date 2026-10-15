@@ -1,12 +1,16 @@
 package com.factoryflow.production.service;
 
 import com.factoryflow.common.event.EventPublisher;
+import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.production.domain.Bom;
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.domain.Production;
 import com.factoryflow.production.event.listener.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.MaterialRequested;
 import com.factoryflow.production.event.publisher.MaterialRequestedPart;
+import com.factoryflow.production.event.publisher.ProductionCancelled;
+import com.factoryflow.production.event.publisher.ProductionStatusChanged;
+import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
@@ -113,5 +117,63 @@ public class ProductionService {
                                                 new MaterialRequestedPart(
                                                         b.getPartId(), b.getQtyPerUnit() * qty))
                                 .toList()));
+    }
+
+    /**
+     * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY 로 바꾼다. 취소된 생산 건이면 예약을 풀도록
+     * production.cancelled 를 다시 보낸다. 그 밖의 상태에서 온 결과는 무시한다
+     * (docs/specs/production-reservation-result.md).
+     */
+    @Transactional
+    public void markReserved(Long productionId) {
+        Production production = findProduction(productionId);
+        if (production.isCancelled()) {
+            log.info("취소된 생산 건에 예약이 늦게 와 취소를 다시 보냄: productionId={}", productionId);
+            eventPublisher.publish(new ProductionCancelled(productionId));
+            return;
+        }
+        if (!production.markReady()) {
+            log.info(
+                    "허용되지 않은 상태라 inventory.reserved 무시: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            return;
+        }
+        publishStatusChanged(production);
+    }
+
+    /**
+     * inventory.reservation-pending: PLANNED 생산 건을 WAITING_MATERIAL 로 바꾼다. 그 밖의 상태에서 온 결과는 무시한다.
+     */
+    @Transactional
+    public void markWaitingForMaterial(Long productionId) {
+        Production production = findProduction(productionId);
+        if (!production.waitForMaterial()) {
+            log.info(
+                    "허용되지 않은 상태라 inventory.reservation-pending 무시: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            return;
+        }
+        publishStatusChanged(production);
+    }
+
+    private Production findProduction(Long productionId) {
+        return productionRepository
+                .findById(productionId)
+                .orElseThrow(() -> new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND));
+    }
+
+    /** 불량 재생산 중의 상태 변화는 order 에 알리지 않는다 (COMPLETED 때만 알린다). */
+    private void publishStatusChanged(Production production) {
+        if (production.isRework()) {
+            return;
+        }
+        eventPublisher.publish(
+                new ProductionStatusChanged(
+                        production.getOrderId(),
+                        production.getId(),
+                        production.getProductId(),
+                        production.getStatus()));
     }
 }

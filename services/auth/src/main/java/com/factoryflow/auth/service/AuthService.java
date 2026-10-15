@@ -102,7 +102,7 @@ public class AuthService {
         if (loginAttemptGuard.isLocked(email)) {
             throw new CustomException(AuthErrorCode.ACCOUNT_LOCKED);
         }
-        UserAccount account = repository.findByEmail(email).orElse(null);
+        UserAccount account = findAccountByEmail(email);
         if (account == null
                 || !passwordEncoder.matches(request.password(), account.getPassword())) {
             loginAttemptGuard.recordFailure(email);
@@ -124,11 +124,7 @@ public class AuthService {
         if (publicId == null) {
             throw new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
-        UserAccount account =
-                repository
-                        .findByPublicId(publicId)
-                        .orElseThrow(
-                                () -> new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN));
+        UserAccount account = findAccountForRefresh(publicId);
         if (account.getStatus() != AccountStatus.ACTIVE) {
             throw new CustomException(AuthErrorCode.ACCOUNT_NOT_ACTIVE);
         }
@@ -140,6 +136,18 @@ public class AuthService {
         if (refreshToken != null) {
             refreshTokenStore.revoke(refreshToken);
         }
+    }
+
+    /** 이메일로 계정을 찾는다. 없으면 null (로그인 실패와 같은 응답으로 처리한다). */
+    private UserAccount findAccountByEmail(String email) {
+        return repository.findByEmail(email).orElse(null);
+    }
+
+    /** 리프레시 토큰의 계정을 찾는다. 없으면 토큰이 유효하지 않은 것으로 본다. */
+    private UserAccount findAccountForRefresh(String publicId) {
+        return repository
+                .findByPublicId(publicId)
+                .orElseThrow(() -> new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN));
     }
 
     private IssuedTokens issueTokens(UserAccount account) {
