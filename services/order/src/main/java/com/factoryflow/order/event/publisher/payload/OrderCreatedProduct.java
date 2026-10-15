@@ -1,3 +1,3 @@
-package com.factoryflow.production.event.listener;
+package com.factoryflow.order.event.publisher.payload;
 
 public record OrderCreatedProduct(Long productId, int qty) {}

@@ -1,3 +1,3 @@
-package com.factoryflow.production.event.publisher;
+package com.factoryflow.inventory.event.listener.payload;
 
 public record MaterialRequestedPart(Long partId, int qty) {}

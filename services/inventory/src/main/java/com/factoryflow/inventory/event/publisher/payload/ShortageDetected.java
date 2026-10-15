@@ -1,4 +1,4 @@
-package com.factoryflow.inventory.event.publisher;
+package com.factoryflow.inventory.event.publisher.payload;
 
 import com.factoryflow.common.event.DomainEvent;
 

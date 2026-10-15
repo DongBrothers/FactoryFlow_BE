@@ -3,6 +3,7 @@ package com.factoryflow.inventory.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.inventory.config.EventQueueConfig;
+import com.factoryflow.inventory.event.listener.payload.MaterialRequested;
 import com.factoryflow.inventory.service.PartReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;

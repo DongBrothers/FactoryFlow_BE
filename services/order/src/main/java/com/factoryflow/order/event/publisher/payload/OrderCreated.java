@@ -1,4 +1,4 @@
-package com.factoryflow.order.event.publisher;
+package com.factoryflow.order.event.publisher.payload;
 
 import com.factoryflow.common.event.DomainEvent;
 import java.util.List;
