@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.exception.ProductionErrorCode;
+import com.factoryflow.production.repository.EquipmentRepository;
 import com.factoryflow.production.repository.WorkOrderRepository;
 import com.factoryflow.production.service.ProductionService;
 import com.factoryflow.production.service.WorkOrderService;
@@ -41,6 +42,7 @@ class WorkOrderControllerTest {
     @Autowired ProductionService productionService;
     @Autowired WorkOrderService workOrderService;
     @Autowired WorkOrderRepository workOrderRepository;
+    @Autowired EquipmentRepository equipmentRepository;
 
     MockMvc mockMvc;
 
@@ -52,7 +54,7 @@ class WorkOrderControllerTest {
         jdbc.update("DELETE FROM work_order");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
-        jdbc.update("UPDATE equipment SET status = 'RUNNING'");
+        jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
     }
 
     @Test
@@ -130,6 +132,44 @@ class WorkOrderControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_BUSY"));
         start(second, "PRESS", "PRESS-02").andExpect(status().isOk());
+    }
+
+    @Test
+    void equipmentIsFreeAgainWhenTheStepEnds() throws Exception {
+        long first = releasedWorkOrder(42L, 1L);
+        long second = releasedWorkOrder(42L, 2L);
+        start(first, "PRESS", "PRESS-01");
+        assertThat(occupiedStepOf("PRESS-01")).isNotNull();
+
+        // 불량이면 재작업으로 돌아가면서 설비를 놓는다
+        complete(first, "PRESS", "{\"result\":\"DEFECT\",\"defectReason\":\"찍힘\"}");
+        assertThat(occupiedStepOf("PRESS-01")).isNull();
+        start(second, "PRESS", "PRESS-01").andExpect(status().isOk());
+
+        // 양품으로 끝나도 설비를 놓는다
+        complete(second, "PRESS", "{\"result\":\"GOOD\"}");
+        assertThat(occupiedStepOf("PRESS-01")).isNull();
+        start(first, "PRESS", "PRESS-01").andExpect(status().isOk());
+    }
+
+    /**
+     * 다른 차가 같은 설비를 먼저 잡고 커밋한 것처럼 만든다: 이 트랜잭션이 설비를 읽은 뒤 DB 의 설비 version 을 올리면, 이 트랜잭션의 점유는 낡은
+     * version 으로 저장하려다 실패한다. 작업지시가 달라도 같은 설비를 두 차가 함께 잡을 수 없다.
+     */
+    @Test
+    @Transactional
+    void twoCarsCannotTakeTheSameEquipmentAtOnce() {
+        long second = releasedWorkOrder(42L, 2L);
+        equipmentRepository.findByCodeAndIsDeletedFalse("PRESS-01");
+        jdbc.update("UPDATE equipment SET version = version + 1 WHERE code = 'PRESS-01'");
+
+        assertThatThrownBy(
+                        () ->
+                                workOrderService.startStep(
+                                        second, ProductionProcess.PRESS, "PRESS-01"))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ProductionErrorCode.PRODUCTION_CONFLICT);
     }
 
     @Test
@@ -355,6 +395,11 @@ class WorkOrderControllerTest {
         productionService.markReserved(production);
         return jdbc.queryForObject(
                 "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
+    }
+
+    private Long occupiedStepOf(String equipmentCode) {
+        return jdbc.queryForObject(
+                "SELECT occupied_step_id FROM equipment WHERE code = ?", Long.class, equipmentCode);
     }
 
     private String workOrderStatus(long workOrder) {

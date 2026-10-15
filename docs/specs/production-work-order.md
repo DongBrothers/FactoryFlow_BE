@@ -44,7 +44,7 @@
 
 ### 3. 로봇 공정 자동 진행 (배정 스케줄러 + 설비 보고)
 **배정** (production 스케줄러, `factoryflow.line.dispatch-interval` 기본 5초마다. `factoryflow.line.dispatch-enabled` 로 켜고 끈다. 배정을 받을 simulator 가 생길 때까지는 꺼 둔다)
-1. 로봇 공정(PRESS, BODY, PAINT)마다 비어 있는 설비를 찾는다: RUNNING 이고, 그 설비에 DISPATCHED·IN_PROGRESS 인 공정이 없는 설비
+1. 로봇 공정(PRESS, BODY, PAINT)마다 비어 있는 설비를 찾는다: RUNNING 이고 맡은 공정이 없는(occupied_step_id 가 비어 있는) 설비
 2. 그 공정이 PENDING 이고 앞 공정이 모두 DONE 인 작업지시를, 비어 있는 설비 수만큼 작업지시 id 순서(먼저 발행된 차)로 고른다. 작업지시는 RELEASED 또는 IN_PROGRESS
    - PRESS 는 발행 후 `factoryflow.line.press-hold`(기본 1분)가 지난 작업지시만 고른다 (취소할 틈)
    - 다 읽지 않고 필요한 개수만 DB 에서 고른다
@@ -68,7 +68,8 @@
 | 없는 설비 | 404 `EQUIPMENT_NOT_FOUND` |
 | 다른 공정의 설비를 지정 (예: PRESS 에 BODY-01) | 409 `EQUIPMENT_PROCESS_MISMATCH` |
 | 설비가 RUNNING 이 아님 (정지·고장) | 409 `EQUIPMENT_NOT_RUNNING` |
-| 설비가 다른 차를 작업 중 (배정·진행 중인 공정이 있음) | 409 `EQUIPMENT_BUSY` |
+| 설비가 다른 차를 작업 중 (맡은 공정이 있음) | 409 `EQUIPMENT_BUSY` |
+| 두 차가 같은 설비를 동시에 잡음 (작업자끼리, 배정과 작업자) | 설비 `@Version` 으로 한쪽만 반영. 늦은 쪽 API 는 409 `PRODUCTION_CONFLICT`, 배정은 건너뛰고 다음 주기에 |
 | 앞 공정이 DONE 이 아닌데 시작 | 409 `STEP_OUT_OF_ORDER` |
 | PENDING 이 아닌 공정 시작, IN_PROGRESS 가 아닌 공정 종료 | 409 `INVALID_STEP_STATUS` |
 | 작업지시가 CANCELLED, FAILED | 409 `WORK_ORDER_CLOSED` |
@@ -85,7 +86,7 @@
 | 테이블 | 컬럼 |
 |---|---|
 | `production` | `version BIGINT NOT NULL DEFAULT 0` 추가 |
-| `equipment` | id, code (UNIQUE, 예: PRESS-01), name, process, status (RUNNING, STOPPED, FAULT), version. 공정마다 2대를 기본 데이터로 넣는다: PRESS-01·02, BODY-01·02, PAINT-01·02, ASSEMBLY-01·02, INSPECTION-01·02 (simulator 와 같은 코드) |
+| `equipment` | id, code (UNIQUE, 예: PRESS-01), name, process, status (RUNNING, STOPPED, FAULT), occupied_step_id (지금 맡은 공정, 배정·시작 때 기록, 양품 완료·불량 재작업 때 비움), version. 공정마다 2대를 기본 데이터로 넣는다: PRESS-01·02, BODY-01·02, PAINT-01·02, ASSEMBLY-01·02, INSPECTION-01·02 (simulator 와 같은 코드) |
 | `work_order` | id, production_id (UNIQUE), order_id, product_id, status, vin (NULL, #73), released_at, started_at, completed_at, step_changed_at, version. 공정이 바뀔 때마다 step_changed_at 을 바꿔 작업지시 version 이 오르게 한다 (같은 작업지시의 공정을 동시에 바꾸면 늦은 쪽이 409) |
 | `work_order_step` | id, work_order_id, process, seq (1~5), status, equipment_code (시작 때), started_at, ended_at. UNIQUE (work_order_id, process) |
 | `production_result` | id, work_order_step_id, result (GOOD, DEFECT), defect_reason, worker_id (작업자 public_id, 설비 보고면 NULL), equipment_code, started_at, ended_at |

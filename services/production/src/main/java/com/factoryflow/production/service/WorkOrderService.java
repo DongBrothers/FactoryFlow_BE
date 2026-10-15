@@ -8,7 +8,6 @@ import com.factoryflow.production.domain.Equipment;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionResult;
 import com.factoryflow.production.domain.StepResult;
-import com.factoryflow.production.domain.StepStatus;
 import com.factoryflow.production.domain.WorkOrder;
 import com.factoryflow.production.domain.WorkOrderStatus;
 import com.factoryflow.production.domain.WorkOrderStep;
@@ -26,7 +25,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -41,10 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class WorkOrderService {
-
-    /** 설비를 쓰고 있는 공정 상태. 이 상태의 공정이 있는 설비에는 다른 차를 배정·시작하지 않는다. */
-    private static final List<StepStatus> BUSY_STATUSES =
-            List.of(StepStatus.DISPATCHED, StepStatus.IN_PROGRESS);
 
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderStepRepository workOrderStepRepository;
@@ -90,9 +84,11 @@ public class WorkOrderService {
         List<WorkOrderStep> steps = findSteps(workOrderId);
         WorkOrderStep step = stepOf(steps, process);
         requireStartable(steps, step);
-        requireUsable(findEquipment(equipmentCode), process);
+        Equipment equipment = findEquipment(equipmentCode);
+        requireUsable(equipment, process);
         LocalDateTime now = LocalDateTime.now();
         step.start(equipmentCode, now);
+        equipment.occupy(step.getId());
         workOrder.recordStepChange(now);
         if (workOrder.start(now)) {
             productionService.startProduction(workOrder.getProductionId());
@@ -101,17 +97,12 @@ public class WorkOrderService {
         return detail(workOrder, steps);
     }
 
-    /** 로봇 공정에서 배정을 받을 수 있는 설비: RUNNING 이고 배정·진행 중인 공정이 없는 설비, 코드 순서. */
+    /** 로봇 공정에서 배정을 받을 수 있는 설비: RUNNING 이고 맡은 공정이 없는 설비, 코드 순서. */
     @Transactional(readOnly = true)
     public List<String> findFreeEquipmentCodes(ProductionProcess process) {
-        Set<String> busy =
-                findBusySteps(process).stream()
-                        .map(WorkOrderStep::getEquipmentCode)
-                        .collect(Collectors.toSet());
         return findEquipmentsOf(process).stream()
-                .filter(Equipment::isRunning)
+                .filter(e -> e.isRunning() && !e.isOccupied())
                 .map(Equipment::getCode)
-                .filter(code -> !busy.contains(code))
                 .toList();
     }
 
@@ -135,9 +126,11 @@ public class WorkOrderService {
         List<WorkOrderStep> steps = findSteps(workOrderId);
         WorkOrderStep step = stepOf(steps, process);
         requireStartable(steps, step);
-        requireUsable(findEquipment(equipmentCode), process);
+        Equipment equipment = findEquipment(equipmentCode);
+        requireUsable(equipment, process);
         LocalDateTime now = LocalDateTime.now();
         step.dispatch(equipmentCode);
+        equipment.occupy(step.getId());
         workOrder.recordStepChange(now);
         if (workOrder.start(now)) {
             productionService.startProduction(workOrder.getProductionId());
@@ -174,6 +167,7 @@ public class WorkOrderService {
                             String reason = result == StepResult.DEFECT ? defectReason : null;
                             productionResultRepository.save(
                                     ProductionResult.record(step, result, reason, null, now));
+                            findEquipment(step.getEquipmentCode()).release();
                             step.finish(result, now);
                             findWorkOrderById(workOrderId).recordStepChange(now);
                         });
@@ -222,6 +216,7 @@ public class WorkOrderService {
         String reason = result == StepResult.DEFECT ? defectReason : null;
         productionResultRepository.save(
                 ProductionResult.record(step, result, reason, workerId, now));
+        findEquipment(step.getEquipmentCode()).release();
         step.finish(result, now);
         workOrder.recordStepChange(now);
         flushOrConflict(workOrderId);
@@ -242,7 +237,7 @@ public class WorkOrderService {
         }
     }
 
-    /** 이 공정의 설비이고, 가동 중이고, 다른 차를 작업 중(배정·진행)이 아니어야 한다. */
+    /** 이 공정의 설비이고, 가동 중이고, 다른 공정을 맡고 있지 않아야 한다. 같은 설비를 동시에 잡으면 설비 version 충돌로 한쪽만 성공한다. */
     private void requireUsable(Equipment equipment, ProductionProcess process) {
         if (equipment.getProcess() != process) {
             throw new CustomException(ProductionErrorCode.EQUIPMENT_PROCESS_MISMATCH);
@@ -250,7 +245,7 @@ public class WorkOrderService {
         if (!equipment.isRunning()) {
             throw new CustomException(ProductionErrorCode.EQUIPMENT_NOT_RUNNING);
         }
-        if (isBusy(equipment.getCode())) {
+        if (equipment.isOccupied()) {
             throw new CustomException(ProductionErrorCode.EQUIPMENT_BUSY);
         }
     }
@@ -348,15 +343,6 @@ public class WorkOrderService {
     private List<Long> findDispatchable(
             ProductionProcess process, LocalDateTime releasedBefore, int limit) {
         return workOrderStepRepository.findDispatchableWorkOrderIds(process, releasedBefore, limit);
-    }
-
-    private List<WorkOrderStep> findBusySteps(ProductionProcess process) {
-        return workOrderStepRepository.findAllByProcessAndStatusIn(process, BUSY_STATUSES);
-    }
-
-    private boolean isBusy(String equipmentCode) {
-        return workOrderStepRepository.existsByEquipmentCodeAndStatusIn(
-                equipmentCode, BUSY_STATUSES);
     }
 
     private List<Equipment> findEquipmentsOf(ProductionProcess process) {

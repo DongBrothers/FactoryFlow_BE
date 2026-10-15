@@ -43,9 +43,26 @@ public class Equipment extends BaseEntity {
     @Column(nullable = false, length = 20)
     private EquipmentStatus status;
 
+    /** 지금 맡은 공정(배정·진행 중). 비었으면 null. 같은 설비를 두 차가 동시에 잡으면 version 충돌로 한쪽만 성공한다. */
+    private Long occupiedStepId;
+
     @Version private Long version;
 
     public boolean isRunning() {
         return status == EquipmentStatus.RUNNING;
+    }
+
+    public boolean isOccupied() {
+        return occupiedStepId != null;
+    }
+
+    /** 공정을 맡는다 (배정 또는 작업자 시작). 비어 있는지는 서비스가 먼저 확인한다. */
+    public void occupy(Long stepId) {
+        this.occupiedStepId = stepId;
+    }
+
+    /** 맡은 공정이 끝났다 (양품 완료, 불량 재작업). */
+    public void release() {
+        this.occupiedStepId = null;
     }
 }

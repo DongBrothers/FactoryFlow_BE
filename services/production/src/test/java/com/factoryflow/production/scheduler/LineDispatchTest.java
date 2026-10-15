@@ -47,7 +47,7 @@ class LineDispatchTest {
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
-        jdbc.update("UPDATE equipment SET status = 'RUNNING'");
+        jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
     }
 
     @Test

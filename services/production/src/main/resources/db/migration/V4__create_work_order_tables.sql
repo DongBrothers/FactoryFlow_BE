@@ -10,6 +10,7 @@ CREATE TABLE equipment (
     name        VARCHAR(100) NOT NULL,
     process     VARCHAR(20) NOT NULL,              -- PRESS, BODY, PAINT, ASSEMBLY, INSPECTION
     status      VARCHAR(20) NOT NULL,              -- RUNNING, STOPPED, FAULT
+    occupied_step_id BIGINT NULL,                  -- 지금 맡은 공정 (work_order_step.id). 비었으면 NULL. 같은 설비를 두 차가 잡지 않게 version 과 함께 쓴다
     version     BIGINT      NOT NULL DEFAULT 0,
     created_at  DATETIME(6) NOT NULL,
     updated_at  DATETIME(6) NOT NULL,

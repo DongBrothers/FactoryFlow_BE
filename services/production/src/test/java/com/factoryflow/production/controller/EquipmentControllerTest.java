@@ -28,7 +28,7 @@ class EquipmentControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-        jdbc.update("UPDATE equipment SET status = 'RUNNING'");
+        jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
     }
 
     @Test
