@@ -47,7 +47,10 @@ public class AuthController {
                 description = "요청 형식 오류, 허용되지 않은 이메일 도메인 (AUTH-003)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
-                description = "이미 활성화된 이메일 (AUTH-002)")
+                description = "이미 활성화된 이메일 (AUTH-002)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description = "활성화 메일을 보내지 못함 (AUTH-012). 대기 정보는 남지 않으므로 다시 발급하면 된다")
     })
     @PostMapping("/admin/users")
     @ResponseStatus(HttpStatus.CREATED)

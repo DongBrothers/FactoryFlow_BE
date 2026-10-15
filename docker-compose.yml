@@ -45,6 +45,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # 로컬 메일 확인용 가짜 SMTP 서버. auth 가 보낸 활성화 메일을 http://localhost:8025 에서 본다
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    container_name: ff-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   mysql-data:
   rabbitmq-data:

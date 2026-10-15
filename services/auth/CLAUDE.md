@@ -8,3 +8,4 @@
 - 발행: 없음
 - 수신: 없음
 - 보상: 없음
+- 활성화 메일: ActivationNotifier 가 SMTP 로 보낸다. 메일 서버 기본값은 로컬 Mailpit(localhost:1025, 보낸 메일은 localhost:8025), dev 는 APP_DEV_YML_AUTH 의 spring.mail.* 로 덮어쓴다. 보내지 못하면 이번 발급의 Redis 키를 지우고 503 MAIL_UNAVAILABLE. 테스트는 GreenMail

@@ -8,16 +8,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.factoryflow.test.container.TestContainersConfig;
+import com.icegreen.greenmail.junit5.GreenMailExtension;
+import com.icegreen.greenmail.util.ServerSetupTest;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jwt.SignedJWT;
+import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -26,19 +30,33 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-/** 계정 발급과 인증 (docs/specs/auth-account.md). 실제 MySQL, Redis 를 쓴다. */
-@SpringBootTest
+/**
+ * 계정 발급과 인증 (docs/specs/auth-account.md). 실제 MySQL, Redis 를 쓰고, 활성화 메일은 GreenMail(가짜 SMTP 서버)이 받는다.
+ */
+// GreenMail(테스트 도구)은 받은 메일의 주소를 INFO 로 남긴다. 우리 코드의 로그만 검사하도록 끈다
+@SpringBootTest(properties = "logging.level.com.icegreen=WARN")
 @Import(TestContainersConfig.class)
 @ExtendWith(OutputCaptureExtension.class)
 class AuthAccountTest {
 
     static final String EMAIL = "kim@gmail.com";
     static final String PASSWORD = "pw-1234!";
+
+    /** 테스트마다 새로 띄우는 가짜 SMTP 서버. 받은 메일을 꺼내 볼 수 있다. */
+    @RegisterExtension
+    static final GreenMailExtension mail = new GreenMailExtension(ServerSetupTest.SMTP);
+
+    @DynamicPropertySource
+    static void mailServer(DynamicPropertyRegistry registry) {
+        registry.add("spring.mail.port", ServerSetupTest.SMTP::getPort);
+    }
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
@@ -73,6 +91,33 @@ class AuthAccountTest {
         assertThat(redis.hasKey("auth:activation:" + token)).isTrue();
         assertTtlAbout24Hours("auth:activation:" + token);
         assertTtlAbout24Hours("auth:pending:" + EMAIL);
+    }
+
+    @Test
+    void issueSendsActivationMailWithTokenLink() throws Exception {
+        issue(EMAIL).andExpect(status().isCreated());
+
+        MimeMessage[] messages = mail.getReceivedMessages();
+        assertThat(messages).hasSize(1);
+        assertThat(messages[0].getAllRecipients())
+                .extracting(Object::toString)
+                .containsExactly(EMAIL);
+        assertThat(messages[0].getSubject()).isEqualTo("[FactoryFlow] 계정 활성화 안내");
+        assertThat((String) messages[0].getContent())
+                .contains("http://localhost:5173/activate?token=" + pendingToken(EMAIL));
+    }
+
+    @Test
+    void issueFailsAndLeavesNoPendingWhenMailCannotBeSent(CapturedOutput output) throws Exception {
+        mail.stop();
+
+        issue(EMAIL)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("AUTH-012"));
+
+        // 대기 정보가 남지 않으므로 관리자는 다시 발급하면 된다
+        assertThat(redis.keys("auth:*")).isEmpty();
+        assertThat(output).doesNotContain(EMAIL);
     }
 
     @Test
@@ -388,7 +433,7 @@ class AuthAccountTest {
                         .getContentAsString();
 
         // 명세 "API 별 응답" 표의 코드만 나오고, 공통 핸들러의 500 은 자동으로 붙지 않는다
-        assertResponseCodes(docs, "/auth/admin/users", "201", "400", "409");
+        assertResponseCodes(docs, "/auth/admin/users", "201", "400", "409", "503");
         assertResponseCodes(docs, "/auth/activation", "204", "400", "409");
         assertResponseCodes(docs, "/auth/login", "200", "400", "401", "403", "429");
         assertResponseCodes(docs, "/auth/token/refresh", "200", "401", "403");
