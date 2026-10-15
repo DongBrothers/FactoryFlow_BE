@@ -5,9 +5,9 @@
   - MES: work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력)
 - 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
 - 생산 트리거: inventory.reserved 수신 시 생산 건 READY + 작업지시 1건과 공정 5개 생성
-- 공정 진행: 라인 작업자가 작업자 API 로 공정별 시작·종료와 실적(양품/불량) 입력. 순서대로만, 그 공정 설비가 RUNNING 일 때만 시작. 불량은 실적만 남기고 같은 공정 재작업
+- 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + production.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API 로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
 - 완료: 검사 양품 → VIN 발행 → production.completed
-- 발행: production.material-requested, production.status-changed, production.cancelled, production.cancel-rejected, production.failed, production.completed
-- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, equipment.status-changed
-- 보상: order.cancel-requested 수신 시 프레스 시작 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 설비 고장(FAULT) 수신 시 그 공정 진행 중 차량 FAILED + production.failed (예약 해제)
+- 발행: production.material-requested, production.status-changed, production.step-dispatched, production.cancelled, production.cancel-rejected, production.failed, production.completed
+- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, equipment.step-started, equipment.step-completed, equipment.status-changed
+- 보상: order.cancel-requested 수신 시 프레스 배정 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 설비 고장(FAULT) 수신 시 그 설비에 배정·진행 중인 차량 FAILED + production.failed (예약 해제)
 - 동시 변경: 생산 건은 @Version 으로 막는다 (docs/specs/saga-order-fulfillment.md)
