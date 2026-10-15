@@ -9,6 +9,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class LineDispatcher {
 
-    /** 설비 쪽 이유로 실패한 경우. 차는 그대로 두고 그 설비만 이번 바퀴에서 뺀다. */
+    /** 설비 쪽 이유로 실패한 경우. 차는 그대로 두고 그 설비만 이번 바퀴에서 빼고, 같은 차로 다음 설비를 시도한다. */
     private static final Set<ProductionErrorCode> EQUIPMENT_ERRORS =
             Set.of(
                     ProductionErrorCode.EQUIPMENT_NOT_FOUND,
@@ -42,7 +43,7 @@ public class LineDispatcher {
         }
     }
 
-    /** 빈 설비가 남아 있고 후보가 있는 동안 계속 배정한다. 한 번 시도할 때마다 설비가 쓰이거나 빠지거나 차가 빠지므로 끝난다. */
+    /** 빈 설비가 남아 있고 후보가 있는 동안 계속 배정한다. 차마다 설비가 쓰이거나 빠지거나 차가 빠지므로 끝난다. */
     private void dispatch(ProductionProcess process) {
         Deque<String> freeEquipmentCodes =
                 new ArrayDeque<>(workOrderService.findFreeEquipmentCodes(process));
@@ -58,31 +59,48 @@ public class LineDispatcher {
                 if (freeEquipmentCodes.isEmpty()) {
                     return;
                 }
-                dispatchOne(workOrderId, process, freeEquipmentCodes, skipped);
+                DispatchOutcome outcome =
+                        tryEquipments(
+                                freeEquipmentCodes, code -> attempt(workOrderId, process, code));
+                if (outcome == DispatchOutcome.CAR_FAILED) {
+                    skipped.add(workOrderId);
+                }
             }
         }
     }
 
-    /** 성공하면 그 설비를 쓰고, 설비 쪽 이유로 실패하면 그 설비를, 차 쪽 이유로 실패하면 그 차를 이번 바퀴에서 뺀다. */
-    private void dispatchOne(
-            Long workOrderId,
-            ProductionProcess process,
-            Deque<String> freeEquipmentCodes,
-            Set<Long> skipped) {
-        String equipmentCode = freeEquipmentCodes.peek();
+    /**
+     * 차 하나를 빈 설비에 앞에서부터 시도한다. 설비 쪽 실패면 그 설비만 빼고 같은 차로 다음 설비를 시도해, 먼저 발행된 차가 뒤의 차에 밀리지 않게 한다. 배정되면 그
+     * 설비를 쓰고, 차 쪽 실패면 설비는 다음 차를 위해 남긴다. 설비가 다 빠지면 차 잘못이 아니므로 EQUIPMENT_FAILED.
+     */
+    static DispatchOutcome tryEquipments(
+            Deque<String> freeEquipmentCodes, Function<String, DispatchOutcome> attempt) {
+        while (!freeEquipmentCodes.isEmpty()) {
+            DispatchOutcome outcome = attempt.apply(freeEquipmentCodes.peek());
+            if (outcome == DispatchOutcome.CAR_FAILED) {
+                return outcome;
+            }
+            freeEquipmentCodes.pop();
+            if (outcome == DispatchOutcome.DISPATCHED) {
+                return outcome;
+            }
+        }
+        return DispatchOutcome.EQUIPMENT_FAILED;
+    }
+
+    private DispatchOutcome attempt(
+            Long workOrderId, ProductionProcess process, String equipmentCode) {
         try {
             workOrderService.dispatch(workOrderId, process, equipmentCode);
-            freeEquipmentCodes.pop();
+            return DispatchOutcome.DISPATCHED;
         } catch (CustomException e) {
             logSkipped(workOrderId, process, equipmentCode, e.getMessage());
-            if (EQUIPMENT_ERRORS.contains(e.getErrorCode())) {
-                freeEquipmentCodes.pop();
-            } else {
-                skipped.add(workOrderId);
-            }
+            return EQUIPMENT_ERRORS.contains(e.getErrorCode())
+                    ? DispatchOutcome.EQUIPMENT_FAILED
+                    : DispatchOutcome.CAR_FAILED;
         } catch (OptimisticLockingFailureException e) {
             logSkipped(workOrderId, process, equipmentCode, e.getMessage());
-            skipped.add(workOrderId);
+            return DispatchOutcome.CAR_FAILED;
         }
     }
 
