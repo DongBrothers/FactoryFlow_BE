@@ -97,8 +97,9 @@ class InventoryEventListenerTest {
         listener.onReserved(reserved(production));
 
         assertThat(statusOf(production)).isEqualTo("CANCELLED");
-        assertThat(number(onlyOutbox("production.cancelled"), "$.payload.productionId"))
-                .isEqualTo(production);
+        String cancelled = onlyOutbox("production.cancelled");
+        assertThat(number(cancelled, "$.payload.orderId")).isEqualTo(42L);
+        assertThat(number(cancelled, "$.payload.productionId")).isEqualTo(production);
         assertThat(outbox("production.status-changed")).isEmpty();
     }
 
@@ -117,13 +118,15 @@ class InventoryEventListenerTest {
     }
 
     @Test
-    void reworkDoesNotSendStatusChanged() {
-        // 불량 재생산 중: started_at 이 있는 WAITING_MATERIAL. READY 로 가지만 order 에는 알리지 않는다
-        long production = insertProduction(42L, 1L, "WAITING_MATERIAL", true);
+    void reservedForFailedProductionSendsCancelledAgain() {
+        // 설비 고장으로 실패한 생산 건에 늦게 온 예약도 풀게 한다
+        long production = insertProduction(42L, 1L, "FAILED", true);
 
         listener.onReserved(reserved(production));
 
-        assertThat(statusOf(production)).isEqualTo("READY");
+        assertThat(statusOf(production)).isEqualTo("FAILED");
+        assertThat(number(onlyOutbox("production.cancelled"), "$.payload.productionId"))
+                .isEqualTo(production);
         assertThat(outbox("production.status-changed")).isEmpty();
     }
 
@@ -219,7 +222,7 @@ class InventoryEventListenerTest {
 
     private long insertProduction(long orderId, long productId, String status, boolean started) {
         jdbc.update(
-                "INSERT INTO production (order_id, product_id, qty, status, started_at, created_at,"
+                "INSERT INTO production (order_id, product_id, seq, status, started_at, created_at,"
                         + " updated_at) VALUES (?, ?, 1, ?, "
                         + (started ? "NOW(6)" : "NULL")
                         + ", NOW(6), NOW(6))",

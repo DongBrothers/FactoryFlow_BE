@@ -1,9 +1,12 @@
 package com.factoryflow.order.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
+import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.order.exception.OrderErrorCode;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -46,36 +49,53 @@ class ProductionEventListenerTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("DELETE FROM order_vehicle");
         jdbc.update("DELETE FROM order_item");
         jdbc.update("DELETE FROM customer_order");
         jdbc.update("DELETE FROM processed_event");
         amqpAdmin.purgeQueue(DLQ, false);
         orderId = insertOrder();
-        insertItem(orderId, CAR_A, "RECEIVED");
-        insertItem(orderId, CAR_B, "RECEIVED");
+        insertItem(orderId, CAR_A, 2);
+        insertItem(orderId, CAR_B, 1);
     }
 
     @Test
-    void waitingMaterialMovesItemAndOrderToWaitingMaterial() {
-        listener.onStatusChanged(statusChanged(CAR_A, "WAITING_MATERIAL"));
+    void plannedCreatesReceivedVehicle() {
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
 
-        assertThat(itemStatus(CAR_A)).isEqualTo("WAITING_MATERIAL");
-        assertThat(itemStatus(CAR_B)).isEqualTo("RECEIVED");
-        assertThat(orderStatus()).isEqualTo("WAITING_MATERIAL");
+        assertThat(vehicleStatus(101L)).isEqualTo("RECEIVED");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM order_vehicle", Integer.class))
+                .isEqualTo(1);
+        assertThat(itemStatus(CAR_A)).isEqualTo("RECEIVED");
+        assertThat(orderStatus()).isEqualTo("RECEIVED");
     }
 
     @Test
-    void readyMovesItemAndOrderToInProduction() {
-        listener.onStatusChanged(statusChanged(CAR_A, "READY"));
+    void oneOfTwoVehiclesReadyMakesItemAndOrderInProduction() {
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
+        listener.onStatusChanged(statusChanged(102L, CAR_A, "PLANNED"));
 
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+
+        assertThat(vehicleStatus(101L)).isEqualTo("IN_PRODUCTION");
+        assertThat(vehicleStatus(102L)).isEqualTo("RECEIVED");
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
         assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
     }
 
     @Test
+    void notYetKnownVehicleCountsAsReceived() {
+        // 품목 A 는 2대인데 한 대만 알려졌다. 모르는 한 대는 RECEIVED 로 보고 요약한다
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "WAITING_MATERIAL"));
+
+        assertThat(itemStatus(CAR_A)).isEqualTo("WAITING_MATERIAL");
+        assertThat(orderStatus()).isEqualTo("WAITING_MATERIAL");
+    }
+
+    @Test
     void itemsCanDifferAndOrderShowsInProduction() {
-        listener.onStatusChanged(statusChanged(CAR_A, "READY"));
-        listener.onStatusChanged(statusChanged(CAR_B, "WAITING_MATERIAL"));
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "WAITING_MATERIAL"));
 
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
         assertThat(itemStatus(CAR_B)).isEqualTo("WAITING_MATERIAL");
@@ -83,43 +103,69 @@ class ProductionEventListenerTest {
     }
 
     @Test
-    void finishedItemIgnoresStatusChanged() {
-        jdbc.update("UPDATE order_item SET status = 'COMPLETED' WHERE product_id = ?", CAR_A);
-        jdbc.update("UPDATE order_item SET status = 'CANCELLED' WHERE product_id = ?", CAR_B);
+    void failedVehicleMakesItsOnlyItemFailed() {
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "FAILED"));
 
-        listener.onStatusChanged(statusChanged(CAR_A, "WAITING_MATERIAL"));
-        listener.onStatusChanged(statusChanged(CAR_B, "READY"));
-
-        assertThat(itemStatus(CAR_A)).isEqualTo("COMPLETED");
-        assertThat(itemStatus(CAR_B)).isEqualTo("CANCELLED");
+        assertThat(vehicleStatus(201L)).isEqualTo("FAILED");
+        assertThat(itemStatus(CAR_B)).isEqualTo("FAILED");
     }
 
     @Test
-    void cancelRequestedItemAcceptsOnlyCancelled() {
+    void finishedVehicleIgnoresStatusChanged() {
+        insertVehicle(CAR_A, 101L, "COMPLETED");
+        insertVehicle(CAR_A, 102L, "CANCELLED");
+        insertVehicle(CAR_B, 201L, "FAILED");
+
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "WAITING_MATERIAL"));
+        listener.onStatusChanged(statusChanged(102L, CAR_A, "READY"));
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "READY"));
+
+        assertThat(vehicleStatus(101L)).isEqualTo("COMPLETED");
+        assertThat(vehicleStatus(102L)).isEqualTo("CANCELLED");
+        assertThat(vehicleStatus(201L)).isEqualTo("FAILED");
+    }
+
+    @Test
+    void cancelRequestedVehicleAcceptsOnlyCancelled() {
+        insertVehicle(CAR_A, 101L, "CANCEL_REQUESTED");
+        insertVehicle(CAR_B, 201L, "CANCEL_REQUESTED");
+        // 취소 요청 때 품목과 주문도 CANCEL_REQUESTED 가 된다
         jdbc.update("UPDATE order_item SET status = 'CANCEL_REQUESTED'");
+        jdbc.update("UPDATE customer_order SET status = 'CANCEL_REQUESTED'");
 
-        listener.onStatusChanged(statusChanged(CAR_A, "READY"));
-        listener.onStatusChanged(statusChanged(CAR_B, "CANCELLED"));
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "CANCELLED"));
 
-        assertThat(itemStatus(CAR_A)).isEqualTo("CANCEL_REQUESTED");
+        assertThat(vehicleStatus(101L)).isEqualTo("CANCEL_REQUESTED");
+        assertThat(vehicleStatus(201L)).isEqualTo("CANCELLED");
         assertThat(itemStatus(CAR_B)).isEqualTo("CANCELLED");
         assertThat(orderStatus()).isEqualTo("CANCEL_REQUESTED");
     }
 
     @Test
+    void moreVehiclesThanItemQtyIsAnError() {
+        insertVehicle(CAR_B, 201L, "RECEIVED");
+
+        assertThatThrownBy(() -> listener.onStatusChanged(statusChanged(202L, CAR_B, "PLANNED")))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(OrderErrorCode.ORDER_VEHICLE_OVERFLOW);
+    }
+
+    @Test
     void sameEventTwiceIsAppliedOnce() {
-        EventEnvelope event = statusChanged(CAR_A, "READY");
+        EventEnvelope event = statusChanged(101L, CAR_A, "READY");
         listener.onStatusChanged(event);
-        jdbc.update("UPDATE order_item SET status = 'RECEIVED' WHERE product_id = ?", CAR_A);
+        jdbc.update("UPDATE order_vehicle SET status = 'RECEIVED' WHERE production_id = 101");
 
         listener.onStatusChanged(event);
 
-        assertThat(itemStatus(CAR_A)).isEqualTo("RECEIVED");
+        assertThat(vehicleStatus(101L)).isEqualTo("RECEIVED");
     }
 
     @Test
     void receivesStatusChangedFromRabbitMq() {
-        send(statusChanged(CAR_A, "READY"));
+        send(statusChanged(101L, CAR_A, "READY"));
 
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION"));
@@ -128,7 +174,7 @@ class ProductionEventListenerTest {
 
     @Test
     void unknownItemIsDeadLettered() {
-        EventEnvelope event = statusChanged(999_999L, "READY");
+        EventEnvelope event = statusChanged(901L, 999_999L, "READY");
 
         send(event);
 
@@ -140,7 +186,7 @@ class ProductionEventListenerTest {
         assertThat(orderStatus()).isEqualTo("RECEIVED");
     }
 
-    private EventEnvelope statusChanged(long productId, String status) {
+    private EventEnvelope statusChanged(long productionId, long productId, String status) {
         return new EventEnvelope(
                 UUID.randomUUID(),
                 "production.status-changed",
@@ -150,7 +196,7 @@ class ProductionEventListenerTest {
                 objectMapper.valueToTree(
                         Map.of(
                                 "orderId", orderId,
-                                "productionId", 100L + productId,
+                                "productionId", productionId,
                                 "productId", productId,
                                 "status", status)));
     }
@@ -179,15 +225,35 @@ class ProductionEventListenerTest {
                 "SELECT id FROM customer_order WHERE order_no = ?", Long.class, orderNo);
     }
 
-    private void insertItem(long orderId, long productId, String status) {
+    private void insertItem(long orderId, long productId, int qty) {
         jdbc.update(
                 "INSERT INTO order_item (order_id, product_id, product_code, product_name, qty,"
-                        + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, NOW(6), NOW(6))",
+                        + " status, created_at, updated_at)"
+                        + " VALUES (?, ?, ?, ?, ?, 'RECEIVED', NOW(6), NOW(6))",
                 orderId,
                 productId,
                 "CAR-" + productId,
                 "차 " + productId,
-                status);
+                qty);
+    }
+
+    private void insertVehicle(long productId, long productionId, String status) {
+        jdbc.update(
+                "INSERT INTO order_vehicle (order_id, order_item_id, production_id, status,"
+                        + " created_at, updated_at)"
+                        + " SELECT order_id, id, ?, ?, NOW(6), NOW(6) FROM order_item"
+                        + " WHERE order_id = ? AND product_id = ?",
+                productionId,
+                status,
+                orderId,
+                productId);
+    }
+
+    private String vehicleStatus(long productionId) {
+        return jdbc.queryForObject(
+                "SELECT status FROM order_vehicle WHERE production_id = ?",
+                String.class,
+                productionId);
     }
 
     private String itemStatus(long productId) {

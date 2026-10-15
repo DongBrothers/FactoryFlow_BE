@@ -9,6 +9,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -60,21 +63,14 @@ public class OrderItem extends BaseEntity {
     }
 
     /**
-     * 생산 건 상태를 품목에 반영한다. 끝난 품목(COMPLETED, CANCELLED)은 그대로 두고, 취소 결과를 기다리는 품목(CANCEL_REQUESTED)은
-     * CANCELLED 만 받는다. 상태가 바뀌었으면 true.
+     * 차량 상태들로 품목 상태를 다시 계산한다. 아직 알려지지 않은 차량(수량보다 모자란 만큼)은 RECEIVED 로 본다. 차량 상태를 바꾼 트랜잭션에서 함께 부른다.
      */
-    public boolean applyProductionStatus(OrderStatus next) {
-        if (status == OrderStatus.COMPLETED || status == OrderStatus.CANCELLED) {
-            return false;
+    public void refreshStatus(Collection<OrderStatus> vehicleStatuses) {
+        List<OrderStatus> statuses = new ArrayList<>(vehicleStatuses);
+        while (statuses.size() < qty) {
+            statuses.add(OrderStatus.RECEIVED);
         }
-        if (status == OrderStatus.CANCEL_REQUESTED && next != OrderStatus.CANCELLED) {
-            return false;
-        }
-        if (status == next) {
-            return false;
-        }
-        this.status = next;
-        return true;
+        this.status = OrderStatus.summarize(statuses);
     }
 
     public static OrderItem receive(
