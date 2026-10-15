@@ -22,6 +22,7 @@ import com.factoryflow.production.repository.ProductionResultRepository;
 import com.factoryflow.production.repository.WorkOrderRepository;
 import com.factoryflow.production.repository.WorkOrderStepRepository;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -99,14 +100,15 @@ public class WorkOrderService {
                 .toList();
     }
 
-    /** 이 공정을 지금 배정할 수 있는 작업지시 id, 먼저 발행된 순서로 limit 개. 프레스는 발행 후 대기 시간이 지난 것만. */
+    /** 이 공정을 지금 배정할 수 있는 작업지시 id, 먼저 발행된 순서로 limit 개 (excludedIds 제외). 프레스는 발행 후 대기 시간이 지난 것만. */
     @Transactional(readOnly = true)
-    public List<Long> findDispatchableWorkOrderIds(ProductionProcess process, int limit) {
+    public List<Long> findDispatchableWorkOrderIds(
+            ProductionProcess process, Collection<Long> excludedIds, int limit) {
         LocalDateTime releasedBefore =
                 process == ProductionProcess.PRESS
                         ? LocalDateTime.now().minus(lineProperties.pressHold())
                         : null;
-        return findDispatchable(process, releasedBefore, limit);
+        return findDispatchable(process, releasedBefore, excludedIds, limit);
     }
 
     /**
@@ -358,8 +360,12 @@ public class WorkOrderService {
     }
 
     private List<Long> findDispatchable(
-            ProductionProcess process, LocalDateTime releasedBefore, int limit) {
-        return workOrderStepRepository.findDispatchableWorkOrderIds(process, releasedBefore, limit);
+            ProductionProcess process,
+            LocalDateTime releasedBefore,
+            Collection<Long> excludedIds,
+            int limit) {
+        return workOrderStepRepository.findDispatchableWorkOrderIds(
+                process, releasedBefore, excludedIds, limit);
     }
 
     private List<Equipment> findEquipmentsOf(ProductionProcess process) {
