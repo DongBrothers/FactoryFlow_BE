@@ -59,6 +59,24 @@ public class OrderItem extends BaseEntity {
         this.status = OrderStatus.RECEIVED;
     }
 
+    /**
+     * 생산 건 상태를 품목에 반영한다. 끝난 품목(COMPLETED, CANCELLED)은 그대로 두고, 취소 결과를 기다리는 품목(CANCEL_REQUESTED)은
+     * CANCELLED 만 받는다. 상태가 바뀌었으면 true.
+     */
+    public boolean applyProductionStatus(OrderStatus next) {
+        if (status == OrderStatus.COMPLETED || status == OrderStatus.CANCELLED) {
+            return false;
+        }
+        if (status == OrderStatus.CANCEL_REQUESTED && next != OrderStatus.CANCELLED) {
+            return false;
+        }
+        if (status == next) {
+            return false;
+        }
+        this.status = next;
+        return true;
+    }
+
     public static OrderItem receive(
             Long orderId, Long productId, String productCode, String productName, int qty) {
         return new OrderItem(orderId, productId, productCode, productName, qty);
