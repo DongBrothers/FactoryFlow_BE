@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 수신 멱등 처리. processed_event 에 eventId 를 기록하고, 처음 받은 이벤트일 때만 action 을 같은 트랜잭션에서 실행한다. */
@@ -27,6 +28,31 @@ public class ProcessedEventGuard {
      */
     @Transactional
     public boolean runOnce(UUID eventId, Runnable action) {
+        return recordAndRun(eventId, action);
+    }
+
+    /**
+     * 받은 메시지를 한 번만 처리한다. 처리하는 동안 받은 이벤트의 traceId 를 MDC 에 두어, action 안에서 발행하는 이벤트가 같은 traceId 를 이어
+     * 쓰게 한다 ({@link EventPublisher} 가 MDC 의 traceId 를 쓴다). 끝나면 MDC 를 원래 값으로 돌린다.
+     *
+     * @return action 을 실행했으면 true, 이미 처리된 이벤트라 건너뛰었으면 false
+     */
+    @Transactional
+    public boolean runOnce(EventEnvelope envelope, Runnable action) {
+        String previous = MDC.get(EventPublisher.TRACE_ID_MDC_KEY);
+        MDC.put(EventPublisher.TRACE_ID_MDC_KEY, envelope.traceId());
+        try {
+            return recordAndRun(envelope.eventId(), action);
+        } finally {
+            if (previous == null) {
+                MDC.remove(EventPublisher.TRACE_ID_MDC_KEY);
+            } else {
+                MDC.put(EventPublisher.TRACE_ID_MDC_KEY, previous);
+            }
+        }
+    }
+
+    private boolean recordAndRun(UUID eventId, Runnable action) {
         // 중복이면 오류 대신 0줄. 오류가 없으니 트랜잭션이 롤백 전용이 되지 않아 바깥 트랜잭션 안에서도 그대로 커밋된다.
         // INSERT IGNORE 는 중복이 아닌 오류(값 잘림 등)도 경고로 바꾸므로, 중복 경고(1062) 외의 경고가 있으면 실패로 본다
         int inserted =
