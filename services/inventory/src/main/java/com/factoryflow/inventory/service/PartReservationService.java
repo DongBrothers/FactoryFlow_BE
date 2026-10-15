@@ -55,11 +55,7 @@ public class PartReservationService {
         List<ReservationShortage> shortages = new ArrayList<>();
         qtyByPartId.forEach(
                 (partId, qty) ->
-                        reserveOne(
-                                        productionId,
-                                        partsById.get(partId),
-                                        qty,
-                                        waitingQtyByPartId.getOrDefault(partId, 0))
+                        reserveOne(productionId, partsById.get(partId), qty, waitingQtyByPartId)
                                 .ifPresent(shortages::add));
         publishResult(productionId, shortages);
     }
@@ -75,6 +71,7 @@ public class PartReservationService {
                                 TreeMap::new));
     }
 
+    /** 요청한 부품을 한 번에 읽는다. 하나라도 없거나 삭제됐으면 PART_NOT_FOUND. */
     private Map<Long, Part> loadParts(Set<Long> partIds) {
         Map<Long, Part> partsById =
                 partRepository.findAllByIdInAndIsDeletedFalse(partIds).stream()
@@ -85,6 +82,7 @@ public class PartReservationService {
         return partsById;
     }
 
+    /** 부품별로 이미 기다리는(WAITING) 수량의 합. 기다리는 줄이 없는 부품은 빠진다. */
     private Map<Long, Integer> waitingQtyByPartId(Set<Long> partIds) {
         return reservationRepository
                 .findAllByPartIdInAndStatus(partIds, ReservationStatus.WAITING)
@@ -99,7 +97,8 @@ public class PartReservationService {
      * inventory.shortage 를 발행한 뒤 그 줄을 돌려준다.
      */
     private Optional<ReservationShortage> reserveOne(
-            Long productionId, Part part, int qty, int waiting) {
+            Long productionId, Part part, int qty, Map<Long, Integer> waitingQtyByPartId) {
+        int waiting = waitingQtyByPartId.getOrDefault(part.getId(), 0);
         if (waiting == 0 && part.getAvailable() >= qty) {
             part.reserve(qty);
             reservationRepository.save(PartReservation.reserved(productionId, part.getId(), qty));

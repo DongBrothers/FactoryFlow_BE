@@ -1,5 +1,6 @@
 package com.factoryflow.production.service;
 
+import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.dto.response.InternalProductResponse;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
@@ -20,12 +21,20 @@ public class ProductService {
     /** 있는 제품만 돌려준다. 없는 id 와 삭제된 제품은 결과에서 빠진다. */
     @Transactional(readOnly = true)
     public List<InternalProductResponse> findProducts(List<Long> ids) {
-        Set<Long> withBom = new HashSet<>(bomRepository.findProductIdsHavingBom(ids));
-        return productRepository.findAllByIdInAndIsDeletedFalse(ids).stream()
+        Set<Long> withBom = productIdsHavingBom(ids);
+        return existingProducts(ids).stream()
                 .map(
                         product ->
                                 InternalProductResponse.of(
                                         product, withBom.contains(product.getId())))
                 .toList();
+    }
+
+    private Set<Long> productIdsHavingBom(List<Long> ids) {
+        return new HashSet<>(bomRepository.findProductIdsHavingBom(ids));
+    }
+
+    private List<Product> existingProducts(List<Long> ids) {
+        return productRepository.findAllByIdInAndIsDeletedFalse(ids);
     }
 }
