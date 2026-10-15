@@ -43,6 +43,19 @@ final class RedisScripts {
                     """,
                     Long.class);
 
+    /**
+     * 활성화 대기 취소(메일을 보내지 못했을 때). KEYS[1] = auth:pending:{email}, KEYS[2] = auth:activation:{token},
+     * ARGV[1] = token. 토큰 키를 지우고, 이메일 키는 아직 이 토큰을 가리킬 때만 지운다 (그 사이 다시 발급됐으면 새 발급은 남긴다).
+     */
+    static final RedisScript<Long> CANCEL_ACTIVATION =
+            RedisScript.of(
+                    """
+                    redis.call('DEL', KEYS[2])
+                    if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('DEL', KEYS[1]) end
+                    return 1
+                    """,
+                    Long.class);
+
     /** KEYS[1] 을 1 늘리고 만료(ARGV[1], ms)를 다시 건다. 둘을 한 번에 해 만료 없는 카운터가 남지 않는다. 늘린 값을 돌려준다. */
     static final RedisScript<Long> INCREMENT_WITH_EXPIRE =
             RedisScript.of(

@@ -42,6 +42,14 @@ public class ActivationTokenStore {
         save(RedisScripts.RESTORE_ACTIVATION, token, pending);
     }
 
+    /** 발급을 취소한다(활성화 메일을 보내지 못했을 때). 그 사이 같은 이메일로 다시 발급됐으면 새 발급은 남긴다. */
+    public void cancel(String token, String email) {
+        redis.execute(
+                RedisScripts.CANCEL_ACTIVATION,
+                List.of(EMAIL_PREFIX + email, TOKEN_PREFIX + token),
+                token);
+    }
+
     private void save(RedisScript<Long> script, String token, PendingAccount pending) {
         redis.execute(
                 script,

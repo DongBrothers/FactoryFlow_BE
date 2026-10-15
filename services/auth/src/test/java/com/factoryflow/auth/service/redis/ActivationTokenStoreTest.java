@@ -144,4 +144,28 @@ class ActivationTokenStoreTest {
         assertThat(store.consume(oldToken)).isNull();
         assertThat(store.consume(newToken)).isEqualTo(KIM);
     }
+
+    @Test
+    void cancelRemovesBothKeysOfThatIssue() {
+        // 활성화 메일을 보내지 못하면 이번 발급의 대기 정보를 지운다
+        String token = store.issue(KIM);
+
+        store.cancel(token, KIM.email());
+
+        assertThat(redisTemplate.keys("auth:*")).isEmpty();
+    }
+
+    @Test
+    void cancelKeepsNewerIssueForSameEmail() {
+        // 지우기 전에 같은 이메일로 다시 발급됐다면, 새 발급은 남긴다
+        String oldToken = store.issue(KIM);
+        String newToken = store.issue(KIM);
+
+        store.cancel(oldToken, KIM.email());
+
+        // 이메일 키도 새 발급을 가리켜야 다음 재발급 때 새 링크를 무효로 만들 수 있다
+        assertThat(redisTemplate.opsForValue().get("auth:pending:kim@gmail.com"))
+                .isEqualTo(newToken);
+        assertThat(store.consume(newToken)).isEqualTo(KIM);
+    }
 }

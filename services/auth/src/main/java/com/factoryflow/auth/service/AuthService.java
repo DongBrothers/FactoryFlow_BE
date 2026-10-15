@@ -47,7 +47,13 @@ public class AuthService {
         }
         PendingAccount pending = new PendingAccount(email, request.name(), request.role());
         String token = activationTokenStore.issue(pending);
-        notifier.sendActivationLink(email, token);
+        try {
+            notifier.sendActivationLink(pending, token);
+        } catch (CustomException e) {
+            // 메일을 못 보내면 이번 발급을 남기지 않는다. 관리자가 다시 발급하면 된다
+            activationTokenStore.cancel(token, email);
+            throw e;
+        }
         return IssueAccountResponse.from(pending);
     }
 
