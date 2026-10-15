@@ -52,4 +52,19 @@ class UserHeaderFilterTest extends GatewayTestSupport {
         assertThat(BACKEND.lastPath()).isEqualTo("/auth/login");
         assertThat(BACKEND.lastUserHeaders()).isEmpty();
     }
+
+    /** 만료된 Access 토큰을 붙인 재발급도 auth 까지 가고, 검증되지 않은 토큰이라 X-User-Id 는 붙지 않는다 (#63). */
+    @Test
+    void expiredTokenOnPublicPathReachesBackendWithoutUserId() {
+        client.post()
+                .uri("/api/auth/token/refresh")
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
+                .header("X-User-Id", "forged-user")
+                .exchange()
+                .expectStatus()
+                .isOk();
+
+        assertThat(BACKEND.lastPath()).isEqualTo("/auth/token/refresh");
+        assertThat(BACKEND.lastUserHeaders()).isEmpty();
+    }
 }
