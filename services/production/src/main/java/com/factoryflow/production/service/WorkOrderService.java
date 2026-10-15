@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -80,21 +81,13 @@ public class WorkOrderService {
     @Transactional
     public WorkOrderDetailResponse startStep(
             Long workOrderId, ProductionProcess process, String equipmentCode) {
-        WorkOrder workOrder = findOpenWorkOrder(workOrderId);
-        List<WorkOrderStep> steps = findSteps(workOrderId);
-        WorkOrderStep step = stepOf(steps, process);
-        requireStartable(steps, step);
-        Equipment equipment = findEquipment(equipmentCode);
-        requireUsable(equipment, process);
-        LocalDateTime now = LocalDateTime.now();
-        step.start(equipmentCode, now);
-        equipment.occupy(step.getId());
-        workOrder.recordStepChange(now);
-        if (workOrder.start(now)) {
-            productionService.startProduction(workOrder.getProductionId());
-        }
-        flushOrConflict(workOrderId);
-        return detail(workOrder, steps);
+        WorkOrder workOrder =
+                beginStep(
+                        workOrderId,
+                        process,
+                        equipmentCode,
+                        (step, now) -> step.start(equipmentCode, now));
+        return detail(workOrder, findSteps(workOrderId));
     }
 
     /** 로봇 공정에서 배정을 받을 수 있는 설비: RUNNING 이고 맡은 공정이 없는 설비, 코드 순서. */
@@ -122,6 +115,19 @@ public class WorkOrderService {
      */
     @Transactional
     public void dispatch(Long workOrderId, ProductionProcess process, String equipmentCode) {
+        beginStep(workOrderId, process, equipmentCode, (step, now) -> step.dispatch(equipmentCode));
+        eventPublisher.publish(new StepDispatched(workOrderId, process, equipmentCode));
+    }
+
+    /**
+     * 공정 시작(작업자)과 배정(스케줄러)의 공통: 작업지시·순서·설비를 확인하고, 공정을 바꾸고(begin: 시작 또는 배정), 설비를 점유하고, 작업지시의 첫 시작이면
+     * 생산 건도 시작한 뒤 저장한다. 두 경로가 같은 규칙을 쓰게 하려고 한곳에 둔다.
+     */
+    private WorkOrder beginStep(
+            Long workOrderId,
+            ProductionProcess process,
+            String equipmentCode,
+            BiConsumer<WorkOrderStep, LocalDateTime> begin) {
         WorkOrder workOrder = findOpenWorkOrder(workOrderId);
         List<WorkOrderStep> steps = findSteps(workOrderId);
         WorkOrderStep step = stepOf(steps, process);
@@ -129,14 +135,14 @@ public class WorkOrderService {
         Equipment equipment = findEquipment(equipmentCode);
         requireUsable(equipment, process);
         LocalDateTime now = LocalDateTime.now();
-        step.dispatch(equipmentCode);
+        begin.accept(step, now);
         equipment.occupy(step.getId());
         workOrder.recordStepChange(now);
         if (workOrder.start(now)) {
             productionService.startProduction(workOrder.getProductionId());
         }
         flushOrConflict(workOrderId);
-        eventPublisher.publish(new StepDispatched(workOrderId, process, equipmentCode));
+        return workOrder;
     }
 
     /** 설비의 시작 보고: 그 설비에 배정된(DISPATCHED) 공정이면 IN_PROGRESS. 아니면 무시한다. */
