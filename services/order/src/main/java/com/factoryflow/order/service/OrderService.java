@@ -25,7 +25,7 @@ public class OrderService {
      * 제품을 확인한 뒤 주문을 저장하고 주문 번호를 담은 응답을 돌려준다. production 조회는 트랜잭션 밖에서 해서 외부 호출 동안 DB 커넥션을 잡지 않고, 저장은
      * OrderWriter 가 한 트랜잭션으로 한다.
      */
-    public CreateOrderResponse create(Long customerId, CreateOrderRequest request) {
+    public CreateOrderResponse create(CreateOrderRequest request) {
         List<Long> productIds =
                 request.items().stream().map(CreateOrderItemRequest::productId).toList();
         Map<Long, ProductResponse> products =
@@ -40,6 +40,6 @@ public class OrderService {
                 throw new CustomException(OrderErrorCode.BOM_NOT_FOUND);
             }
         }
-        return orderWriter.save(customerId, request, products);
+        return orderWriter.save(request, products);
     }
 }

@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** 주문 생성 (docs/specs/order-create.md). 실제 MySQL 을 쓰고, production 호출(client)만 대신한다. */
 @SpringBootTest
@@ -39,6 +41,7 @@ class OrderCreateTest {
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ObjectMapper objectMapper;
     @MockitoBean ProductClient productClient;
 
     MockMvc mockMvc;
@@ -135,8 +138,26 @@ class OrderCreateTest {
     }
 
     @Test
-    void missingCustomerHeaderIs400() throws Exception {
+    void missingCustomerIdIs400() throws Exception {
         postOrder(null, TWO_PRODUCTS).andExpect(status().isBadRequest());
+        assertRejectedBeforeLookup();
+    }
+
+    @Test
+    void nonPositiveCustomerIdIs400() throws Exception {
+        postOrder("0", TWO_PRODUCTS).andExpect(status().isBadRequest());
+        assertRejectedBeforeLookup();
+    }
+
+    @Test
+    void loggedInEmployeeHeaderIsNotTakenAsTheCustomer() throws Exception {
+        // 예전에는 고객 번호를 X-User-Id 로 받았다. 그 헤더는 로그인한 직원의 public_id 라 고객 번호가 아니다
+        mockMvc.perform(
+                        post("/orders")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .header("X-User-Id", "7")
+                                .content(TWO_PRODUCTS))
+                .andExpect(status().isBadRequest());
         assertRejectedBeforeLookup();
     }
 
@@ -184,8 +205,9 @@ class OrderCreateTest {
                 .andExpect(jsonPath("$.paths['/orders'].post.responses['500']").doesNotExist())
                 .andExpect(
                         jsonPath(
-                                        "$.paths['/orders'].post.parameters[?(@.name == 'X-User-Id')].description")
-                                .value("로그인한 고객 번호 (gateway 가 넣음)"))
+                                        "$.components.schemas.CreateOrderRequest.properties.customerId.description")
+                                .value("주문하는 고객 번호"))
+                .andExpect(jsonPath("$.paths['/orders'].post.parameters").doesNotExist())
                 .andExpect(
                         jsonPath(
                                         "$.components.schemas.CreateOrderItemRequest.properties.qty.description")
@@ -200,12 +222,16 @@ class OrderCreateTest {
         when(productClient.findProducts(anyList())).thenReturn(List.of(products));
     }
 
+    /** body 는 items 만 담은 JSON 객체. customerId 가 있으면 본문에 넣는다 (null 이면 넣지 않음). */
     private ResultActions postOrder(String customerId, String body) throws Exception {
-        var request = post("/orders").contentType(MediaType.APPLICATION_JSON).content(body);
+        ObjectNode content = (ObjectNode) objectMapper.readTree(body);
         if (customerId != null) {
-            request.header("X-User-Id", customerId);
+            content.put("customerId", Long.parseLong(customerId));
         }
-        return mockMvc.perform(request);
+        return mockMvc.perform(
+                post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(content)));
     }
 
     private void assertNothingSaved() {

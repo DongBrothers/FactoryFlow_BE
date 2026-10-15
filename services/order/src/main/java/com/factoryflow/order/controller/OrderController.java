@@ -5,7 +5,6 @@ import com.factoryflow.order.dto.request.CreateOrderRequest;
 import com.factoryflow.order.dto.response.CreateOrderResponse;
 import com.factoryflow.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -13,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,7 +35,7 @@ public class OrderController {
                 description = "주문 생성됨. 주문 번호를 돌려준다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "요청 형식 오류 (X-User-Id 없음, 품목 없음, 수량 1 미만, 같은 제품 중복)"),
+                description = "요청 형식 오류 (고객 번호 없음·1 미만, 품목 없음, 수량 1 미만, 같은 제품 중복)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "없는 제품 (PRODUCT_NOT_FOUND) 또는 BOM 없는 제품 (BOM_NOT_FOUND)"),
@@ -47,12 +45,8 @@ public class OrderController {
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<CreateOrderResponse> create(
-            @Parameter(description = "로그인한 고객 번호 (gateway 가 넣음)", example = "7")
-                    @RequestHeader("X-User-Id")
-                    Long customerId,
-            @Valid @RequestBody CreateOrderRequest request) {
-        CreateOrderResponse response = orderService.create(customerId, request);
+    public ApiResponse<CreateOrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
+        CreateOrderResponse response = orderService.create(request);
         return ApiResponse.created(response);
     }
 }

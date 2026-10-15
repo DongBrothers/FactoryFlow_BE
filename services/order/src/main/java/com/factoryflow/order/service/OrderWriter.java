@@ -28,8 +28,8 @@ public class OrderWriter {
 
     @Transactional
     public CreateOrderResponse save(
-            Long customerId, CreateOrderRequest request, Map<Long, ProductResponse> products) {
-        CustomerOrder order = orderRepository.save(CustomerOrder.receive(customerId));
+            CreateOrderRequest request, Map<Long, ProductResponse> products) {
+        CustomerOrder order = orderRepository.save(CustomerOrder.receive(request.customerId()));
         List<OrderItem> items =
                 request.items().stream()
                         .map(item -> toOrderItem(order, item, products.get(item.productId())))
