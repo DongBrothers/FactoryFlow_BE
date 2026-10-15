@@ -28,7 +28,7 @@ class CorsTest extends GatewayTestSupport {
 
     @Test
     void preflightFromOtherOriginIsRejected() {
-        preflight("https://evil.example").expectStatus().isForbidden();
+        preflight("https://evil.example").expectStatus().isForbidden().expectBody().isEmpty();
 
         assertThat(BACKEND.lastPath()).isNull();
     }
