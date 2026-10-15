@@ -142,6 +142,13 @@ public final class FactoryFlowRules {
     private static final String PARAMETER = "io.swagger.v3.oas.annotations.Parameter";
     private static final String SCHEMA = "io.swagger.v3.oas.annotations.media.Schema";
     private static final String DOMAIN_EVENT = "com.factoryflow.common.event.DomainEvent";
+    private static final String EVENT_ENVELOPE = "com.factoryflow.common.event.EventEnvelope";
+    private static final String EVENT_PUBLISHER = "com.factoryflow.common.event.EventPublisher";
+    private static final String PROCESSED_EVENT_GUARD =
+            "com.factoryflow.common.event.ProcessedEventGuard";
+    private static final String RABBIT_LISTENER =
+            "org.springframework.amqp.rabbit.annotation.RabbitListener";
+    private static final String ENTITY = "jakarta.persistence.Entity";
     private static final String ERROR_CODE =
             "com.factoryflow.common.web.exception.errorcode.ErrorCode";
     private static final Pattern DISABLING_ANNOTATION =
@@ -785,6 +792,105 @@ public final class FactoryFlowRules {
                     .because(
                             "service 호출 결과를 ApiResponse.ok(...) 같은 다른 호출 안에 바로 넣지 않는다."
                                     + " 지역 변수에 먼저 담는다");
+
+    // ---- 이벤트 수신, 발행 ----
+
+    public static final ArchRule LISTENER_USES_GUARD =
+            methods()
+                    .that()
+                    .areAnnotatedWith(RABBIT_LISTENER)
+                    .should()
+                    .beDeclaredInClassesThat()
+                    .haveSimpleNameEndingWith("EventListener")
+                    .andShould()
+                    .haveRawParameterTypes(EVENT_ENVELOPE)
+                    .andShould(
+                            check(
+                                    "call ProcessedEventGuard.runOnce(EventEnvelope, Runnable)",
+                                    (JavaMethod m) ->
+                                            m.getMethodCallsFromSelf().stream()
+                                                    .anyMatch(
+                                                            call ->
+                                                                    call.getTargetOwner()
+                                                                                    .getName()
+                                                                                    .equals(
+                                                                                            PROCESSED_EVENT_GUARD)
+                                                                            && call.getName()
+                                                                                    .equals(
+                                                                                            "runOnce")
+                                                                            && call.getTarget()
+                                                                                    .getRawParameterTypes()
+                                                                                    .get(0)
+                                                                                    .getName()
+                                                                                    .equals(
+                                                                                            EVENT_ENVELOPE)),
+                                    JavaMethod::getFullName))
+                    .because(
+                            "수신은 {발행 서비스}EventListener 가 EventEnvelope 를 받아"
+                                    + " ProcessedEventGuard.runOnce(envelope, …) 로 중복을 거르고 traceId 를 이어 받는다");
+
+    public static final ArchRule PUBLISH_FROM_SERVICE =
+            noClasses()
+                    .that(describe("belong to a service", c -> serviceOf(c) != null))
+                    .and()
+                    .resideOutsideOfPackage("..service..")
+                    .should()
+                    .callMethodWhere(
+                            describe(
+                                    "the target is EventPublisher.publish",
+                                    (JavaMethodCall call) ->
+                                            call.getTargetOwner().getName().equals(EVENT_PUBLISHER)
+                                                    && call.getName().equals("publish")))
+                    .because("이벤트 발행은 저장과 같은 트랜잭션에서 하도록 service 에서만 한다");
+
+    // ---- 엔티티 ----
+
+    public static final ArchRule ENTITY_NO_SETTERS =
+            noMethods()
+                    .that()
+                    .areDeclaredInClassesThat()
+                    .areAnnotatedWith(ENTITY)
+                    .and()
+                    .arePublic()
+                    .should()
+                    .haveNameMatching("set[A-Z].*")
+                    .because(
+                            "엔티티 상태는 setter 가 아니라 의미 있는 메서드(markReady 등)로 바꾼다 (@Setter, @Data 금지)");
+
+    public static final ArchRule ENTITY_NO_PUBLIC_CONSTRUCTOR =
+            constructors()
+                    .that()
+                    .areDeclaredInClassesThat()
+                    .areAnnotatedWith(ENTITY)
+                    .should()
+                    .notBePublic()
+                    .because("엔티티는 정적 팩토리(plan, create 등)로만 만든다");
+
+    // ---- 조회 ----
+
+    public static final ArchRule FINDS_IN_PRIVATE_METHODS =
+            methods()
+                    .that()
+                    .areDeclaredInClassesThat()
+                    .resideInAPackage("..service..")
+                    .and()
+                    .arePublic()
+                    .should(
+                            check(
+                                    "not call a Repository find method directly",
+                                    (JavaMethod m) ->
+                                            m.getMethodCallsFromSelf().stream()
+                                                    .noneMatch(
+                                                            call ->
+                                                                    call.getTargetOwner()
+                                                                                    .getSimpleName()
+                                                                                    .endsWith(
+                                                                                            "Repository")
+                                                                            && call.getName()
+                                                                                    .startsWith(
+                                                                                            "find")),
+                                    JavaMethod::getFullName))
+                    .because("레포지토리 조회는 무엇을 돌려주는지 이름을 붙인 private 메서드로 뺀다");
 
     // ---- 메서드 길이 ----
 

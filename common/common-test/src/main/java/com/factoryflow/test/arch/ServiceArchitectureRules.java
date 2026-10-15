@@ -60,6 +60,14 @@ public final class ServiceArchitectureRules {
     @ArchTest static final ArchRule responseNaming = FactoryFlowRules.RESPONSE_NAMING;
     @ArchTest static final ArchRule nested = FactoryFlowRules.NO_NESTED_CLASSES;
     @ArchTest static final ArchRule methodLength = FactoryFlowRules.METHOD_LENGTH;
+    @ArchTest static final ArchRule listenerGuard = FactoryFlowRules.LISTENER_USES_GUARD;
+    @ArchTest static final ArchRule publishFromService = FactoryFlowRules.PUBLISH_FROM_SERVICE;
+    @ArchTest static final ArchRule entitySetters = FactoryFlowRules.ENTITY_NO_SETTERS;
+
+    @ArchTest
+    static final ArchRule entityConstructors = FactoryFlowRules.ENTITY_NO_PUBLIC_CONSTRUCTOR;
+
+    @ArchTest static final ArchRule findsInPrivate = FactoryFlowRules.FINDS_IN_PRIVATE_METHODS;
     @ArchTest static final ArchRule responseFactory = FactoryFlowRules.RESPONSE_STATIC_FACTORY;
     @ArchTest static final ArchRule responseNew = FactoryFlowRules.NO_RESPONSE_CONSTRUCTOR_OUTSIDE;
 
