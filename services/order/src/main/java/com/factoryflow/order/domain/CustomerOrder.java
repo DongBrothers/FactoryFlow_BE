@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.Collection;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -42,6 +43,11 @@ public class CustomerOrder extends BaseEntity {
         this.orderNo = orderNo;
         this.customerId = customerId;
         this.status = status;
+    }
+
+    /** 품목 상태로 주문 상태를 다시 계산한다. 품목 상태를 바꾼 트랜잭션에서 함께 부른다. */
+    public void refreshStatus(Collection<OrderStatus> itemStatuses) {
+        this.status = OrderStatus.summarize(itemStatuses);
     }
 
     public static CustomerOrder receive(Long customerId) {
