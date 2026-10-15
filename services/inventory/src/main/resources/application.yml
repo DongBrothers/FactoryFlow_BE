@@ -27,8 +27,3 @@ management:
     web:
       exposure:
         include: health
-
-# 로그 줄마다 traceId (TraceIdFilter·이벤트 수신이 MDC 에 넣는다, docs/specs/saga-order-fulfillment.md "추적")
-logging:
-  pattern:
-    correlation: "[%X{traceId:-}] "
