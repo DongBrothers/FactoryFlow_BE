@@ -37,7 +37,7 @@ public class OrderController {
                 description = "주문 생성됨. 주문 번호를 돌려준다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "요청 형식 오류 (X-User-Id 없음, 품목 없음, 수량 1 미만, 같은 제품 중복)"),
+                description = "요청 형식 오류 (X-Customer-Id 없음, 품목 없음, 수량 1 미만, 같은 제품 중복)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "없는 제품 (PRODUCT_NOT_FOUND) 또는 BOM 없는 제품 (BOM_NOT_FOUND)"),
@@ -48,8 +48,7 @@ public class OrderController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<CreateOrderResponse> create(
-            @Parameter(description = "로그인한 고객 번호 (gateway 가 넣음)", example = "7")
-                    @RequestHeader("X-User-Id")
+            @Parameter(description = "주문하는 고객 번호", example = "7") @RequestHeader("X-Customer-Id")
                     Long customerId,
             @Valid @RequestBody CreateOrderRequest request) {
         CreateOrderResponse response = orderService.create(customerId, request);

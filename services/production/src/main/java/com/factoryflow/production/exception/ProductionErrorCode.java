@@ -9,7 +9,16 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ProductionErrorCode implements ErrorCode {
     PRODUCTION_NOT_FOUND(HttpStatus.NOT_FOUND, "생산 건을 찾을 수 없습니다."),
-    INVALID_ORDER_QTY(HttpStatus.BAD_REQUEST, "주문 수량은 1 이상이어야 합니다.");
+    INVALID_ORDER_QTY(HttpStatus.BAD_REQUEST, "주문 수량은 1 이상이어야 합니다."),
+    WORK_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "작업지시를 찾을 수 없습니다."),
+    EQUIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "설비를 찾을 수 없습니다."),
+    WORK_ORDER_CLOSED(HttpStatus.CONFLICT, "취소되었거나 실패한 작업지시입니다."),
+    STEP_OUT_OF_ORDER(HttpStatus.CONFLICT, "앞 공정이 끝나지 않았습니다."),
+    INVALID_STEP_STATUS(HttpStatus.CONFLICT, "지금 공정 상태에서는 할 수 없는 작업입니다."),
+    EQUIPMENT_PROCESS_MISMATCH(HttpStatus.CONFLICT, "이 공정의 설비가 아닙니다."),
+    EQUIPMENT_NOT_RUNNING(HttpStatus.CONFLICT, "설비가 가동 중이 아닙니다."),
+    EQUIPMENT_BUSY(HttpStatus.CONFLICT, "설비가 다른 차를 작업 중입니다."),
+    PRODUCTION_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요.");
 
     private final HttpStatus httpStatus;
     private final String message;
