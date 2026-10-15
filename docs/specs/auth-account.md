@@ -168,6 +168,32 @@
   아니든 auth 까지 전달한다. 프론트는 보통 모든 요청에 Access 토큰을 붙이는데, 검증하면 만료된 토큰 때문에 재발급이
   401 로 막힌다 (#63). 이 경로들은 `X-User-Id` 도 붙지 않는다
 
+### gateway 오류 응답
+
+서비스는 모든 오류를 공통 형식 `{"code": "...", "message": "..."}` 로 돌려준다 (common-web `ErrorResponse`).
+gateway 가 직접 만드는 오류도 같은 형식으로 맞춘다 (#66). 상태 코드는 바꾸지 않는다 (아래 연결 실패만 예외).
+gateway 는 WebFlux 라 common-web 을 쓰지 않고 같은 형식을 따로 만든다.
+
+- `code` 는 상태 코드 이름 그대로 (예: 401 → `UNAUTHORIZED`, 404 → `NOT_FOUND`, 504 → `GATEWAY_TIMEOUT`).
+  서비스 공통 처리기의 `NOT_FOUND`, `INTERNAL_SERVER_ERROR` 와 같은 방식이다
+- `message` 는 상태별 고정 문구. `NOT_FOUND`, `INTERNAL_SERVER_ERROR` 는 서비스 공통 처리기와 같은 문구를 쓴다
+
+  | 상태 | code | message |
+  |---|---|---|
+  | 401 | `UNAUTHORIZED` | 로그인이 필요합니다. |
+  | 403 | `FORBIDDEN` | 권한이 없습니다. |
+  | 404 | `NOT_FOUND` | 요청한 리소스를 찾을 수 없습니다. |
+  | 500 | `INTERNAL_SERVER_ERROR` | 서버 내부 오류가 발생했습니다. |
+  | 503 | `SERVICE_UNAVAILABLE` | 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요. |
+  | 504 | `GATEWAY_TIMEOUT` | 서비스 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요. |
+  | 그 밖의 상태 | 상태 이름 | 요청을 처리할 수 없습니다. |
+- 401 의 `WWW-Authenticate: Bearer ...` 헤더는 그대로 둔다 (RFC 6750)
+- **예외: 뒤 서비스 연결 실패는 503**. gateway 기본값은 500 인데, 서비스가 꺼진 것을 "gateway 내부 오류" 로 보여 의미가 틀려서
+  503 `SERVICE_UNAVAILABLE` 로 바꾼다 (client 규칙의 `{상대 서비스}_UNAVAILABLE` 503 과 같은 뜻)
+- **서비스가 낸 오류는 바꾸지 않는다**: auth 의 `AUTH-006` 같은 응답은 상태·본문 그대로 전달한다
+- **CORS 거부(403)는 본문 없이 둔다**: 브라우저가 CORS 거부 응답의 본문을 프론트에 넘기지 않아 형식이 의미가 없다
+- 오류 본문에 요청 경로, 예외 메시지, 스택 같은 내부 정보를 넣지 않는다
+
 ## 관련 이벤트 (events.md 참조)
 
 - 없음. auth 는 이벤트를 발행·수신하지 않는다.
@@ -193,6 +219,9 @@
     dev 에서 모든 auth API 가 404 였다. 다른 서비스(order `/orders`)처럼 `/api` 없이 받는다 (2026-10-14).
 12. **공개 경로는 토큰을 검증하지 않음**: Spring Security 는 Bearer 토큰이 있으면 `permitAll` 보다 먼저 검증해 401 을
     낸다. 공개 경로에서는 토큰을 읽지 않게 해서, 만료된 Access 토큰이 붙은 재발급도 auth 에 닿게 한다 (2026-10-15, #63).
+13. **gateway 오류도 공통 형식**: 프론트가 오류를 `code` 하나로 구분하게 한다. 상태 코드는 그대로 두고, `code` 는 상태
+    이름을 그대로 써서 새 이름을 만들지 않는다. 단 뒤 서비스 연결 실패는 기본값 500 이 "내부 오류" 로 보여 틀리므로 503 으로 바꾼다
+    (2026-10-15, #66).
 
 ## 다른 서비스에 필요한 후속 변경 (auth 범위 밖, 추후 상의 필요)
 
@@ -235,6 +264,7 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] Refresh 재발급 시 새 쌍 발급 + 옛 Refresh 무효(회전), 로그아웃 시 Refresh 무효
 - [ ] 공개키로 Access 서명 검증 성공
 - [ ] gateway 에서 ADMIN 이 아닌 JWT 로 admin API 를 부르면 403, 토큰이 없으면 401
+- [ ] gateway 가 직접 만든 오류(401·403·404·5xx)의 본문이 `{"code","message"}` 이고 상태 코드는 그대로, 서비스가 낸 오류는 그대로 전달된다
 - [ ] 비번은 해시로 저장되고, 비번·토큰·이메일이 로그에 남지 않는다
 - [ ] `user_account` 에 `employee_no` 컬럼이 없고, `email` 은 UNIQUE, `password` 는 NOT NULL
 - [ ] `/v3/api-docs` 에 5개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 `/internal/jwks` 내부 API 로 나온다

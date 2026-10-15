@@ -1,6 +1,9 @@
 package com.factoryflow.gateway.config;
 
 import com.factoryflow.test.container.TestContainersConfig;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.ServerSocket;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,10 +29,14 @@ abstract class GatewayTestSupport {
 
     @Autowired WebTestClient client;
 
+    /** 아무도 듣지 않는 포트. 이 포트로 가는 라우트(down)는 뒤 서비스 연결 실패를 만든다. */
+    static final int CLOSED_PORT = closedPort();
+
     @DynamicPropertySource
     static void routes(DynamicPropertyRegistry registry) {
-        route(registry, 0, "orders");
-        route(registry, 1, "auth");
+        route(registry, 0, "orders", BACKEND.url());
+        route(registry, 1, "auth", BACKEND.url());
+        route(registry, 2, "down", "http://localhost:" + CLOSED_PORT);
     }
 
     @BeforeEach
@@ -37,11 +44,20 @@ abstract class GatewayTestSupport {
         BACKEND.reset();
     }
 
-    private static void route(DynamicPropertyRegistry registry, int index, String service) {
+    private static void route(
+            DynamicPropertyRegistry registry, int index, String service, String uri) {
         String prefix = "spring.cloud.gateway.server.webflux.routes[" + index + "].";
         registry.add(prefix + "id", () -> service);
-        registry.add(prefix + "uri", BACKEND::url);
+        registry.add(prefix + "uri", () -> uri);
         registry.add(prefix + "predicates[0]", () -> "Path=/api/" + service + "/**");
         registry.add(prefix + "filters[0]", () -> "StripPrefix=1");
+    }
+
+    private static int closedPort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

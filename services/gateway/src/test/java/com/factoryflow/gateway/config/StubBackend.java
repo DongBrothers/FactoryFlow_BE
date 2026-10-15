@@ -5,14 +5,17 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
  * gateway 뒤 서비스 대신 요청을 받는 HTTP 서버 (JDK HttpServer). 마지막으로 받은 요청의 경로와 X-User-* 헤더를 기록하고 200 을 돌려준다.
- * gateway 가 라우트로 실제로 넘긴 것을 확인하려고 쓴다.
+ * gateway 가 라우트로 실제로 넘긴 것을 확인하려고 쓴다. 경로가 /error 로 끝나면 서비스 오류(409)를 돌려준다.
  */
 final class StubBackend {
+
+    static final String SERVICE_ERROR_BODY = "{\"code\":\"ORDER-001\",\"message\":\"서비스가 낸 오류\"}";
 
     private final HttpServer server;
     private volatile String lastPath;
@@ -65,7 +68,20 @@ final class StubBackend {
         lastUserHeaders = userHeaders;
         lastPath = exchange.getRequestURI().getPath();
         exchange.getRequestBody().readAllBytes();
+        if (lastPath.endsWith("/error")) {
+            sendServiceError(exchange);
+            return;
+        }
         exchange.sendResponseHeaders(200, -1);
+        exchange.close();
+    }
+
+    /** 경로가 /error 로 끝나면 서비스가 낸 오류처럼 409 와 서비스 오류 본문을 돌려준다. */
+    private static void sendServiceError(HttpExchange exchange) throws IOException {
+        byte[] body = SERVICE_ERROR_BODY.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(409, body.length);
+        exchange.getResponseBody().write(body);
         exchange.close();
     }
 }
