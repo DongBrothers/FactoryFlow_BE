@@ -36,7 +36,7 @@ order 가 생산 건 상태 변화를 받아 주문 품목(order_item) 상태를
 | 품목이 COMPLETED 또는 CANCELLED (끝난 상태) | 바꾸지 않고 INFO 로그 (늦게 온 이벤트) |
 | 품목이 CANCEL_REQUESTED (취소 결과 대기) | CANCELLED 만 반영하고, 그 외 상태는 무시한다 (취소 결과는 cancelled / cancel-rejected 로 정해진다) |
 | 매핑 결과가 지금 품목 상태와 같음 (예: READY → IN_PROGRESS 둘 다 IN_PRODUCTION) | 바꾸지 않는다. 요약도 그대로 |
-| 없는 주문 품목 (orderId, productId) 또는 모르는 status 값 | 처리 중 오류 (`ORDER_ITEM_NOT_FOUND`, `UNKNOWN_PRODUCTION_STATUS`). 재시도 후 DLQ. 정상 흐름에서는 생기지 않는다 |
+| 없는 주문 품목 (orderId, productId), 품목의 주문이 없음, 모르는 status 값 | 처리 중 오류 (`ORDER_ITEM_NOT_FOUND`, `ORDER_NOT_FOUND`, `UNKNOWN_PRODUCTION_STATUS`). 재시도 후 DLQ. 정상 흐름에서는 생기지 않는다 |
 | 처리 중 오류 | 트랜잭션 롤백, 1s·2s·4s 로 3번 재시도, 그래도 실패하면 `EVENT_DEAD_LETTERED` 로그 후 `order.production-status-changed.dlq` |
 
 - order 는 이 처리에서 이벤트를 발행하지 않는다
