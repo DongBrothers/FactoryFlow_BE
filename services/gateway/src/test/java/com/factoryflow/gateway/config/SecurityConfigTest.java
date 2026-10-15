@@ -1,6 +1,8 @@
 package com.factoryflow.gateway.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
@@ -35,6 +37,37 @@ class SecurityConfigTest {
     @Test
     void loginIsPublic() {
         client.post().uri("/api/auth/login").exchange().expectStatus().isNotFound();
+    }
+
+    /**
+     * 공개 경로는 토큰을 검증하지 않는다. 프론트가 만료된 Access 토큰을 붙인 채 재발급·로그아웃을 불러도 auth 까지 가야 한다 (#63). 라우트가 없으므로
+     * 통과하면 404 다.
+     */
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "/api/auth/login",
+                "/api/auth/activation",
+                "/api/auth/token/refresh",
+                "/api/auth/logout"
+            })
+    void publicPathIgnoresExpiredToken(String path) {
+        client.post()
+                .uri(path)
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+    }
+
+    @Test
+    void protectedPathRejectsExpiredToken() {
+        client.get()
+                .uri("/api/orders/1")
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
+                .exchange()
+                .expectStatus()
+                .isUnauthorized();
     }
 
     /** CORS 허용 origin 의 기본값은 비어 있다. 환경별 설정 없이는 어떤 origin 의 preflight 도 403 이다. */
