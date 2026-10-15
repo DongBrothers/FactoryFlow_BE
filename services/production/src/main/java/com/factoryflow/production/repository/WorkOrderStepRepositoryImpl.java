@@ -12,6 +12,7 @@ import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 
@@ -22,7 +23,10 @@ public class WorkOrderStepRepositoryImpl implements WorkOrderStepRepositoryCusto
 
     @Override
     public List<Long> findDispatchableWorkOrderIds(
-            ProductionProcess process, LocalDateTime releasedBefore, int limit) {
+            ProductionProcess process,
+            LocalDateTime releasedBefore,
+            Collection<Long> excludedIds,
+            int limit) {
         BooleanBuilder where =
                 new BooleanBuilder()
                         .and(workOrderStep.process.eq(process))
@@ -35,6 +39,9 @@ public class WorkOrderStepRepositoryImpl implements WorkOrderStepRepositoryCusto
         }
         if (releasedBefore != null) {
             where.and(workOrder.releasedAt.loe(releasedBefore));
+        }
+        if (!excludedIds.isEmpty()) {
+            where.and(workOrderStep.workOrderId.notIn(excludedIds));
         }
         return queryFactory
                 .select(workOrderStep.workOrderId)

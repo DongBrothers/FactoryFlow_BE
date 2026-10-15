@@ -49,7 +49,7 @@
    - PRESS 는 발행 후 `factoryflow.line.press-hold`(기본 1분)가 지난 작업지시만 고른다 (취소할 틈)
    - 다 읽지 않고 필요한 개수만 DB 에서 고른다
 3. 한 차씩 따로 트랜잭션으로 배정한다: 공정 DISPATCHED(설비 기록) + `production.step-dispatched { workOrderId, process, equipmentCode }`. 작업지시의 첫 시작이면 작업지시·생산 건 IN_PROGRESS + status-changed (취소 불가)
-   - 배정하려는 순간 상태가 바뀌었으면(작업자가 먼저 시작 등) 그 차는 건너뛴다. 다음 주기에 다시 본다
+   - 배정하려는 순간 상태가 바뀌었으면(작업자가 먼저 시작 등) 그 차는 이번 주기에서 빼고 다음 후보로 그 설비를 채운다. 설비 쪽 이유(정지, 다른 차가 먼저 잡음)면 그 설비만 뺀다. 계속 실패하는 차가 뒤의 차를 막지 않는다. 뺀 차는 다음 주기에 다시 본다
 
 **설비 보고** (simulator → production, ProcessedEventGuard)
 | 받은 이벤트 | 조건 | 처리 |

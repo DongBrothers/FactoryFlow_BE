@@ -96,6 +96,24 @@ class LineDispatchTest {
     }
 
     @Test
+    void aCarThatKeepsFailingDoesNotBlockTheCarsBehindIt() {
+        // 맨 앞 차는 생산 건이 취소됐는데 작업지시만 남아 배정할 때마다 실패한다 (WORK_ORDER_CLOSED)
+        long broken = releasedWorkOrder(true);
+        jdbc.update(
+                "UPDATE production SET status = 'CANCELLED' WHERE id ="
+                        + " (SELECT production_id FROM work_order WHERE id = ?)",
+                broken);
+        long second = releasedWorkOrder(true);
+        long third = releasedWorkOrder(true);
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(broken, "PRESS")).containsEntry("status", "PENDING");
+        assertThat(step(second, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(step(third, "PRESS")).containsEntry("status", "DISPATCHED");
+    }
+
+    @Test
     void stoppedEquipmentGetsNothing() {
         releasedWorkOrder(true);
         releasedWorkOrder(true);
