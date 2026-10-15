@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** 주문 생성 (docs/specs/order-create.md). 실제 MySQL 을 쓰고, production 호출(client)만 대신한다. */
 @SpringBootTest
@@ -39,6 +41,7 @@ class OrderCreateTest {
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ObjectMapper objectMapper;
     @MockitoBean ProductClient productClient;
 
     MockMvc mockMvc;
@@ -219,14 +222,16 @@ class OrderCreateTest {
         when(productClient.findProducts(anyList())).thenReturn(List.of(products));
     }
 
-    /** body 는 items 만 담은 JSON. customerId 가 있으면 본문에 넣는다. */
+    /** body 는 items 만 담은 JSON 객체. customerId 가 있으면 본문에 넣는다 (null 이면 넣지 않음). */
     private ResultActions postOrder(String customerId, String body) throws Exception {
-        String content =
-                customerId == null
-                        ? body
-                        : "{\"customerId\":" + customerId + "," + body.substring(1);
+        ObjectNode content = (ObjectNode) objectMapper.readTree(body);
+        if (customerId != null) {
+            content.put("customerId", Long.parseLong(customerId));
+        }
         return mockMvc.perform(
-                post("/orders").contentType(MediaType.APPLICATION_JSON).content(content));
+                post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(content)));
     }
 
     private void assertNothingSaved() {
