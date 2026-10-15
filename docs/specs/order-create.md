@@ -5,7 +5,7 @@
 `order.created` 를 발행해 SAGA(docs/specs/saga-order-fulfillment.md)를 시작한다.
 
 ## 흐름
-1. `POST /orders` 를 보낸다. 주문하는 고객 번호는 헤더 `X-Customer-Id` 로 받는다. 로그인한 직원 식별자인 `X-User-Id`(gateway 가 JWT 로 채움)와는 다른 값이다
+1. 고객이 `POST /orders` 를 보낸다. 고객 번호는 gateway 가 로그인 확인 후 헤더 `X-User-Id` 로 넘긴다
    ```json
    { "items": [ { "productId": 1, "qty": 2 }, { "productId": 2, "qty": 1 } ] }
    ```
@@ -27,7 +27,7 @@
 ## 규칙 / 예외
 | 상황 | 응답 | 저장 / 이벤트 |
 |---|---|---|
-| `X-Customer-Id` 헤더 없음 | 400 | 없음 |
+| `X-User-Id` 헤더 없음 | 400 | 없음 |
 | 요청 본문이 JSON 으로 읽히지 않음 (깨진 JSON, 숫자 자리에 문자 등) | 400 | 없음 |
 | items 가 비어 있음 (`@NotEmpty`) | 400 | 없음 |
 | productId 가 없음 (`@NotNull`) | 400 | 없음 |

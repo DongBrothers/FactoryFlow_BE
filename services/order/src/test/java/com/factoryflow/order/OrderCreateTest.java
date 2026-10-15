@@ -184,8 +184,8 @@ class OrderCreateTest {
                 .andExpect(jsonPath("$.paths['/orders'].post.responses['500']").doesNotExist())
                 .andExpect(
                         jsonPath(
-                                        "$.paths['/orders'].post.parameters[?(@.name == 'X-Customer-Id')].description")
-                                .value("주문하는 고객 번호"))
+                                        "$.paths['/orders'].post.parameters[?(@.name == 'X-User-Id')].description")
+                                .value("로그인한 고객 번호 (gateway 가 넣음)"))
                 .andExpect(
                         jsonPath(
                                         "$.components.schemas.CreateOrderItemRequest.properties.qty.description")
@@ -203,7 +203,7 @@ class OrderCreateTest {
     private ResultActions postOrder(String customerId, String body) throws Exception {
         var request = post("/orders").contentType(MediaType.APPLICATION_JSON).content(body);
         if (customerId != null) {
-            request.header("X-Customer-Id", customerId);
+            request.header("X-User-Id", customerId);
         }
         return mockMvc.perform(request);
     }
