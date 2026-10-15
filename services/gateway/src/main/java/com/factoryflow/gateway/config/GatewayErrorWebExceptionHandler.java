@@ -28,9 +28,10 @@ public class GatewayErrorWebExceptionHandler implements ErrorWebExceptionHandler
         HttpStatus status = statusOf(ex);
         if (status.is5xxServerError()) {
             log.error(
-                    "[gateway] {} {}: {}",
+                    "[gateway] {} {} traceId={}: {}",
                     status.value(),
                     exchange.getRequest().getPath(),
+                    exchange.getResponse().getHeaders().getFirst(TraceIdFilter.HEADER),
                     ex.toString());
         }
         return GatewayErrors.write(exchange, status);
