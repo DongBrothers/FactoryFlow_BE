@@ -168,15 +168,13 @@ public class WorkOrderService {
             String defectReason) {
         reportableStep(workOrderId, process, equipmentCode, WorkOrderStep::isInProgress)
                 .ifPresent(
-                        step -> {
-                            LocalDateTime now = LocalDateTime.now();
-                            String reason = result == StepResult.DEFECT ? defectReason : null;
-                            productionResultRepository.save(
-                                    ProductionResult.record(step, result, reason, null, now));
-                            findEquipment(step.getEquipmentCode()).release();
-                            step.finish(result, now);
-                            findWorkOrderById(workOrderId).recordStepChange(now);
-                        });
+                        step ->
+                                finishStep(
+                                        findWorkOrderById(workOrderId),
+                                        step,
+                                        result,
+                                        defectReason,
+                                        null));
     }
 
     /** 설비 보고를 반영할 공정. 작업지시가 없거나 끝났거나, 공정 상태·설비가 맞지 않으면 empty (늦거나 꼬인 보고, 수동 개입). */
@@ -218,6 +216,21 @@ public class WorkOrderService {
         if (!step.isInProgress()) {
             throw invalidStepStatus(step);
         }
+        finishStep(workOrder, step, result, defectReason, workerId);
+        flushOrConflict(workOrderId);
+        return detail(workOrder, steps);
+    }
+
+    /**
+     * 공정 종료(작업자)와 설비 완료 보고의 공통: 실적을 남기고(불량 사유는 DEFECT 일 때만), 설비를 놓고, 공정을 마무리하고(양품 DONE, 불량
+     * PENDING), 작업지시 변경을 기록한다. 두 경로가 같은 완료 규칙을 쓰게 하려고 한곳에 둔다. workerId 는 설비 보고면 null.
+     */
+    private void finishStep(
+            WorkOrder workOrder,
+            WorkOrderStep step,
+            StepResult result,
+            String defectReason,
+            String workerId) {
         LocalDateTime now = LocalDateTime.now();
         String reason = result == StepResult.DEFECT ? defectReason : null;
         productionResultRepository.save(
@@ -225,8 +238,6 @@ public class WorkOrderService {
         findEquipment(step.getEquipmentCode()).release();
         step.finish(result, now);
         workOrder.recordStepChange(now);
-        flushOrConflict(workOrderId);
-        return detail(workOrder, steps);
     }
 
     /** 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이어야 한다. 그래서 한 작업지시에서 진행 중인 공정은 하나뿐이다. */
