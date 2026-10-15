@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -47,6 +48,9 @@ public class Production extends BaseEntity {
     /** 첫 공정(프레스)을 시작한 시각. 이후에는 취소할 수 없다. */
     private LocalDateTime startedAt;
 
+    /** 같은 생산 건을 동시에 바꾸면(프레스 시작 vs 취소 수신 등) 늦은 쪽이 실패한다. */
+    @Version private Long version;
+
     private Production(Long orderId, Long productId, int seq) {
         this.orderId = orderId;
         this.productId = productId;
@@ -73,6 +77,16 @@ public class Production extends BaseEntity {
             return false;
         }
         this.status = ProductionStatus.WAITING_MATERIAL;
+        return true;
+    }
+
+    /** 첫 공정(프레스)을 시작했다. READY 에서만 바뀐다. 이후에는 취소할 수 없다. 바뀌었으면 true. */
+    public boolean start(LocalDateTime now) {
+        if (status != ProductionStatus.READY) {
+            return false;
+        }
+        this.status = ProductionStatus.IN_PROGRESS;
+        this.startedAt = now;
         return true;
     }
 

@@ -2,6 +2,7 @@ package com.factoryflow.production;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.factoryflow.test.db.MigrationTestSupport;
 import java.sql.Connection;
@@ -20,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("3");
+        jdbc = migrateTo("4");
     }
 
     @Test
@@ -105,6 +106,43 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v4AddsTwoRunningEquipmentsPerProcess() {
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT process, COUNT(*) AS n FROM equipment"
+                                        + " WHERE status = 'RUNNING' GROUP BY process"))
+                .extracting(r -> r.get("process"), r -> ((Number) r.get("n")).intValue())
+                .containsExactlyInAnyOrder(
+                        tuple("PRESS", 2),
+                        tuple("BODY", 2),
+                        tuple("PAINT", 2),
+                        tuple("ASSEMBLY", 2),
+                        tuple("INSPECTION", 2));
+    }
+
+    @Test
+    void oneWorkOrderPerProductionAndOneStepPerProcess() {
+        jdbc.update(
+                "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
+                        + " created_at, updated_at) VALUES (700, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO work_order (production_id, order_id, product_id, status,"
+                                                + " released_at, created_at, updated_at)"
+                                                + " VALUES (700, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_work_order_production");
+        long workOrder =
+                jdbc.queryForObject(
+                        "SELECT id FROM work_order WHERE production_id = 700", Long.class);
+        insertStep(workOrder, "PRESS", 1);
+        assertThatThrownBy(() -> insertStep(workOrder, "PRESS", 1))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_work_order_step_process");
+    }
+
+    @Test
     void oneProductionPerVehicleOfOrderProduct() {
         // 생산 건은 차량 1대 (V3): 같은 주문·제품의 차량 번호(seq)는 하나씩만
         insertProduction(10L, 1L, 1);
@@ -153,6 +191,15 @@ class MigrationTest extends MigrationTestSupport {
                         + " VALUES (?, ?, ?, 'PLANNED', NOW(6), NOW(6))",
                 orderId,
                 productId,
+                seq);
+    }
+
+    private void insertStep(long workOrderId, String process, int seq) {
+        jdbc.update(
+                "INSERT INTO work_order_step (work_order_id, process, seq, status, created_at,"
+                        + " updated_at) VALUES (?, ?, ?, 'PENDING', NOW(6), NOW(6))",
+                workOrderId,
+                process,
                 seq);
     }
 

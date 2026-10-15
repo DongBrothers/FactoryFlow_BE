@@ -24,6 +24,9 @@ public class EventQueueConfig {
     public static final String INVENTORY_RESERVED_QUEUE = "production.inventory-reserved";
     public static final String RESERVATION_PENDING_QUEUE =
             "production.inventory-reservation-pending";
+    public static final String EQUIPMENT_STEP_STARTED_QUEUE = "production.equipment-step-started";
+    public static final String EQUIPMENT_STEP_COMPLETED_QUEUE =
+            "production.equipment-step-completed";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -44,6 +47,20 @@ public class EventQueueConfig {
                 factoryFlowEventsExchange,
                 RESERVATION_PENDING_QUEUE,
                 "inventory.reservation-pending");
+    }
+
+    @Bean
+    Declarables equipmentStepStartedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, EQUIPMENT_STEP_STARTED_QUEUE, "equipment.step-started");
+    }
+
+    @Bean
+    Declarables equipmentStepCompletedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange,
+                EQUIPMENT_STEP_COMPLETED_QUEUE,
+                "equipment.step-completed");
     }
 
     // ---- 실패 처리 ----

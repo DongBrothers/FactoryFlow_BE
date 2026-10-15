@@ -5,6 +5,9 @@ import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.production.domain.Bom;
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.domain.Production;
+import com.factoryflow.production.domain.ProductionProcess;
+import com.factoryflow.production.domain.WorkOrder;
+import com.factoryflow.production.domain.WorkOrderStep;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
@@ -14,6 +17,10 @@ import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
+import com.factoryflow.production.repository.WorkOrderRepository;
+import com.factoryflow.production.repository.WorkOrderStepRepository;
+import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +28,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +40,8 @@ public class ProductionService {
     private final ProductionRepository productionRepository;
     private final ProductRepository productRepository;
     private final BomRepository bomRepository;
+    private final WorkOrderRepository workOrderRepository;
+    private final WorkOrderStepRepository workOrderStepRepository;
     private final EventPublisher eventPublisher;
 
     /**
@@ -130,9 +140,9 @@ public class ProductionService {
     }
 
     /**
-     * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY 로 바꾼다. 취소되었거나 실패한 생산 건이면 예약을 풀도록
-     * production.cancelled 를 다시 보낸다. 그 밖의 상태에서 온 결과는 무시한다
-     * (docs/specs/production-reservation-result.md).
+     * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY 로 바꾸고 작업지시 1건과 공정 5개를 발행한다 (생산의
+     * 트리거, docs/specs/production-work-order.md). 취소되었거나 실패한 생산 건이면 예약을 풀도록 production.cancelled 를
+     * 다시 보낸다. 그 밖의 상태에서 온 결과는 무시한다 (docs/specs/production-reservation-result.md).
      */
     @Transactional
     public void markReserved(Long productionId) {
@@ -152,7 +162,53 @@ public class ProductionService {
                     production.getStatus());
             return;
         }
+        releaseWorkOrder(production);
         publishStatusChanged(production);
+    }
+
+    /** 작업지시 1건과 라우팅 순서대로 공정 5개(PENDING)를 만든다. 생산 건당 하나뿐이다. */
+    private void releaseWorkOrder(Production production) {
+        if (workOrderRepository.existsByProductionId(production.getId())) {
+            log.info("작업지시가 이미 있어 건너뜀: productionId={}", production.getId());
+            return;
+        }
+        WorkOrder workOrder =
+                workOrderRepository.save(WorkOrder.release(production, LocalDateTime.now()));
+        workOrderStepRepository.saveAll(
+                Arrays.stream(ProductionProcess.values())
+                        .map(process -> WorkOrderStep.plan(workOrder.getId(), process))
+                        .toList());
+    }
+
+    /**
+     * 첫 공정(프레스)을 시작했다: 생산 건 READY → IN_PROGRESS, order 에 알린다. 이후에는 취소할 수 없다. 작업자의 공정 시작
+     * (WorkOrderService)과 같은 트랜잭션에서 부른다.
+     */
+    @Transactional
+    public void startProduction(Long productionId) {
+        Production production = findProduction(productionId);
+        if (!production.start(LocalDateTime.now())) {
+            log.info(
+                    "READY 가 아니라 생산을 시작할 수 없음: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            throw new CustomException(ProductionErrorCode.WORK_ORDER_CLOSED);
+        }
+        flushOrConflict(productionId);
+        publishStatusChanged(production);
+    }
+
+    /**
+     * 이벤트를 발행하기 전에 저장해 version 을 확인한다. 다른 트랜잭션이 먼저 바꿨으면 PRODUCTION_CONFLICT. (발행의 Outbox INSERT 가
+     * 먼저 flush 를 일으키면 충돌이 번역되지 않은 예외로 나가므로 순서를 지킨다)
+     */
+    private void flushOrConflict(Long productionId) {
+        try {
+            productionRepository.flush();
+        } catch (OptimisticLockingFailureException e) {
+            log.info("다른 작업이 먼저 바꿔 거절: productionId={}", productionId);
+            throw new CustomException(ProductionErrorCode.PRODUCTION_CONFLICT);
+        }
     }
 
     /**

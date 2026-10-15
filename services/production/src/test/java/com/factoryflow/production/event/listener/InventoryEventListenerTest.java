@@ -44,6 +44,9 @@ class InventoryEventListenerTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("DELETE FROM production_result");
+        jdbc.update("DELETE FROM work_order_step");
+        jdbc.update("DELETE FROM work_order");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
@@ -62,6 +65,60 @@ class InventoryEventListenerTest {
         assertThat(number(changed, "$.payload.productionId")).isEqualTo(production);
         assertThat(number(changed, "$.payload.productId")).isEqualTo(1L);
         assertThat(JsonPath.<String>read(changed, "$.payload.status")).isEqualTo("READY");
+    }
+
+    @Test
+    void reservedReleasesOneWorkOrderWithFiveStepsInRoutingOrder() {
+        // 예약 완료가 생산의 트리거다: 작업지시 1건과 공정 5개 (docs/specs/production-work-order.md)
+        long production = insertProduction(42L, 1L, "PLANNED", false);
+
+        listener.onReserved(reserved(production));
+
+        Map<String, Object> workOrder =
+                jdbc.queryForMap(
+                        "SELECT id, order_id, product_id, status FROM work_order WHERE production_id = ?",
+                        production);
+        assertThat(workOrder)
+                .containsEntry("order_id", 42L)
+                .containsEntry("product_id", 1L)
+                .containsEntry("status", "RELEASED");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT process FROM work_order_step WHERE work_order_id = ?"
+                                        + " ORDER BY seq",
+                                String.class,
+                                workOrder.get("id")))
+                .containsExactly("PRESS", "BODY", "PAINT", "ASSEMBLY", "INSPECTION");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT DISTINCT status FROM work_order_step WHERE work_order_id = ?",
+                                String.class,
+                                workOrder.get("id")))
+                .containsExactly("PENDING");
+    }
+
+    @Test
+    void reservedTwiceKeepsOneWorkOrder() {
+        long production = insertProduction(42L, 1L, "PLANNED", false);
+
+        listener.onReserved(reserved(production));
+        listener.onReserved(reserved(production));
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM work_order WHERE production_id = ?",
+                                Integer.class,
+                                production))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void reservationPendingDoesNotReleaseWorkOrder() {
+        long production = insertProduction(42L, 1L, "PLANNED", false);
+
+        listener.onReservationPending(reservationPending(production));
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM work_order", Integer.class)).isZero();
     }
 
     @Test
