@@ -197,6 +197,15 @@ public final class FactoryFlowRules {
             describe(
                     "are DTOs of our own API (not client/)",
                     c -> DTOS.test(c) && !isInClientPackage(c));
+
+    /**
+     * 이름이 Internal 로 시작하는 것은 /internal 아래 내부 API 다 (CONTROLLER_NAMING 이 맞춘다). 프론트가 보지 않아 문서화하지 않는다.
+     */
+    private static final DescribedPredicate<JavaClass> PUBLIC_API_CLASSES =
+            describe(
+                    "are not internal API classes (Internal*)",
+                    c -> !c.getSimpleName().startsWith("Internal"));
+
     private static final DescribedPredicate<JavaClass> API_RESPONSES =
             describe(
                     "are response DTOs of our own API (not client/)",
@@ -941,6 +950,8 @@ public final class FactoryFlowRules {
             methods()
                     .that()
                     .areDeclaredInClassesThat(CONTROLLERS)
+                    .and()
+                    .areDeclaredInClassesThat(PUBLIC_API_CLASSES)
                     .and(describe("are request handlers", FactoryFlowRules::isHandler))
                     .should(
                             check(
@@ -997,11 +1008,13 @@ public final class FactoryFlowRules {
                                                                             && hasText(
                                                                                     a, "example")),
                                     JavaMethod::getFullName))
-                    .because("문서 없는 API 는 머지하지 않는다");
+                    .because("문서 없는 API 는 머지하지 않는다 (내부 API /internal/** 는 프론트가 보지 않아 제외)");
 
     public static final ArchRule DTO_FIELDS_DOCUMENTED =
             fields().that()
                     .areDeclaredInClassesThat(API_DTOS)
+                    .and()
+                    .areDeclaredInClassesThat(PUBLIC_API_CLASSES)
                     .and()
                     .areNotStatic()
                     .should()
@@ -1023,7 +1036,8 @@ public final class FactoryFlowRules {
                                                                                             "example")))
                                                     .orElse(true),
                                     JavaField::getFullName))
-                    .because("요청/응답 DTO 필드는 @Schema(description, example) 로 문서화한다");
+                    .because(
+                            "요청/응답 DTO 필드는 @Schema(description, example) 로 문서화한다 (내부 API 의 Internal*Response 는 제외)");
 
     // ---- 테스트 코드 (ImportOption.OnlyIncludeTests 로 등록) ----
 

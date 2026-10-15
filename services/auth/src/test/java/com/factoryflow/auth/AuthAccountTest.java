@@ -393,9 +393,9 @@ class AuthAccountTest {
         assertResponseCodes(docs, "/auth/login", "200", "400", "401", "403", "429");
         assertResponseCodes(docs, "/auth/token/refresh", "200", "401", "403");
         assertResponseCodes(docs, "/auth/logout", "204");
-        // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 /internal 아래에 (내부) 로 나온다
-        assertThat(JsonPath.<String>read(docs, "$.paths['/internal/jwks'].get.summary"))
-                .isNotBlank();
+        // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 프론트가 보는 문서에 나오지 않는다
+        assertThat(JsonPath.<Map<String, Object>>read(docs, "$.paths"))
+                .doesNotContainKey("/internal/jwks");
 
         assertThat(
                         JsonPath.<String>read(

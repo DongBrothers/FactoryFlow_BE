@@ -76,18 +76,11 @@ class InternalProductControllerTest {
     }
 
     @Test
-    void internalProductApiIsDocumented() throws Exception {
+    void internalProductApiIsHiddenFromApiDocs() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(
-                        jsonPath("$.paths['/internal/products'].get.summary")
-                                .value("제품 조회 (서비스 간 내부용)"))
-                .andExpect(jsonPath("$.paths['/internal/products'].get.responses['200']").exists())
-                .andExpect(jsonPath("$.paths['/internal/products'].get.responses['400']").exists())
-                .andExpect(
-                        jsonPath(
-                                        "$.components.schemas.InternalProductResponse.properties.orderable.description")
-                                .value("BOM 이 있어 주문할 수 있는지"));
+                .andExpect(jsonPath("$.paths['/internal/products']").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.InternalProductResponse").doesNotExist());
     }
 
     private long insertProduct(String code, String name) {
