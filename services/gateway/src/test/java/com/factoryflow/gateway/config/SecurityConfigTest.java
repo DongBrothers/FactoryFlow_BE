@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
@@ -16,6 +17,9 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 @WebFluxTest
 @Import({SecurityConfig.class, RoleTokenDecoder.class})
 class SecurityConfigTest {
+
+    private static final String UNAUTHORIZED_BODY =
+            "{\"code\":\"UNAUTHORIZED\",\"message\":\"로그인이 필요합니다.\"}";
 
     @Autowired WebTestClient client;
 
@@ -81,6 +85,45 @@ class SecurityConfigTest {
                 .exchange()
                 .expectStatus()
                 .isForbidden();
+    }
+
+    /**
+     * gateway 가 만든 401·403 도 서비스와 같은 {code, message} 형식이다 (#66). 401 의 WWW-Authenticate 헤더는 그대로다.
+     */
+    @Test
+    void missingTokenBodyIsCommonFormat() {
+        client.post()
+                .uri("/api/auth/admin/users")
+                .exchange()
+                .expectStatus()
+                .isUnauthorized()
+                .expectHeader()
+                .valueMatches("WWW-Authenticate", "Bearer.*")
+                .expectBody()
+                .json(UNAUTHORIZED_BODY, JsonCompareMode.STRICT);
+    }
+
+    @Test
+    void expiredTokenBodyIsCommonFormat() {
+        client.get()
+                .uri("/api/orders/1")
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
+                .exchange()
+                .expectStatus()
+                .isUnauthorized()
+                .expectHeader()
+                .valueMatches("WWW-Authenticate", "Bearer.*invalid_token.*")
+                .expectBody()
+                .json(UNAUTHORIZED_BODY, JsonCompareMode.STRICT);
+    }
+
+    @Test
+    void forbiddenBodyIsCommonFormat() {
+        callAdminApi("SALES")
+                .expectStatus()
+                .isForbidden()
+                .expectBody()
+                .json("{\"code\":\"FORBIDDEN\",\"message\":\"권한이 없습니다.\"}", JsonCompareMode.STRICT);
     }
 
     private WebTestClient.ResponseSpec callAdminApi(String role) {
