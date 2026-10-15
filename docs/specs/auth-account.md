@@ -197,11 +197,11 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 이 구조는 아래 **보안 필수** 두 가지가 모두 갖춰져야 안전하다 (둘 중 하나라도 빠지면 헤더를 위조해 우회할 수 있다.
 "규칙 / 예외 > 권한 확인과 헤더 신뢰 전제" 참고).
 
-- [ ] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 의 sub(public_id) 로 `X-User-Id` 를
+- [x] (보안 필수) gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 지우고, 검증한 JWT 의 sub(public_id) 로 `X-User-Id` 를
       다시 채운다. role 은 넘기지 않는다 (권한은 gateway 가 JWT 로 확인)
 - [ ] (보안 필수) 서비스는 gateway 를 통해서만 접근되는지 확인 (dev ECS 보안그룹에서 서비스 포트의 외부 접속 차단)
-- [ ] CORS 다시 만들기. PR #30 에서 명세 밖이라 뺐다(AI 리뷰 [spec]). 뺀 설정은 다음과 같았다
-  - 허용 origin 은 설정값 `app.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`, 기본 `https://factoryflow.dev`)
+- [x] CORS 다시 만들기. PR #30 에서 명세 밖이라 뺐다(AI 리뷰 [spec]). 뺀 설정은 다음과 같았다
+  - 허용 origin 은 설정값 `app.cors.allowed-origins` (env `CORS_ALLOWED_ORIGINS`). 기본은 비어 있어 모든 origin 을 거부한다. 프론트 주소가 아직 없고, 소유하지 않은 주소를 허용하지 않기 위해서다 (2026-10-15). 주소가 정해지면 환경별 설정에 넣는다
   - 메서드 GET, POST, PUT, PATCH, DELETE, OPTIONS / 헤더 전부 / 경로 `/**`
   - **allowCredentials = true 필수**: Refresh 토큰이 httpOnly 쿠키라, 없으면 브라우저가 재발급·로그아웃 요청에
     쿠키를 싣지 않는다. 이때 허용 origin 에 `*` 는 쓸 수 없다(정확한 origin 목록)

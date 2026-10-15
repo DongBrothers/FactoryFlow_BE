@@ -37,6 +37,19 @@ class SecurityConfigTest {
         client.post().uri("/api/auth/login").exchange().expectStatus().isNotFound();
     }
 
+    /** CORS 허용 origin 의 기본값은 비어 있다. 환경별 설정 없이는 어떤 origin 의 preflight 도 403 이다. */
+    @Test
+    void corsAllowsNoOriginByDefault() {
+        client.options()
+                // CORS 는 요청 주소의 origin 과 비교하므로 host 가 있어야 한다 (없으면 origin 과 상관없이 403)
+                .uri("https://api.factoryflow.test/api/orders")
+                .header("Origin", "https://factoryflow.dev")
+                .header("Access-Control-Request-Method", "POST")
+                .exchange()
+                .expectStatus()
+                .isForbidden();
+    }
+
     private WebTestClient.ResponseSpec callAdminApi(String role) {
         return client.post()
                 .uri("/api/auth/admin/users")
