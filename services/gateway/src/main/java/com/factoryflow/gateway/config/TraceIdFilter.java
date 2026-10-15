@@ -25,6 +25,13 @@ public class TraceIdFilter implements WebFilter {
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String traceId = UUID.randomUUID().toString();
         exchange.getResponse().getHeaders().set(HEADER, traceId);
+        // 뒤 서비스도 응답에 X-Trace-Id 를 넣으므로, 내보내기 직전에 하나로 덮어쓴다 (#82)
+        exchange.getResponse()
+                .beforeCommit(
+                        () -> {
+                            exchange.getResponse().getHeaders().set(HEADER, traceId);
+                            return Mono.empty();
+                        });
         ServerHttpRequest request =
                 exchange.getRequest()
                         .mutate()

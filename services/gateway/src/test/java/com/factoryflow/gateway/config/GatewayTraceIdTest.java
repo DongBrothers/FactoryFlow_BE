@@ -36,6 +36,23 @@ class GatewayTraceIdTest extends GatewayTestSupport {
         assertThat(result.getResponseHeaders().getFirst(TRACE_ID)).isEqualTo(forwarded);
     }
 
+    /** 뒤 서비스도 응답에 X-Trace-Id 를 넣는다. 최종 응답에는 하나만 있어야 한다 (#82). */
+    @Test
+    void responseHasOneTraceIdEvenWhenServiceAlsoSetsIt() {
+        EntityExchangeResult<byte[]> result =
+                client.get()
+                        .uri("/api/orders/1")
+                        .header("Authorization", "Bearer SALES")
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody()
+                        .returnResult();
+
+        assertThat(result.getResponseHeaders().get(TRACE_ID))
+                .containsExactly(BACKEND.lastTraceId());
+    }
+
     @Test
     void publicPathAlsoGetsTraceId() {
         EntityExchangeResult<byte[]> result =
