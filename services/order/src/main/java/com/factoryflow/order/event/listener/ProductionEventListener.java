@@ -3,6 +3,7 @@ package com.factoryflow.order.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.order.config.EventQueueConfig;
+import com.factoryflow.order.event.listener.payload.ProductionStatusChanged;
 import com.factoryflow.order.service.OrderItemService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
