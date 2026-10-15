@@ -85,6 +85,7 @@ public final class ServiceArchitectureRules {
     static final ArchRule controllerResult = FactoryFlowRules.CONTROLLER_STORES_SERVICE_RESULT;
 
     @ArchTest static final ArchRule events = FactoryFlowRules.EVENTS_ARE_PUBLISHER_RECORDS;
+    @ArchTest static final ArchRule eventPayloads = FactoryFlowRules.EVENT_PAYLOAD_PACKAGES;
 
     @ArchTest static final ArchRule apiDocs = FactoryFlowRules.API_DOCUMENTED;
     @ArchTest static final ArchRule dtoDocs = FactoryFlowRules.DTO_FIELDS_DOCUMENTED;
