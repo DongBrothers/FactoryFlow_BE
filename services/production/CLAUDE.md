@@ -1,6 +1,13 @@
-# production 서비스
-- DB: production_db (Flyway: src/main/resources/db/migration). 테이블: product, bom, production (주문 속 제품 1종당 생산 1건)
-- 발행: production.material-requested, production.cancelled, production.status-changed, production.completed, production.failed, production.cancel-rejected
-- 수신: order.created, order.cancelled, inventory.reserved, inventory.reservation-pending
-- 보상: order.cancelled 수신 시 started_at 이 없으면 (한 번도 시작 안 한 건) CANCELLED + production.cancelled 로 예약 해제, 아니면 production.cancel-rejected
-- 재생산: 불량 시 WAITING_MATERIAL 로 되돌리고 production.failed (docs/specs/saga-order-fulfillment.md)
+# production 서비스 (ERP 생산 계획 + MES)
+- DB: production_db (Flyway: src/main/resources/db/migration)
+  - 제품: product, bom
+  - 생산: production (생산 건 = 차량 1대. SAGA 상태)
+  - MES: work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력)
+- 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
+- 생산 트리거: inventory.reserved 수신 시 생산 건 READY + 작업지시 1건과 공정 5개 생성
+- 공정 진행: 라인 작업자가 작업자 API 로 공정별 시작·종료와 실적(양품/불량) 입력. 순서대로만, 그 공정 설비가 RUNNING 일 때만 시작. 불량은 실적만 남기고 같은 공정 재작업
+- 완료: 검사 양품 → VIN 발행 → production.completed
+- 발행: production.material-requested, production.status-changed, production.cancelled, production.cancel-rejected, production.failed, production.completed
+- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, equipment.status-changed
+- 보상: order.cancel-requested 수신 시 프레스 시작 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 설비 고장(FAULT) 수신 시 그 공정 진행 중 차량 FAILED + production.failed (예약 해제)
+- 동시 변경: 생산 건은 @Version 으로 막는다 (docs/specs/saga-order-fulfillment.md)
