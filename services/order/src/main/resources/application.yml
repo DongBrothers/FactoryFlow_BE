@@ -37,3 +37,8 @@ management:
 # Swagger: 공통 예외 핸들러의 응답을 모든 API 에 자동으로 붙이지 않는다 (API 마다 @ApiResponse 로 적는다)
 springdoc:
   override-with-generic-response: false
+
+# 로그 줄마다 traceId (TraceIdFilter·이벤트 수신이 MDC 에 넣는다, docs/specs/saga-order-fulfillment.md "추적")
+logging:
+  pattern:
+    correlation: "[%X{traceId:-}] "
