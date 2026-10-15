@@ -4,7 +4,7 @@ import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.order.config.EventQueueConfig;
 import com.factoryflow.order.event.listener.payload.ProductionStatusChanged;
-import com.factoryflow.order.service.OrderItemService;
+import com.factoryflow.order.service.OrderVehicleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -18,7 +18,7 @@ import tools.jackson.databind.ObjectMapper;
 public class ProductionEventListener {
 
     private final ProcessedEventGuard processedEventGuard;
-    private final OrderItemService orderItemService;
+    private final OrderVehicleService orderVehicleService;
     private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = EventQueueConfig.STATUS_CHANGED_QUEUE)
@@ -28,7 +28,10 @@ public class ProductionEventListener {
         processedEventGuard.runOnce(
                 envelope,
                 () ->
-                        orderItemService.applyProductionStatus(
-                                event.orderId(), event.productId(), event.status()));
+                        orderVehicleService.applyProductionStatus(
+                                event.orderId(),
+                                event.productionId(),
+                                event.productId(),
+                                event.status()));
     }
 }

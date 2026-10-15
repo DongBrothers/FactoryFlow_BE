@@ -74,24 +74,37 @@ class OrderEventListenerTest {
     }
 
     @Test
-    void createsPlannedProductionAndMaterialRequestPerProduct() {
+    void createsOnePlannedProductionPerVehicleWithMaterialRequestAndStatusChanged() {
         listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1)));
 
         assertThat(productions())
                 .extracting(
                         r -> r.get("order_id"),
                         r -> r.get("product_id"),
-                        r -> r.get("qty"),
+                        r -> r.get("seq"),
                         r -> r.get("status"))
                 .containsExactlyInAnyOrder(
-                        tuple(10L, carA, 2, "PLANNED"), tuple(10L, carB, 1, "PLANNED"));
+                        tuple(10L, carA, 1, "PLANNED"),
+                        tuple(10L, carA, 2, "PLANNED"),
+                        tuple(10L, carB, 1, "PLANNED"));
 
         Map<Long, String> requests = materialRequestsByProductionId();
-        assertThat(requests).hasSize(2);
-        assertThat(parts(requests.get(productionIdOf(carA))))
-                .containsExactlyInAnyOrderEntriesOf(Map.of(1001, 2, 1011, 8));
-        assertThat(parts(requests.get(productionIdOf(carB))))
+        assertThat(requests).hasSize(3);
+        for (long production : productionIdsOf(carA)) {
+            assertThat(parts(requests.get(production)))
+                    .containsExactlyInAnyOrderEntriesOf(Map.of(1001, 1, 1011, 4));
+        }
+        assertThat(parts(requests.get(productionIdsOf(carB).get(0))))
                 .containsExactlyInAnyOrderEntriesOf(Map.of(1001, 1, 1012, 4));
+
+        List<String> changed = outbox("production.status-changed");
+        assertThat(changed).hasSize(3);
+        assertThat(changed)
+                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
+                .containsOnly("PLANNED");
+        assertThat(changed)
+                .extracting(c -> ((Number) JsonPath.read(c, "$.payload.productionId")).longValue())
+                .containsExactlyInAnyOrderElementsOf(requests.keySet());
     }
 
     @Test
@@ -104,7 +117,7 @@ class OrderEventListenerTest {
                 materialRequestsByProductionId().values().stream()
                         .map(p -> JsonPath.<String>read(p, "$.traceId"))
                         .toList();
-        assertThat(traceIds).hasSize(2).containsOnly(event.traceId());
+        assertThat(traceIds).hasSize(3).containsOnly(event.traceId());
     }
 
     @Test
@@ -114,8 +127,8 @@ class OrderEventListenerTest {
         listener.onOrderCreated(event);
         listener.onOrderCreated(event);
 
-        assertThat(productions()).hasSize(2);
-        assertThat(materialRequestsByProductionId()).hasSize(2);
+        assertThat(productions()).hasSize(3);
+        assertThat(materialRequestsByProductionId()).hasSize(3);
     }
 
     @Test
@@ -123,21 +136,20 @@ class OrderEventListenerTest {
         listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2)));
         listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2)));
 
-        assertThat(productions()).hasSize(1);
-        assertThat(materialRequestsByProductionId()).hasSize(1);
+        assertThat(productions()).hasSize(2);
+        assertThat(materialRequestsByProductionId()).hasSize(2);
     }
 
     @Test
-    void sameProductTwiceInOneEventIsMergedIntoOneProduction() {
+    void sameProductTwiceInOneEventMakesVehiclesForTheMergedQty() {
         listener.onOrderCreated(
                 orderCreated(
                         UUID.randomUUID(), 10L, List.of(List.of(carA, 1L), List.of(carA, 2L))));
 
         assertThat(productions())
-                .extracting(r -> r.get("product_id"), r -> r.get("qty"))
-                .containsExactly(tuple(carA, 3));
-        assertThat(parts(materialRequestsByProductionId().get(productionIdOf(carA))))
-                .containsExactlyInAnyOrderEntriesOf(Map.of(1001, 3, 1011, 12));
+                .extracting(r -> r.get("product_id"), r -> r.get("seq"))
+                .containsExactlyInAnyOrder(tuple(carA, 1), tuple(carA, 2), tuple(carA, 3));
+        assertThat(materialRequestsByProductionId()).hasSize(3);
     }
 
     @Test
@@ -146,8 +158,9 @@ class OrderEventListenerTest {
 
         listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1)));
 
-        assertThat(productions()).extracting(r -> r.get("product_id")).containsExactly(carA);
-        assertThat(materialRequestsByProductionId()).containsOnlyKeys(productionIdOf(carA));
+        assertThat(productions()).extracting(r -> r.get("product_id")).containsOnly(carA);
+        assertThat(materialRequestsByProductionId())
+                .containsOnlyKeys(productionIdsOf(carA).toArray(Long[]::new));
     }
 
     @Test
@@ -156,8 +169,9 @@ class OrderEventListenerTest {
 
         listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1)));
 
-        assertThat(productions()).extracting(r -> r.get("product_id")).containsExactly(carA);
-        assertThat(materialRequestsByProductionId()).containsOnlyKeys(productionIdOf(carA));
+        assertThat(productions()).extracting(r -> r.get("product_id")).containsOnly(carA);
+        assertThat(materialRequestsByProductionId())
+                .containsOnlyKeys(productionIdsOf(carA).toArray(Long[]::new));
     }
 
     @Test
@@ -176,7 +190,7 @@ class OrderEventListenerTest {
 
     @Test
     void failingMessageIsRetriedThenDeadLettered(CapturedOutput output) {
-        // qty 0 은 production 의 CHECK (qty > 0) 에 걸려 처리할 때마다 DB 오류가 난다
+        // 수량 0 은 처리할 때마다 INVALID_ORDER_QTY 오류가 난다
         EventEnvelope event = orderCreated(UUID.randomUUID(), 30L, Map.of(carA, 0));
 
         sendToRabbit(event);
@@ -188,12 +202,9 @@ class OrderEventListenerTest {
                 .contains(
                         "EVENT_DEAD_LETTERED queue=production.order-created eventId="
                                 + event.eventId());
-        assertThat(
-                        countLines(
-                                output.getOut(),
-                                "WARN",
-                                "Check constraint 'ck_production_qty' is violated"))
-                .isEqualTo(4);
+        // 처음 1번 + 재시도 3번
+        assertThat(countLines(output.getOut(), "Retry attempt for operation", "StatelessRetry"))
+                .isEqualTo(3);
         assertThat(productions()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
                 .isZero();
@@ -278,12 +289,19 @@ class OrderEventListenerTest {
     }
 
     private List<Map<String, Object>> productions() {
-        return jdbc.queryForList("SELECT id, order_id, product_id, qty, status FROM production");
+        return jdbc.queryForList("SELECT id, order_id, product_id, seq, status FROM production");
     }
 
-    private long productionIdOf(long productId) {
-        return jdbc.queryForObject(
-                "SELECT id FROM production WHERE product_id = ?", Long.class, productId);
+    private List<Long> productionIdsOf(long productId) {
+        return jdbc.queryForList(
+                "SELECT id FROM production WHERE product_id = ? ORDER BY seq",
+                Long.class,
+                productId);
+    }
+
+    private List<String> outbox(String eventName) {
+        return jdbc.queryForList(
+                "SELECT payload FROM outbox WHERE event_name = ?", String.class, eventName);
     }
 
     private Map<Long, String> materialRequestsByProductionId() {

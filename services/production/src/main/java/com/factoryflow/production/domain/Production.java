@@ -16,7 +16,10 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/** 생산 건: 주문 속 제품 1종. orderId 는 order 의 주문 (논리 참조). */
+/**
+ * 생산 건: 차량 1대. orderId 는 order 의 주문 (논리 참조), seq 는 그 주문·제품 안의 차량 번호
+ * (docs/planning/production-flow.md).
+ */
 @Getter
 @Entity
 @Table(name = "production")
@@ -34,25 +37,25 @@ public class Production extends BaseEntity {
     private Long productId;
 
     @Column(nullable = false, updatable = false)
-    private int qty;
+    private int seq;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private ProductionStatus status;
 
-    /** 생산을 처음 시작한 시각. 불량으로 WAITING_MATERIAL 로 돌아가도 남아 있어 재생산 중임을 알 수 있다. */
+    /** 첫 공정(프레스)을 시작한 시각. 이후에는 취소할 수 없다. */
     private LocalDateTime startedAt;
 
-    private Production(Long orderId, Long productId, int qty) {
+    private Production(Long orderId, Long productId, int seq) {
         this.orderId = orderId;
         this.productId = productId;
-        this.qty = qty;
+        this.seq = seq;
         this.status = ProductionStatus.PLANNED;
     }
 
-    public static Production plan(Long orderId, Long productId, int qty) {
-        return new Production(orderId, productId, qty);
+    public static Production plan(Long orderId, Long productId, int seq) {
+        return new Production(orderId, productId, seq);
     }
 
     /** 부품이 모두 예약되면 생산할 수 있다. PLANNED, WAITING_MATERIAL 에서만 바뀐다. 바뀌었으면 true. */
@@ -73,12 +76,8 @@ public class Production extends BaseEntity {
         return true;
     }
 
-    public boolean isCancelled() {
-        return status == ProductionStatus.CANCELLED;
-    }
-
-    /** 한 번 시작했다가 불량으로 되돌아온 생산 건. 이때의 상태 변화는 order 에 알리지 않는다. */
-    public boolean isRework() {
-        return startedAt != null;
+    /** 취소되었거나 설비 고장으로 실패해 더 진행하지 않는 생산 건. 늦게 온 예약은 풀어야 한다. */
+    public boolean isClosed() {
+        return status == ProductionStatus.CANCELLED || status == ProductionStatus.FAILED;
     }
 }

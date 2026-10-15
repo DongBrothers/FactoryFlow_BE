@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("3");
+        jdbc = migrateTo("4");
     }
 
     @Test
@@ -37,7 +37,7 @@ class MigrationTest extends MigrationTestSupport {
                             + " VALUES (7, 'RECEIVED', NOW(6), NOW(6))");
         }
 
-        var result = Flyway.configure().dataSource(upgrade).load().migrate();
+        var result = Flyway.configure().dataSource(upgrade).target("3").load().migrate();
 
         assertThat(result.targetSchemaVersion).isEqualTo("3");
         var orderNos = db.queryForList("SELECT order_no FROM customer_order", String.class);
@@ -48,7 +48,13 @@ class MigrationTest extends MigrationTestSupport {
     void createsOrderTables() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
-        assertThat(tables).contains("customer_order", "order_item", "outbox", "processed_event");
+        assertThat(tables)
+                .contains(
+                        "customer_order",
+                        "order_item",
+                        "order_vehicle",
+                        "outbox",
+                        "processed_event");
     }
 
     @Test
@@ -56,6 +62,16 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertItem(1L, 1L, 0))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_order_item_qty");
+    }
+
+    @Test
+    void oneVehiclePerProduction() {
+        // 차량 = 생산 건 1건 (V4). 같은 생산 건을 두 번 저장하지 않는다
+        insertVehicle(3L, 1L, 501L);
+
+        assertThatThrownBy(() -> insertVehicle(3L, 1L, 501L))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_order_vehicle_production");
     }
 
     @Test
@@ -110,6 +126,15 @@ class MigrationTest extends MigrationTestSupport {
                 orderId,
                 productId,
                 qty);
+    }
+
+    private void insertVehicle(long orderId, long orderItemId, long productionId) {
+        jdbc.update(
+                "INSERT INTO order_vehicle (order_id, order_item_id, production_id, status,"
+                        + " created_at, updated_at) VALUES (?, ?, ?, 'RECEIVED', NOW(6), NOW(6))",
+                orderId,
+                orderItemId,
+                productionId);
     }
 
     private void insertProcessedEvent(String eventId) {

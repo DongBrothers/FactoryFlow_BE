@@ -20,7 +20,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("2");
+        jdbc = migrateTo("3");
     }
 
     @Test
@@ -105,19 +105,21 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
-    void rejectsSecondProductionForSameOrderProduct() {
+    void oneProductionPerVehicleOfOrderProduct() {
+        // 생산 건은 차량 1대 (V3): 같은 주문·제품의 차량 번호(seq)는 하나씩만
         insertProduction(10L, 1L, 1);
+        insertProduction(10L, 1L, 2);
 
         assertThatThrownBy(() -> insertProduction(10L, 1L, 1))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("uk_production_order_product");
+                .hasMessageContaining("uk_production_order_product_seq");
     }
 
     @Test
-    void rejectsNonPositiveProductionQty() {
+    void rejectsNonPositiveVehicleSeq() {
         assertThatThrownBy(() -> insertProduction(11L, 1L, 0))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("ck_production_qty");
+                .hasMessageContaining("ck_production_seq");
     }
 
     @Test
@@ -145,13 +147,13 @@ class MigrationTest extends MigrationTestSupport {
                 code);
     }
 
-    private void insertProduction(long orderId, long productId, int qty) {
+    private void insertProduction(long orderId, long productId, int seq) {
         jdbc.update(
-                "INSERT INTO production (order_id, product_id, qty, status, created_at, updated_at)"
+                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
                         + " VALUES (?, ?, ?, 'PLANNED', NOW(6), NOW(6))",
                 orderId,
                 productId,
-                qty);
+                seq);
     }
 
     private void insertProcessedEvent(String eventId) {

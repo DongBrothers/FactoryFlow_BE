@@ -13,7 +13,8 @@ public enum OrderErrorCode implements ErrorCode {
     PRODUCTION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "제품 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
     ORDER_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "주문 품목을 찾을 수 없습니다."),
-    UNKNOWN_PRODUCTION_STATUS(HttpStatus.BAD_REQUEST, "알 수 없는 생산 상태입니다.");
+    UNKNOWN_PRODUCTION_STATUS(HttpStatus.BAD_REQUEST, "알 수 없는 생산 상태입니다."),
+    ORDER_VEHICLE_OVERFLOW(HttpStatus.CONFLICT, "주문 수량보다 많은 생산 건이 들어왔습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

@@ -15,13 +15,13 @@ production 이 inventory 의 부품 예약 결과를 받아 생산 건 상태를
 | 받은 이벤트 | 현재 상태 | 처리 |
 |---|---|---|
 | inventory.reserved | PLANNED, WAITING_MATERIAL | → **READY** + `production.status-changed` |
-| inventory.reserved | CANCELLED | 상태 유지, `production.cancelled { productionId }` 를 다시 보낸다 (늦게 온 예약을 inventory 가 해제하게) |
+| inventory.reserved | CANCELLED, FAILED | 상태 유지, `production.cancelled { orderId, productionId }` 를 다시 보낸다 (늦게 온 예약을 inventory 가 해제하게) |
 | inventory.reserved | READY, IN_PROGRESS, COMPLETED | 무시 (INFO 로그) |
 | inventory.reservation-pending | PLANNED | → **WAITING_MATERIAL** + `production.status-changed` |
 | inventory.reservation-pending | 그 외 | 무시 (INFO 로그) |
 
 5. `production.status-changed { orderId, productionId, productId, status }` 를 발행한다
-   - 불량 재생산 중(`started_at` 이 있음)에는 상태가 바뀌어도 보내지 않는다 (SAGA "3. 불량 재생산": 재생산 중 변화는 알리지 않고 COMPLETED 때만 알린다)
+   - READY 는 생산의 트리거다. 작업지시와 공정 5개 생성은 MES 작업(#72)에서 이 전이에 붙인다 (SAGA 성공 흐름 6번)
 
 ## 규칙 / 예외
 | 상황 | 처리 |
@@ -41,15 +41,14 @@ production 이 inventory 의 부품 예약 결과를 받아 생산 건 상태를
 | inventory.reserved | inventory → production | productionId |
 | inventory.reservation-pending | inventory → production | productionId, shortages[{partId, shortQty}] |
 | production.status-changed | production → order | orderId, productionId, productId, status |
-| production.cancelled | production → inventory | productionId |
+| production.cancelled | production → inventory, order | orderId, productionId |
 
 ## 완료 조건 (테스트로 확인할 것)
 - [ ] PLANNED 생산 건에 reserved → READY, status-changed(READY) 1건
 - [ ] WAITING_MATERIAL 생산 건에 reserved → READY, status-changed(READY) 1건 (입고 후 예약)
 - [ ] PLANNED 생산 건에 reservation-pending → WAITING_MATERIAL, status-changed(WAITING_MATERIAL) 1건
-- [ ] CANCELLED 생산 건에 reserved → 상태 유지, production.cancelled 1건, status-changed 없음
+- [ ] CANCELLED, FAILED 생산 건에 reserved → 상태 유지, production.cancelled(orderId, productionId) 1건, status-changed 없음
 - [ ] 허용되지 않은 상태(READY 에 reservation-pending 등)는 상태도 이벤트도 바뀌지 않는다
-- [ ] started_at 이 있는 WAITING_MATERIAL 에 reserved → READY 가 되지만 status-changed 는 없다
 - [ ] 같은 이벤트를 두 번 받아도 status-changed 는 한 번만 생긴다
 - [ ] 발행한 이벤트의 traceId 는 받은 이벤트의 traceId 와 같다
 - [ ] RabbitMQ 로 실제 두 이벤트를 보내면 처리된다, 없는 생산 건은 DLQ 로 간다 (Testcontainers)

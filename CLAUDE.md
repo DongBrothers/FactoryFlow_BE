@@ -29,6 +29,7 @@
 ## API 문서 (Swagger)
 - @ApiResponse 는 응답 코드마다 (성공, 400, 404, 409, 503 등 실제로 나는 것 전부)
 - 공통 응답 ApiResponse 와 이름이 같으므로 Swagger 쪽은 io.swagger.v3.oas.annotations.responses.ApiResponse 로 전체 이름을 쓴다
+- 내부 API(/internal/**)는 프론트가 보지 않으므로 Swagger 어노테이션을 달지 않고, springdoc.paths-to-exclude 로 api-docs 에서도 뺀다
 
 ## 사람만 수정 (수정 필요 시 제안만)
 CLAUDE.md(루트), .claude/, .github/, common/common-event/, common/common-test/, docs/specs/events.md, 루트 build.gradle, settings.gradle
