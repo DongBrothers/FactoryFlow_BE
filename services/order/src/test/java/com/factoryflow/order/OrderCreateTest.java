@@ -135,8 +135,26 @@ class OrderCreateTest {
     }
 
     @Test
-    void missingCustomerHeaderIs400() throws Exception {
+    void missingCustomerIdIs400() throws Exception {
         postOrder(null, TWO_PRODUCTS).andExpect(status().isBadRequest());
+        assertRejectedBeforeLookup();
+    }
+
+    @Test
+    void nonPositiveCustomerIdIs400() throws Exception {
+        postOrder("0", TWO_PRODUCTS).andExpect(status().isBadRequest());
+        assertRejectedBeforeLookup();
+    }
+
+    @Test
+    void loggedInEmployeeHeaderIsNotTakenAsTheCustomer() throws Exception {
+        // 예전에는 고객 번호를 X-User-Id 로 받았다. 그 헤더는 로그인한 직원의 public_id 라 고객 번호가 아니다
+        mockMvc.perform(
+                        post("/orders")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .header("X-User-Id", "7")
+                                .content(TWO_PRODUCTS))
+                .andExpect(status().isBadRequest());
         assertRejectedBeforeLookup();
     }
 
@@ -184,8 +202,9 @@ class OrderCreateTest {
                 .andExpect(jsonPath("$.paths['/orders'].post.responses['500']").doesNotExist())
                 .andExpect(
                         jsonPath(
-                                        "$.paths['/orders'].post.parameters[?(@.name == 'X-Customer-Id')].description")
+                                        "$.components.schemas.CreateOrderRequest.properties.customerId.description")
                                 .value("주문하는 고객 번호"))
+                .andExpect(jsonPath("$.paths['/orders'].post.parameters").doesNotExist())
                 .andExpect(
                         jsonPath(
                                         "$.components.schemas.CreateOrderItemRequest.properties.qty.description")
@@ -200,12 +219,14 @@ class OrderCreateTest {
         when(productClient.findProducts(anyList())).thenReturn(List.of(products));
     }
 
+    /** body 는 items 만 담은 JSON. customerId 가 있으면 본문에 넣는다. */
     private ResultActions postOrder(String customerId, String body) throws Exception {
-        var request = post("/orders").contentType(MediaType.APPLICATION_JSON).content(body);
-        if (customerId != null) {
-            request.header("X-Customer-Id", customerId);
-        }
-        return mockMvc.perform(request);
+        String content =
+                customerId == null
+                        ? body
+                        : "{\"customerId\":" + customerId + "," + body.substring(1);
+        return mockMvc.perform(
+                post("/orders").contentType(MediaType.APPLICATION_JSON).content(content));
     }
 
     private void assertNothingSaved() {

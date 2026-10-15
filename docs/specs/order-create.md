@@ -5,9 +5,9 @@
 `order.created` 를 발행해 SAGA(docs/specs/saga-order-fulfillment.md)를 시작한다.
 
 ## 흐름
-1. `POST /orders` 를 보낸다. 주문하는 고객 번호는 헤더 `X-Customer-Id` 로 받는다. 로그인한 직원 식별자인 `X-User-Id`(gateway 가 JWT 로 채움)와는 다른 값이다
+1. `POST /orders` 를 보낸다. 주문은 로그인한 직원이 넣고, 어떤 고객의 주문인지는 요청 본문의 `customerId` 로 받는다 (업무 입력값). 헤더 `X-User-Id` 는 gateway 가 JWT 로 채우는 직원 식별자라 고객 번호로 쓰지 않는다. 클라이언트가 보낸 헤더는 신원으로 믿지 않는다
    ```json
-   { "items": [ { "productId": 1, "qty": 2 }, { "productId": 2, "qty": 1 } ] }
+   { "customerId": 7, "items": [ { "productId": 1, "qty": 2 }, { "productId": 2, "qty": 1 } ] }
    ```
 2. order 가 요청 형식을 Bean Validation(`@Valid`)으로 확인한다 (아래 규칙)
 3. order 가 production 내부 API 로 제품을 한 번에 조회한다: `GET /internal/products?ids=1,2`
@@ -27,7 +27,7 @@
 ## 규칙 / 예외
 | 상황 | 응답 | 저장 / 이벤트 |
 |---|---|---|
-| `X-Customer-Id` 헤더 없음 | 400 | 없음 |
+| `customerId` 없음 또는 1 미만 | 400 | 없음 |
 | 요청 본문이 JSON 으로 읽히지 않음 (깨진 JSON, 숫자 자리에 문자 등) | 400 | 없음 |
 | items 가 비어 있음 (`@NotEmpty`) | 400 | 없음 |
 | productId 가 없음 (`@NotNull`) | 400 | 없음 |
