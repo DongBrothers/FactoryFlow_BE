@@ -17,4 +17,14 @@ dependencies {
     testImplementation project(':common:common-test')
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webflux-test'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
+    testImplementation 'org.testcontainers:testcontainers-rabbitmq'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    // gateway 는 DB, MQ, Redis 를 쓰지 않는다. 통합 테스트가 TestContainersConfig 를 import 해야 하는데(ArchUnit),
+    // 그 컨테이너의 @ServiceConnection 이 연결 대상을 찾도록 테스트에만 둔다
+    testImplementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    testImplementation 'org.springframework.boot:spring-boot-starter-amqp'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    testRuntimeOnly 'com.mysql:mysql-connector-j'
 }

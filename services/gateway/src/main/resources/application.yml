@@ -13,6 +13,12 @@ spring:
 server:
   port: 8080
 
+app:
+  cors:
+    # 브라우저에서 부르는 프론트 주소. 쉼표로 여러 개. allowCredentials 를 켜므로 "*" 는 안 된다.
+    # 기본은 비어 있음(모든 origin 거부). 프론트 주소가 정해지면 환경별 설정(application-dev.yml 등)에 넣는다
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
 management:
   endpoints:
     web:

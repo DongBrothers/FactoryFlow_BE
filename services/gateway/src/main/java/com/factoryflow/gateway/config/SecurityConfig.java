@@ -1,6 +1,7 @@
 package com.factoryflow.gateway.config;
 
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -14,20 +15,25 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
 /**
  * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 role 클레임으로 접근을 제어한다. 로그인·활성화·재발급·로그아웃은 공개,
- * /api/auth/admin/** 은 ADMIN 만. JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
- * (docs/specs/auth-account.md)
+ * /api/auth/admin/** 은 ADMIN 만. 경로는 브라우저가 부르는 밖 주소 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는
+ * jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다. (docs/specs/auth-account.md)
  */
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
     @Bean
-    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+    SecurityWebFilterChain securityWebFilterChain(
+            ServerHttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .authorizeExchange(
                         exchange ->
                                 exchange.pathMatchers("/actuator/health")
@@ -46,6 +52,23 @@ public class SecurityConfig {
                 .oauth2ResourceServer(
                         oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter())))
                 .build();
+    }
+
+    /**
+     * 허용 origin 은 설정값(app.cors.allowed-origins). Refresh 토큰이 httpOnly 쿠키라 allowCredentials 를 켜고,
+     * 그래서 origin 에 "*" 는 쓸 수 없다. Security 의 cors() 에 연결해 preflight(OPTIONS)가 인증 전에 응답된다.
+     */
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     /** JWT 의 role 클레임("ADMIN")을 권한("ROLE_ADMIN")으로 변환한다. */
