@@ -20,7 +20,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("3");
+        jdbc = migrateTo("4");
     }
 
     @Test
@@ -143,6 +143,18 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertFinishedVehicle("KMH000017TU000002", 500L))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_finished_vehicle_production");
+    }
+
+    @Test
+    void v4FinishedVehicleStartsNotShippedWithVersionZero() {
+        insertFinishedVehicle("KMH000017TU000003", 502L);
+
+        assertThat(
+                        jdbc.queryForMap(
+                                "SELECT shipped_at, version FROM finished_vehicle WHERE vin = ?",
+                                "KMH000017TU000003"))
+                .containsEntry("shipped_at", null)
+                .containsEntry("version", 0L);
     }
 
     @Test
