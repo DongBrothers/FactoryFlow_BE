@@ -4,12 +4,15 @@ import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.order.dto.request.CreateOrderRequest;
 import com.factoryflow.order.dto.response.CreateOrderResponse;
 import com.factoryflow.order.dto.response.OrderDetailResponse;
+import com.factoryflow.order.dto.response.OrderListResponse;
 import com.factoryflow.order.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -57,6 +61,47 @@ public class OrderController {
     public ApiResponse<CreateOrderResponse> create(@Valid @RequestBody CreateOrderRequest request) {
         CreateOrderResponse response = orderService.create(request);
         return ApiResponse.created(response);
+    }
+
+    @Operation(
+            summary = "주문 목록",
+            description =
+                    "주문을 최신 먼저 본다. status 로 상태를 거를 수 있다. 다음 페이지는 응답의 nextOrderNo 를 lastOrderNo 로 넘긴다. 품목·차량은 주문 상세에서 본다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공. 주문이 없으면 빈 목록"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "status 가 주문 상태 값이 아님, lastOrderNo 가 UUID 형식이 아님, size 1~100 밖"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "lastOrderNo 주문 없음 (ORDER_NOT_FOUND)")
+    })
+    @GetMapping
+    public ApiResponse<OrderListResponse> findOrders(
+            @Parameter(
+                            description =
+                                    "주문 상태 (RECEIVED, WAITING_MATERIAL, IN_PRODUCTION, COMPLETED, SHIPPED, CANCEL_REQUESTED, CANCELLED). 없으면 전체",
+                            example = "IN_PRODUCTION")
+                    @RequestParam(value = "status", required = false)
+                    @Pattern(
+                            regexp =
+                                    "RECEIVED|WAITING_MATERIAL|IN_PRODUCTION|COMPLETED|SHIPPED|CANCEL_REQUESTED|CANCELLED")
+                    String status,
+            @Parameter(
+                            description = "이 주문보다 오래된 것부터 (처음이면 없음)",
+                            example = "550e8400-e29b-41d4-a716-446655440000")
+                    @RequestParam(value = "lastOrderNo", required = false)
+                    @Pattern(regexp = ORDER_NO)
+                    String lastOrderNo,
+            @Parameter(description = "한 번에 받을 개수 (1~100)", example = "20")
+                    @RequestParam(value = "size", defaultValue = "20")
+                    @Min(1)
+                    @Max(100)
+                    int size) {
+        OrderListResponse orders = orderService.findOrders(status, lastOrderNo, size);
+        return ApiResponse.ok(orders);
     }
 
     @Operation(

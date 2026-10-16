@@ -13,6 +13,8 @@ import com.factoryflow.order.dto.request.CreateOrderRequest;
 import com.factoryflow.order.dto.response.CreateOrderResponse;
 import com.factoryflow.order.dto.response.OrderDetailResponse;
 import com.factoryflow.order.dto.response.OrderItemResponse;
+import com.factoryflow.order.dto.response.OrderListResponse;
+import com.factoryflow.order.dto.response.OrderSummaryResponse;
 import com.factoryflow.order.event.publisher.payload.OrderCancelRequested;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.factoryflow.order.repository.CustomerOrderRepository;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +64,20 @@ public class OrderService {
             }
         }
         return orderWriter.save(request, products);
+    }
+
+    /**
+     * 주문 목록, 최신 먼저 size 개. status 가 있으면 그 상태만. lastOrderNo 가 있으면 그 주문보다 오래된 것부터 (밖으로는 주문 번호만 쓰고 안에서
+     * id 로 바꾼다). 다음 페이지가 있는지 알려고 하나 더 읽는다 (docs/specs/list-apis.md).
+     */
+    @Transactional(readOnly = true)
+    public OrderListResponse findOrders(String status, String lastOrderNo, int size) {
+        Long beforeId = lastOrderNo == null ? Long.MAX_VALUE : findOrderByNo(lastOrderNo).getId();
+        List<OrderSummaryResponse> rows =
+                findOrdersBefore(status, beforeId, size + 1).stream()
+                        .map(OrderSummaryResponse::from)
+                        .toList();
+        return OrderListResponse.of(rows, size);
     }
 
     /** 주문 상세: 품목과 알려진 차량. 내부 id 는 내보내지 않는다. */
@@ -157,6 +174,15 @@ public class OrderService {
         return customerOrderRepository
                 .findByOrderNoAndIsDeletedFalse(orderNo)
                 .orElseThrow(() -> new CustomException(OrderErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private List<CustomerOrder> findOrdersBefore(String status, Long beforeId, int limit) {
+        if (status == null) {
+            return customerOrderRepository.findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
+                    beforeId, Limit.of(limit));
+        }
+        return customerOrderRepository.findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+                OrderStatus.valueOf(status), beforeId, Limit.of(limit));
     }
 
     private List<OrderItem> findItemsOf(Long orderId) {

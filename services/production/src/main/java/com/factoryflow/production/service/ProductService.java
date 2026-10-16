@@ -2,6 +2,7 @@ package com.factoryflow.production.service;
 
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.dto.response.InternalProductResponse;
+import com.factoryflow.production.dto.response.ProductResponse;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import java.util.HashSet;
@@ -28,6 +29,21 @@ public class ProductService {
                                 InternalProductResponse.of(
                                         product, withBom.contains(product.getId())))
                 .toList();
+    }
+
+    /** 주문할 때 고를 수 있는 제품: 삭제되지 않았고 BOM 이 있는 제품, 코드 순 (docs/specs/list-apis.md). */
+    @Transactional(readOnly = true)
+    public List<ProductResponse> findOrderableProducts() {
+        List<Product> products = activeProducts();
+        Set<Long> withBom = productIdsHavingBom(products.stream().map(Product::getId).toList());
+        return products.stream()
+                .filter(product -> withBom.contains(product.getId()))
+                .map(ProductResponse::from)
+                .toList();
+    }
+
+    private List<Product> activeProducts() {
+        return productRepository.findAllByIsDeletedFalseOrderByCodeAsc();
     }
 
     private Set<Long> productIdsHavingBom(List<Long> ids) {
