@@ -15,7 +15,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("2");
+        jdbc = migrateTo("3");
     }
 
     @Test
@@ -36,6 +36,17 @@ class MigrationTest extends MigrationTestSupport {
                         Integer.class);
 
         assertThat(count).isEqualTo(1);
+    }
+
+    @Test
+    void v3AddsPurchaseVersionAndBaseSuppliers() {
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT name FROM supplier WHERE is_deleted = FALSE ORDER BY id",
+                                String.class))
+                .contains("현대모비스", "한국타이어", "현대트랜시스");
+        insertAutoPurchase(2);
+        assertThat(jdbc.queryForObject("SELECT MIN(version) FROM purchase", Long.class)).isZero();
     }
 
     @Test

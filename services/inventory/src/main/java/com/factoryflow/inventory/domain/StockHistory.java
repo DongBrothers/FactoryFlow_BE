@@ -62,6 +62,11 @@ public class StockHistory {
         this.refId = refId;
     }
 
+    public static StockHistory receiveFromPurchase(Long partId, int qty, Long purchaseId) {
+        return new StockHistory(
+                partId, qty, StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);
+    }
+
     public static StockHistory consumeForProduction(Long partId, int qty, Long productionId) {
         return new StockHistory(
                 partId,

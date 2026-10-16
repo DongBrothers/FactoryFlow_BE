@@ -55,6 +55,11 @@ public class PartReservation extends BaseEntity {
         return new PartReservation(productionId, partId, qty, ReservationStatus.WAITING);
     }
 
+    /** 입고로 기다리던 부품을 잡았다 (WAITING → RESERVED). 재고 변경은 서비스가 함께 한다. */
+    public void reserve() {
+        this.status = ReservationStatus.RESERVED;
+    }
+
     /** 잡아 둔 부품을 생산에 썼다 (RESERVED → CONSUMED). */
     public void consume() {
         this.status = ReservationStatus.CONSUMED;
