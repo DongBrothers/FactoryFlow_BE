@@ -47,4 +47,9 @@ public class Part extends BaseEntity {
         this.available -= qty;
         this.reserved += qty;
     }
+
+    /** 생산에 잡아 둔 qty 를 썼다. 바로 쓸 수 있는 수량은 그대로다. */
+    public void consume(int qty) {
+        this.reserved -= qty;
+    }
 }

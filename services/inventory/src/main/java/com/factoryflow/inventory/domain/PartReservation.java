@@ -54,4 +54,9 @@ public class PartReservation extends BaseEntity {
     public static PartReservation waiting(Long productionId, Long partId, int qty) {
         return new PartReservation(productionId, partId, qty, ReservationStatus.WAITING);
     }
+
+    /** 잡아 둔 부품을 생산에 썼다 (RESERVED → CONSUMED). */
+    public void consume() {
+        this.status = ReservationStatus.CONSUMED;
+    }
 }

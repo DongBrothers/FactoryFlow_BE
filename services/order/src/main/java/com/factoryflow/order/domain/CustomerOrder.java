@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.util.Collection;
 import java.util.UUID;
 import lombok.AccessLevel;
@@ -38,6 +39,9 @@ public class CustomerOrder extends BaseEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private OrderStatus status;
+
+    /** 품목·주문 요약을 동시에 바꾸면(다른 큐의 차량 상태 변경) 늦은 쪽이 실패하고 재시도로 다시 요약한다. */
+    @Version private Long version;
 
     private CustomerOrder(String orderNo, Long customerId, OrderStatus status) {
         this.orderNo = orderNo;

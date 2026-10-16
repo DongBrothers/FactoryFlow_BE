@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
 public class EventQueueConfig {
 
     public static final String MATERIAL_REQUESTED_QUEUE = "inventory.production-material-requested";
+    public static final String PRODUCTION_COMPLETED_QUEUE = "inventory.production-completed";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -31,6 +32,12 @@ public class EventQueueConfig {
                 factoryFlowEventsExchange,
                 MATERIAL_REQUESTED_QUEUE,
                 "production.material-requested");
+    }
+
+    @Bean
+    Declarables productionCompletedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, PRODUCTION_COMPLETED_QUEUE, "production.completed");
     }
 
     // ---- 실패 처리 ----

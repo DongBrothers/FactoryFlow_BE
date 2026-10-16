@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("4");
+        jdbc = migrateTo("5");
     }
 
     @Test
@@ -62,6 +62,21 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertItem(1L, 1L, 0))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_order_item_qty");
+    }
+
+    @Test
+    void v5AddsVehicleVinAndOrderVersions() {
+        var columns =
+                jdbc.queryForList(
+                        "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND ((TABLE_NAME = 'order_vehicle'"
+                                + " AND COLUMN_NAME = 'vin') OR (TABLE_NAME IN ('customer_order',"
+                                + " 'order_item') AND COLUMN_NAME = 'version'))",
+                        String.class);
+
+        assertThat(columns)
+                .containsExactlyInAnyOrder(
+                        "order_vehicle.vin", "customer_order.version", "order_item.version");
     }
 
     @Test

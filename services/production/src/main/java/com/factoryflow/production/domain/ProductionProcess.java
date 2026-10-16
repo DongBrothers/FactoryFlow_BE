@@ -27,6 +27,11 @@ public enum ProductionProcess {
         return automated;
     }
 
+    /** 마지막 공정(검사)인가. 양품으로 끝나면 차가 완성된다. */
+    public boolean isLast() {
+        return this == INSPECTION;
+    }
+
     /** 라우팅 순서 1~5. */
     public int seq() {
         return ordinal() + 1;

@@ -20,7 +20,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("2");
+        jdbc = migrateTo("3");
     }
 
     @Test
@@ -134,6 +134,18 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v3FinishedVehicleIsOnePerVinAndPerProduction() {
+        insertFinishedVehicle("KMH000017TU000001", 500L);
+
+        assertThatThrownBy(() -> insertFinishedVehicle("KMH000017TU000001", 501L))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_finished_vehicle_vin");
+        assertThatThrownBy(() -> insertFinishedVehicle("KMH000017TU000002", 500L))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_finished_vehicle_production");
+    }
+
+    @Test
     void processedEventKeyIsIdAndEventIdIsUnique() {
         var pk =
                 jdbc.queryForList(
@@ -167,6 +179,14 @@ class MigrationTest extends MigrationTestSupport {
                 productionId,
                 partId,
                 qty);
+    }
+
+    private void insertFinishedVehicle(String vin, long productionId) {
+        jdbc.update(
+                "INSERT INTO finished_vehicle (vin, production_id, order_id, product_id, status,"
+                        + " created_at, updated_at) VALUES (?, ?, 1, 1, 'IN_STOCK', NOW(6), NOW(6))",
+                vin,
+                productionId);
     }
 
     private void insertProcessedEvent(String eventId) {

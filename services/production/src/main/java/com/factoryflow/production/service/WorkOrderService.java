@@ -7,6 +7,7 @@ import com.factoryflow.production.domain.Equipment;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionResult;
 import com.factoryflow.production.domain.StepResult;
+import com.factoryflow.production.domain.Vin;
 import com.factoryflow.production.domain.WorkOrder;
 import com.factoryflow.production.domain.WorkOrderStatus;
 import com.factoryflow.production.domain.WorkOrderStep;
@@ -219,7 +220,8 @@ public class WorkOrderService {
 
     /**
      * 공정 종료(작업자)와 설비 완료 보고의 공통: 실적을 남기고(불량 사유는 DEFECT 일 때만), 설비를 놓고, 공정을 마무리하고(양품 DONE, 불량
-     * PENDING), 작업지시 변경을 기록한다. 두 경로가 같은 완료 규칙을 쓰게 하려고 한곳에 둔다. workerId 는 설비 보고면 null.
+     * PENDING), 작업지시 변경을 기록한다. 검사 양품이면 차를 완성한다. 두 경로가 같은 완료 규칙을 쓰게 하려고 한곳에 둔다. workerId 는 설비 보고면
+     * null.
      */
     private void finishStep(
             WorkOrder workOrder,
@@ -234,6 +236,16 @@ public class WorkOrderService {
         findEquipment(step.getEquipmentCode()).release();
         step.finish(result, now);
         workOrder.recordStepChange(now);
+        if (result == StepResult.GOOD && step.getProcess().isLast()) {
+            completeWorkOrder(workOrder, now);
+        }
+    }
+
+    /** 마지막 공정(검사)이 양품으로 끝났다: VIN 을 발행하고 작업지시·생산 건을 완료한다 (docs/specs/production-completion.md). */
+    private void completeWorkOrder(WorkOrder workOrder, LocalDateTime now) {
+        String vin = Vin.issue(workOrder.getProductId(), workOrder.getId(), now.getYear());
+        workOrder.complete(vin, now);
+        productionService.completeProduction(workOrder.getProductionId(), vin);
     }
 
     /** 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이어야 한다. 그래서 한 작업지시에서 진행 중인 공정은 하나뿐이다. */
