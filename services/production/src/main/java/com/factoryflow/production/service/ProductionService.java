@@ -11,6 +11,7 @@ import com.factoryflow.production.domain.WorkOrderStep;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
+import com.factoryflow.production.event.publisher.payload.ProductionCancelRejected;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelled;
 import com.factoryflow.production.event.publisher.payload.ProductionCompleted;
 import com.factoryflow.production.event.publisher.payload.ProductionStatusChanged;
@@ -25,6 +26,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -221,6 +223,40 @@ public class ProductionService {
                         production.getId(),
                         production.getProductId(),
                         vin));
+    }
+
+    /**
+     * order.cancel-requested: 주문의 생산 건마다 프레스 배정 전이면 취소(작업지시도) + production.cancelled, 배정 후면
+     * production.cancel-rejected(ALREADY_STARTED, 지금 상태). 이미 취소된 건은 cancelled 를 다시 보낸다. 생산 건이 없으면
+     * PRODUCTION_NOT_FOUND (order 가 차량을 다 알 때만 요청하므로 정상 흐름에서는 없음, docs/specs/order-cancel.md).
+     */
+    @Transactional
+    public void cancelAll(Long orderId) {
+        List<Production> productions = findProductionsOf(orderId);
+        if (productions.isEmpty()) {
+            throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND);
+        }
+        for (Production production : productions) {
+            if (production.isClosed() || production.cancel()) {
+                findWorkOrderOf(production.getId()).ifPresent(WorkOrder::cancel);
+                publishCancelled(production);
+            } else {
+                eventPublisher.publish(
+                        new ProductionCancelRejected(
+                                orderId,
+                                production.getId(),
+                                ProductionCancelRejected.ALREADY_STARTED,
+                                production.getStatus()));
+            }
+        }
+    }
+
+    private List<Production> findProductionsOf(Long orderId) {
+        return productionRepository.findAllByOrderIdOrderByIdAsc(orderId);
+    }
+
+    private Optional<WorkOrder> findWorkOrderOf(Long productionId) {
+        return workOrderRepository.findByProductionId(productionId);
     }
 
     /**

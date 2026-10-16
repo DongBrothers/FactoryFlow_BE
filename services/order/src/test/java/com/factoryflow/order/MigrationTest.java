@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("5");
+        jdbc = migrateTo("6");
     }
 
     @Test
@@ -62,6 +62,20 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertItem(1L, 1L, 0))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_order_item_qty");
+    }
+
+    @Test
+    void v6AddsCancelTimes() {
+        var columns =
+                jdbc.queryForList(
+                        "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN"
+                                + " ('cancel_requested_at', 'cancelled_at') AND IS_NULLABLE = 'YES'",
+                        String.class);
+
+        assertThat(columns)
+                .containsExactlyInAnyOrder(
+                        "customer_order.cancel_requested_at", "order_vehicle.cancelled_at");
     }
 
     @Test

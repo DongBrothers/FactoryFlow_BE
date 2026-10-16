@@ -78,13 +78,54 @@ public class PartReservationService {
         part.receive(event.qty());
         stockHistoryRepository.save(
                 StockHistory.receiveFromPurchase(part.getId(), event.qty(), event.purchaseId()));
-        List<Long> filled = fillWaitingLines(part);
+        announceReserved(fillWaitingLines(part));
+    }
+
+    /**
+     * production.cancelled: 그 생산 건의 예약 줄을 푼다. RESERVED 줄은 재고를 돌려놓고(available +, reserved −, RELEASE
+     * 이력), WAITING 줄은 그냥 푼다. 풀린 부품은 그 부품을 기다리던 줄에 먼저 온 순서로 넘기고, 다 찬 생산 건은 inventory.reserved. 이미
+     * 풀렸거나 줄이 없으면 아무것도 하지 않는다 (docs/specs/order-cancel.md).
+     */
+    @Transactional
+    public void release(Long productionId) {
+        List<PartReservation> lines = findOpenLines(productionId);
+        if (lines.isEmpty()) {
+            log.info("풀 예약 줄이 없어 건너뜀: productionId={}", productionId);
+            return;
+        }
+        List<PartReservation> reserved =
+                lines.stream().filter(PartReservation::isReserved).toList();
+        Map<Long, Part> partsById =
+                loadParts(
+                        reserved.stream()
+                                .map(PartReservation::getPartId)
+                                .collect(Collectors.toSet()));
+        for (PartReservation line : reserved) {
+            partsById.get(line.getPartId()).release(line.getQty());
+            stockHistoryRepository.save(
+                    StockHistory.releaseForProduction(
+                            line.getPartId(), line.getQty(), productionId));
+        }
+        lines.forEach(PartReservation::release);
+        List<Long> filled = new ArrayList<>();
+        partsById.values().forEach(part -> filled.addAll(fillWaitingLines(part)));
+        announceReserved(filled);
+    }
+
+    /** 줄을 채운 생산 건 중 기다리는 줄이 더 없는 것만 inventory.reserved. */
+    private void announceReserved(List<Long> filled) {
         Set<Long> stillWaiting = findStillWaiting(filled);
         filled.stream()
+                .distinct()
                 .filter(productionId -> !stillWaiting.contains(productionId))
                 .forEach(
                         productionId ->
                                 eventPublisher.publish(new InventoryReserved(productionId)));
+    }
+
+    private List<PartReservation> findOpenLines(Long productionId) {
+        return reservationRepository.findAllByProductionIdAndStatusIn(
+                productionId, List.of(ReservationStatus.RESERVED, ReservationStatus.WAITING));
     }
 
     /** 기다리는 줄을 먼저 온 순서로 RESERVED 로 바꾼다. 들어가지 않는 줄을 만나면 멈춘다. 채운 줄의 생산 건 id 를 돌려준다. */

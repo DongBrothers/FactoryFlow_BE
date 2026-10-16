@@ -60,6 +60,15 @@ public class PartReservation extends BaseEntity {
         this.status = ReservationStatus.RESERVED;
     }
 
+    public boolean isReserved() {
+        return status == ReservationStatus.RESERVED;
+    }
+
+    /** 생산 취소로 줄을 푼다 (RESERVED·WAITING → RELEASED). 재고 변경은 서비스가 함께 한다. */
+    public void release() {
+        this.status = ReservationStatus.RELEASED;
+    }
+
     /** 잡아 둔 부품을 생산에 썼다 (RESERVED → CONSUMED). */
     public void consume() {
         this.status = ReservationStatus.CONSUMED;

@@ -11,4 +11,6 @@ public interface OrderVehicleRepository extends JpaRepository<OrderVehicle, Long
 
     /** 한 품목의 차량. 품목 수량만큼만 있다. */
     List<OrderVehicle> findAllByOrderItemId(Long orderItemId);
+
+    List<OrderVehicle> findAllByOrderIdOrderByProductionIdAsc(Long orderId);
 }

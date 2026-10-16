@@ -93,6 +93,17 @@ public class Production extends BaseEntity {
         return true;
     }
 
+    /** 프레스 배정 전(PLANNED, WAITING_MATERIAL, READY)이면 취소한다. 바뀌었으면 true. 배정 후면 false (거절). */
+    public boolean cancel() {
+        if (status != ProductionStatus.PLANNED
+                && status != ProductionStatus.WAITING_MATERIAL
+                && status != ProductionStatus.READY) {
+            return false;
+        }
+        this.status = ProductionStatus.CANCELLED;
+        return true;
+    }
+
     /** 검사 양품으로 차가 완성됐다. IN_PROGRESS 에서만 바뀐다. 바뀌었으면 true. */
     public boolean complete(LocalDateTime now) {
         if (status != ProductionStatus.IN_PROGRESS) {

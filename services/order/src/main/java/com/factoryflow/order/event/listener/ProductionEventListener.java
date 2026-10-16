@@ -3,6 +3,8 @@ package com.factoryflow.order.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.order.config.EventQueueConfig;
+import com.factoryflow.order.event.listener.payload.ProductionCancelRejected;
+import com.factoryflow.order.event.listener.payload.ProductionCancelled;
 import com.factoryflow.order.event.listener.payload.ProductionCompleted;
 import com.factoryflow.order.event.listener.payload.ProductionStatusChanged;
 import com.factoryflow.order.service.OrderVehicleService;
@@ -34,6 +36,28 @@ public class ProductionEventListener {
                                 event.productionId(),
                                 event.productId(),
                                 event.status()));
+    }
+
+    /** 생산 건 취소: 차량 CANCELLED, 답이 다 오면 취소 회차를 끝낸다. 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_CANCELLED_QUEUE)
+    public void onCancelled(EventEnvelope envelope) {
+        ProductionCancelled event =
+                objectMapper.treeToValue(envelope.payload(), ProductionCancelled.class);
+        processedEventGuard.runOnce(
+                envelope,
+                () -> orderVehicleService.applyCancelled(event.orderId(), event.productionId()));
+    }
+
+    /** 생산 건 취소 거절: 차량을 거절 때의 상태로 되돌리고, 답이 다 오면 취소 회차를 끝낸다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_CANCEL_REJECTED_QUEUE)
+    public void onCancelRejected(EventEnvelope envelope) {
+        ProductionCancelRejected event =
+                objectMapper.treeToValue(envelope.payload(), ProductionCancelRejected.class);
+        processedEventGuard.runOnce(
+                envelope,
+                () ->
+                        orderVehicleService.applyCancelRejected(
+                                event.orderId(), event.productionId(), event.status()));
     }
 
     /** 생산 완료: 차량 COMPLETED + VIN, 품목·주문 요약. 처리 기록과 같은 트랜잭션이다. */

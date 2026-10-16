@@ -1,14 +1,17 @@
 package com.factoryflow.order.service;
 
+import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.order.domain.CustomerOrder;
 import com.factoryflow.order.domain.OrderItem;
 import com.factoryflow.order.domain.OrderStatus;
 import com.factoryflow.order.domain.OrderVehicle;
+import com.factoryflow.order.event.publisher.payload.OrderCancelled;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.factoryflow.order.repository.CustomerOrderRepository;
 import com.factoryflow.order.repository.OrderItemRepository;
 import com.factoryflow.order.repository.OrderVehicleRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ public class OrderVehicleService {
     private final OrderVehicleRepository orderVehicleRepository;
     private final OrderItemRepository orderItemRepository;
     private final CustomerOrderRepository customerOrderRepository;
+    private final EventPublisher eventPublisher;
 
     /**
      * 생산 건 상태를 그 차량에 반영하고, 바뀌었으면 같은 트랜잭션에서 품목·주문 상태를 다시 계산한다. 처음 보는 생산 건이면 품목에 차량을 만든다
@@ -64,6 +68,62 @@ public class OrderVehicleService {
             return;
         }
         refreshStatuses(item);
+    }
+
+    /** production.cancelled: 차량을 CANCELLED 로 바꾸고 요약한다. 답이 다 왔으면 취소 요청 회차를 끝낸다. */
+    @Transactional
+    public void applyCancelled(Long orderId, Long productionId) {
+        OrderVehicle vehicle = findVehicleOrThrow(productionId);
+        if (vehicle.cancel(LocalDateTime.now())) {
+            refreshStatuses(findItemById(vehicle.getOrderItemId()));
+        }
+        finishCancelRoundIfAnswered(orderId);
+    }
+
+    /** production.cancel-rejected: 취소 요청 중인 차량을 거절 때의 생산 상태로 되돌리고 요약한다. 답이 다 왔으면 회차를 끝낸다. */
+    @Transactional
+    public void applyCancelRejected(Long orderId, Long productionId, String productionStatus) {
+        OrderVehicle vehicle = findVehicleOrThrow(productionId);
+        if (vehicle.restoreAfterRejection(vehicleStatusOf(productionStatus))) {
+            refreshStatuses(findItemById(vehicle.getOrderItemId()));
+        }
+        finishCancelRoundIfAnswered(orderId);
+    }
+
+    /**
+     * 취소 요청 중인 차량이 더 없으면 회차를 끝낸다. 이번 회차에 취소된 차량이 있으면 order.cancelled (회차당 한 번, 늦게 온 같은 답은 회차가 이미 끝나
+     * 아무것도 하지 않는다).
+     */
+    private void finishCancelRoundIfAnswered(Long orderId) {
+        CustomerOrder order = findOrder(orderId);
+        if (!order.isCancelRoundOpen()) {
+            return;
+        }
+        List<OrderVehicle> vehicles = findVehiclesOfOrder(orderId);
+        if (vehicles.stream().anyMatch(v -> v.getStatus() == OrderStatus.CANCEL_REQUESTED)) {
+            return;
+        }
+        boolean cancelled =
+                vehicles.stream().anyMatch(v -> v.isCancelledSince(order.getCancelRequestedAt()));
+        order.finishCancelRound();
+        if (cancelled) {
+            eventPublisher.publish(new OrderCancelled(orderId));
+        }
+    }
+
+    private OrderVehicle findVehicleOrThrow(Long productionId) {
+        return findVehicle(productionId)
+                .orElseThrow(() -> new CustomException(OrderErrorCode.ORDER_VEHICLE_NOT_FOUND));
+    }
+
+    private OrderItem findItemById(Long orderItemId) {
+        return orderItemRepository
+                .findById(orderItemId)
+                .orElseThrow(() -> new CustomException(OrderErrorCode.ORDER_ITEM_NOT_FOUND));
+    }
+
+    private List<OrderVehicle> findVehiclesOfOrder(Long orderId) {
+        return orderVehicleRepository.findAllByOrderIdOrderByProductionIdAsc(orderId);
     }
 
     /** 그 생산 건의 차량. 처음 보는 생산 건이면 품목에 차량을 만든다. */

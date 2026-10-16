@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -38,6 +39,9 @@ public class OrderVehicle extends BaseEntity {
     /** 차대번호. 생산이 끝나면(production.completed) 기록한다. */
     @Column(length = 17)
     private String vin;
+
+    /** 취소된 시각 (production.cancelled). */
+    private LocalDateTime cancelledAt;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
@@ -76,6 +80,40 @@ public class OrderVehicle extends BaseEntity {
         }
         this.vin = vin;
         return true;
+    }
+
+    /** 취소를 요청한다. 이미 취소된 차량은 그대로. 바뀌었으면 true. */
+    public boolean requestCancel() {
+        if (status == OrderStatus.CANCELLED) {
+            return false;
+        }
+        this.status = OrderStatus.CANCEL_REQUESTED;
+        return true;
+    }
+
+    /** production 이 취소했다. 바뀌었으면 true. */
+    public boolean cancel(LocalDateTime now) {
+        if (!applyProductionStatus(OrderStatus.CANCELLED)) {
+            return false;
+        }
+        this.cancelledAt = now;
+        return true;
+    }
+
+    /** production 이 취소를 거절했다: 취소 요청 중이면 거절 때의 상태로 되돌린다. 바뀌었으면 true. */
+    public boolean restoreAfterRejection(OrderStatus current) {
+        if (status != OrderStatus.CANCEL_REQUESTED) {
+            return false;
+        }
+        this.status = current;
+        return true;
+    }
+
+    /** since 이후에 취소됐는가 (이번 취소 요청 회차에 취소됐는가). */
+    public boolean isCancelledSince(LocalDateTime since) {
+        return status == OrderStatus.CANCELLED
+                && cancelledAt != null
+                && !cancelledAt.isBefore(since);
     }
 
     public static OrderVehicle receive(Long orderId, Long orderItemId, Long productionId) {

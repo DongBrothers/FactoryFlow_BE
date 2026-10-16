@@ -10,6 +10,9 @@ public interface PartReservationRepository extends JpaRepository<PartReservation
 
     boolean existsByProductionId(Long productionId);
 
+    List<PartReservation> findAllByProductionIdAndStatusIn(
+            Long productionId, Collection<ReservationStatus> statuses);
+
     List<PartReservation> findAllByProductionIdInAndStatus(
             Collection<Long> productionIds, ReservationStatus status);
 

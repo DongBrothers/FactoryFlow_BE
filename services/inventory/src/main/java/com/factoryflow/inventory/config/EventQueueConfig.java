@@ -23,6 +23,7 @@ public class EventQueueConfig {
     public static final String MATERIAL_REQUESTED_QUEUE = "inventory.production-material-requested";
     public static final String PRODUCTION_COMPLETED_QUEUE = "inventory.production-completed";
     public static final String PURCHASE_RECEIVED_QUEUE = "inventory.purchase-received";
+    public static final String PRODUCTION_CANCELLED_QUEUE = "inventory.production-cancelled";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -44,6 +45,12 @@ public class EventQueueConfig {
     @Bean
     Declarables purchaseReceivedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(factoryFlowEventsExchange, PURCHASE_RECEIVED_QUEUE, "purchase.received");
+    }
+
+    @Bean
+    Declarables productionCancelledQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, PRODUCTION_CANCELLED_QUEUE, "production.cancelled");
     }
 
     // ---- 실패 처리 ----

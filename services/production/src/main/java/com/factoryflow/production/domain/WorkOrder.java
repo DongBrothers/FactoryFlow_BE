@@ -83,6 +83,11 @@ public class WorkOrder extends BaseEntity {
         this.stepChangedAt = now;
     }
 
+    /** 생산 건이 취소됐다 (프레스 배정 전). 배정·작업자 시작 대상에서 빠진다. */
+    public void cancel() {
+        this.status = WorkOrderStatus.CANCELLED;
+    }
+
     /** 마지막 공정(검사)이 양품으로 끝나 차가 완성됐다: VIN 을 붙이고 COMPLETED. */
     public void complete(String vin, LocalDateTime now) {
         this.status = WorkOrderStatus.COMPLETED;
