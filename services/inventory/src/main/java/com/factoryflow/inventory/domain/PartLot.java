@@ -32,7 +32,7 @@ public class PartLot extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private Long partId;
 
-    @Column(nullable = false, updatable = false, length = 20)
+    @Column(nullable = false, updatable = false, length = 32)
     private String lotNo;
 
     @Column(nullable = false, updatable = false)

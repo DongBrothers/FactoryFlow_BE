@@ -170,6 +170,20 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v5PartLotNoFitsTheLongestPurchaseId() {
+        String lotNo = "LOT-261017-" + Long.MAX_VALUE;
+
+        insertLot(lotNo, Long.MAX_VALUE, 5, 5);
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT lot_no FROM part_lot WHERE purchase_id = ?",
+                                String.class,
+                                Long.MAX_VALUE))
+                .isEqualTo(lotNo);
+    }
+
+    @Test
     void v5PartLotQtyStaysInRange() {
         assertThatThrownBy(() -> insertLot("LOT-261017-000511", 511L, 0, 0))
                 .isInstanceOf(DataAccessException.class)

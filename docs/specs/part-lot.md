@@ -59,7 +59,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 ### 테이블 변경
 | 서비스 | 변경 |
 |---|---|
-| inventory (V5) | `part_lot`: id, part_id, lot_no (UNIQUE), purchase_id (UNIQUE), received_qty (> 0), remaining_qty (≥ 0, ≤ received_qty), received_at, created_at, updated_at, is_deleted. 인덱스 (part_id, id) |
+| inventory (V5) | `part_lot`: id, part_id, lot_no (VARCHAR(32), UNIQUE. 구매 건 id 가 Long 최대 19자리여도 들어감), purchase_id (UNIQUE), received_qty (> 0), remaining_qty (≥ 0, ≤ received_qty), received_at, created_at, updated_at, is_deleted. 인덱스 (part_id, id) |
 | inventory (V5) | `part_lot_usage`: id, vin, production_id, part_id, lot_id (NULL = LOT 없음), qty (> 0), created_at. 인덱스 (vin) |
 
 ## 관련 이벤트 (events.md 참조)

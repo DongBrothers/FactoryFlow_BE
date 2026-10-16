@@ -2,7 +2,7 @@
 CREATE TABLE part_lot (
     id             BIGINT      NOT NULL AUTO_INCREMENT,
     part_id        BIGINT      NOT NULL,           -- 논리 FK: part.id
-    lot_no         VARCHAR(20) NOT NULL,           -- LOT-{yyMMdd}-{purchaseId 6자리}
+    lot_no         VARCHAR(32) NOT NULL,           -- LOT-{yyMMdd}-{purchaseId, 6자리 미만은 0 채움}. Long 최대 19자리까지
     purchase_id    BIGINT      NOT NULL,           -- 논리 참조: purchase_db.purchase.id
     received_qty   INT         NOT NULL,
     remaining_qty  INT         NOT NULL,
