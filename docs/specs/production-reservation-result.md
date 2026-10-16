@@ -15,7 +15,7 @@ production 이 inventory 의 부품 예약 결과를 받아 생산 건 상태를
 | 받은 이벤트 | 현재 상태 | 처리 |
 |---|---|---|
 | inventory.reserved | PLANNED, WAITING_MATERIAL | → **READY** + `production.status-changed` |
-| inventory.reserved | CANCELLED, FAILED | 상태 유지, `production.cancelled { orderId, productionId }` 를 다시 보낸다 (늦게 온 예약을 inventory 가 해제하게) |
+| inventory.reserved | CANCELLED | 상태 유지, `production.cancelled { orderId, productionId }` 를 다시 보낸다 (늦게 온 예약을 inventory 가 해제하게) |
 | inventory.reserved | READY, IN_PROGRESS, COMPLETED | 무시 (INFO 로그) |
 | inventory.reservation-pending | PLANNED | → **WAITING_MATERIAL** + `production.status-changed` |
 | inventory.reservation-pending | 그 외 | 무시 (INFO 로그) |
@@ -47,7 +47,7 @@ production 이 inventory 의 부품 예약 결과를 받아 생산 건 상태를
 - [ ] PLANNED 생산 건에 reserved → READY, status-changed(READY) 1건
 - [ ] WAITING_MATERIAL 생산 건에 reserved → READY, status-changed(READY) 1건 (입고 후 예약)
 - [ ] PLANNED 생산 건에 reservation-pending → WAITING_MATERIAL, status-changed(WAITING_MATERIAL) 1건
-- [ ] CANCELLED, FAILED 생산 건에 reserved → 상태 유지, production.cancelled(orderId, productionId) 1건, status-changed 없음
+- [ ] CANCELLED 생산 건에 reserved → 상태 유지, production.cancelled(orderId, productionId) 1건, status-changed 없음
 - [ ] 허용되지 않은 상태(READY 에 reservation-pending 등)는 상태도 이벤트도 바뀌지 않는다
 - [ ] 같은 이벤트를 두 번 받아도 status-changed 는 한 번만 생긴다
 - [ ] 발행한 이벤트의 traceId 는 받은 이벤트의 traceId 와 같다

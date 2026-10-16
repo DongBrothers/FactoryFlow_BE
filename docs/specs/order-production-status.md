@@ -20,25 +20,23 @@
 | READY, IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
-| FAILED | FAILED |
 
 6. 같은 트랜잭션에서 품목 상태(그 품목의 차량들)와 주문 상태(그 주문의 품목들)를 다시 계산한다 (SAGA "요약")
    - 품목 수량보다 아직 알려지지 않은 차량이 있으면 그 차량은 RECEIVED 로 보고 계산한다
    - CANCELLED 는 빼고 남은 것으로, 위에서부터 먼저 맞는 것
    1. 남은 것이 없음 → CANCELLED
    2. 하나라도 CANCEL_REQUESTED → CANCEL_REQUESTED
-   3. 남은 것이 모두 FAILED → FAILED (FAILED 는 아래 규칙에서 빼고 본다)
-   4. 모두 SHIPPED → SHIPPED
-   5. 모두 COMPLETED 또는 SHIPPED → COMPLETED
-   6. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
-   7. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
-   8. 그 외 → RECEIVED
+   3. 모두 SHIPPED → SHIPPED
+   4. 모두 COMPLETED 또는 SHIPPED → COMPLETED
+   5. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
+   6. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
+   7. 그 외 → RECEIVED
 
 ## 규칙 / 예외
 | 상황 | 처리 |
 |---|---|
 | 같은 이벤트를 두 번 받음 | 두 번째는 건너뛴다 (ProcessedEventGuard) |
-| 차량이 COMPLETED, SHIPPED, CANCELLED, FAILED (끝난 상태) | 바꾸지 않고 INFO 로그 (늦게 온 이벤트) |
+| 차량이 COMPLETED, SHIPPED, CANCELLED (끝난 상태) | 바꾸지 않고 INFO 로그 (늦게 온 이벤트) |
 | 차량이 CANCEL_REQUESTED (취소 결과 대기) | CANCELLED 만 반영하고, 그 외 상태는 무시한다 (취소 결과는 cancelled / cancel-rejected 로 정해진다) |
 | 매핑 결과가 지금 차량 상태와 같음 (예: READY → IN_PROGRESS 둘 다 IN_PRODUCTION) | 바꾸지 않는다. 요약도 그대로 |
 | 처음 보는 생산 건인데 그 품목의 차량이 이미 수량만큼 있음 | 처리 중 오류 (`ORDER_VEHICLE_OVERFLOW`). 정상 흐름에서는 생기지 않는다 |
@@ -46,7 +44,7 @@
 | 처리 중 오류 | 트랜잭션 롤백, 1s·2s·4s 로 3번 재시도, 그래도 실패하면 `EVENT_DEAD_LETTERED` 로그 후 `order.production-status-changed.dlq` |
 
 - order 는 이 처리에서 이벤트를 발행하지 않는다
-- production.completed / cancelled / failed 수신, 출고, 고객 취소 요청은 해당 하위 이슈에서 한다. 이 작업의 차량 상태와 요약 계산을 그대로 쓴다
+- production.completed / cancelled 수신, 출고, 고객 취소 요청은 해당 하위 이슈에서 한다. 이 작업의 차량 상태와 요약 계산을 그대로 쓴다
 - 테이블 `order_vehicle (id, order_id, order_item_id, production_id UNIQUE, status)` (Flyway)
 
 ## 관련 이벤트 (events.md 참조)
@@ -59,7 +57,7 @@
 - [ ] 2대 품목에서 한 대만 READY → 차량 IN_PRODUCTION, 품목·주문 IN_PRODUCTION
 - [ ] 2대 품목에서 한 대만 WAITING_MATERIAL, 나머지는 아직 모름 → 품목 WAITING_MATERIAL
 - [ ] 품목 2개 중 하나 READY, 하나 WAITING_MATERIAL → 품목 상태가 각각 다르고 주문은 IN_PRODUCTION
-- [ ] 끝난 차량(COMPLETED, CANCELLED, FAILED)에 온 status-changed 는 무시한다
+- [ ] 끝난 차량(COMPLETED, CANCELLED)에 온 status-changed 는 무시한다
 - [ ] CANCEL_REQUESTED 차량에는 CANCELLED 만 반영된다
 - [ ] 요약 규칙 8가지를 각각 확인한다 (단위 테스트)
 - [ ] 같은 이벤트를 두 번 받아도 한 번만 반영된다

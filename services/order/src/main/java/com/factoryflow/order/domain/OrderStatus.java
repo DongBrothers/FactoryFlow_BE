@@ -21,13 +21,11 @@ public enum OrderStatus {
     /** 취소 요청. 고객이 취소를 요청했고 production 의 cancelled / cancel-rejected 를 기다린다. */
     CANCEL_REQUESTED,
     /** 취소됨. 끝난 상태라 이후 상태 변경 이벤트는 무시한다. */
-    CANCELLED,
-    /** 설비 고장으로 생산 실패. 끝난 상태라 이후 상태 변경 이벤트는 무시한다. */
-    FAILED;
+    CANCELLED;
 
     /** 더 바뀌지 않는 상태. 늦게 온 이벤트는 무시한다. */
     public boolean isFinished() {
-        return this == COMPLETED || this == SHIPPED || this == CANCELLED || this == FAILED;
+        return this == COMPLETED || this == SHIPPED || this == CANCELLED;
     }
 
     /**
@@ -42,14 +40,10 @@ public enum OrderStatus {
         if (remaining.contains(CANCEL_REQUESTED)) {
             return CANCEL_REQUESTED;
         }
-        List<OrderStatus> alive = remaining.stream().filter(s -> s != FAILED).toList();
-        if (alive.isEmpty()) {
-            return FAILED;
-        }
-        return summarizeAlive(alive);
+        return summarizeAlive(remaining);
     }
 
-    /** 취소·실패를 뺀 상태들의 요약. */
+    /** 취소를 뺀 상태들의 요약. */
     private static OrderStatus summarizeAlive(List<OrderStatus> alive) {
         if (alive.stream().allMatch(s -> s == SHIPPED)) {
             return SHIPPED;

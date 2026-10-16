@@ -3,8 +3,10 @@ package com.factoryflow.production.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.production.config.EventQueueConfig;
+import com.factoryflow.production.event.listener.payload.EquipmentStatusChanged;
 import com.factoryflow.production.event.listener.payload.EquipmentStepCompleted;
 import com.factoryflow.production.event.listener.payload.EquipmentStepStarted;
+import com.factoryflow.production.service.EquipmentService;
 import com.factoryflow.production.service.WorkOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -18,6 +20,7 @@ public class SimulatorEventListener {
 
     private final ProcessedEventGuard processedEventGuard;
     private final WorkOrderService workOrderService;
+    private final EquipmentService equipmentService;
     private final ObjectMapper objectMapper;
 
     @RabbitListener(queues = EventQueueConfig.EQUIPMENT_STEP_STARTED_QUEUE)
@@ -44,5 +47,17 @@ public class SimulatorEventListener {
                                 event.equipmentCode(),
                                 event.result(),
                                 event.defectReason()));
+    }
+
+    /** 설비 상태 변경: 상태·이력 저장, 고장·정지면 그 설비의 공정을 되돌려 다른 설비로 재배정하게 한다. */
+    @RabbitListener(queues = EventQueueConfig.EQUIPMENT_STATUS_CHANGED_QUEUE)
+    public void onStatusChanged(EventEnvelope envelope) {
+        EquipmentStatusChanged event =
+                objectMapper.treeToValue(envelope.payload(), EquipmentStatusChanged.class);
+        processedEventGuard.runOnce(
+                envelope,
+                () ->
+                        equipmentService.changeStatus(
+                                event.equipmentCode(), event.status(), envelope.occurredAt()));
     }
 }

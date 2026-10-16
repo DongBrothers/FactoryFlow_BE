@@ -21,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("5");
+        jdbc = migrateTo("6");
     }
 
     @Test
@@ -140,6 +140,22 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertStep(workOrder, "PRESS", 1))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_step_process");
+    }
+
+    @Test
+    void v6CreatesEquipmentStatusHistory() {
+        jdbc.update(
+                "INSERT INTO equipment_status_history (equipment_code, from_status, to_status,"
+                        + " changed_at, created_at) VALUES ('PRESS-01', 'RUNNING', 'FAULT', NOW(6), NOW(6))");
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM information_schema.STATISTICS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE()"
+                                        + " AND TABLE_NAME = 'equipment_status_history'"
+                                        + " AND INDEX_NAME = 'idx_equipment_status_history_equipment'",
+                                Integer.class))
+                .isEqualTo(2);
     }
 
     @Test

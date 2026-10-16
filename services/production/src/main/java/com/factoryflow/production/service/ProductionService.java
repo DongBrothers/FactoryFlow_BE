@@ -142,8 +142,8 @@ public class ProductionService {
 
     /**
      * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY 로 바꾸고 작업지시 1건과 공정 5개를 발행한다 (생산의
-     * 트리거, docs/specs/production-work-order.md). 취소되었거나 실패한 생산 건이면 예약을 풀도록 production.cancelled 를
-     * 다시 보낸다. 그 밖의 상태에서 온 결과는 무시한다 (docs/specs/production-reservation-result.md).
+     * 트리거, docs/specs/production-work-order.md). 취소된 생산 건이면 예약을 풀도록 production.cancelled 를 다시 보낸다.
+     * 그 밖의 상태에서 온 결과는 무시한다 (docs/specs/production-reservation-result.md).
      */
     @Transactional
     public void markReserved(Long productionId) {

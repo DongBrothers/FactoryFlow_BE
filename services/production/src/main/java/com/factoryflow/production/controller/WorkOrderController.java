@@ -110,7 +110,7 @@ public class WorkOrderController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description =
-                        "앞 공정이 안 끝남 (STEP_OUT_OF_ORDER), 시작 전 공정이 아님 (INVALID_STEP_STATUS), 다른 공정의 설비 (EQUIPMENT_PROCESS_MISMATCH), 설비가 가동 중이 아님 (EQUIPMENT_NOT_RUNNING), 설비가 다른 차 작업 중 (EQUIPMENT_BUSY), 취소·실패한 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (PRODUCTION_CONFLICT)")
+                        "앞 공정이 안 끝남 (STEP_OUT_OF_ORDER), 시작 전 공정이 아님 (INVALID_STEP_STATUS), 다른 공정의 설비 (EQUIPMENT_PROCESS_MISMATCH), 설비가 가동 중이 아님 (EQUIPMENT_NOT_RUNNING), 설비가 다른 차 작업 중 (EQUIPMENT_BUSY), 취소된 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (PRODUCTION_CONFLICT)")
     })
     @PostMapping("/{workOrderId}/steps/{process}/start")
     public ApiResponse<WorkOrderDetailResponse> startStep(
@@ -144,7 +144,7 @@ public class WorkOrderController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description =
-                        "진행 중인 공정이 아님 (INVALID_STEP_STATUS), 취소·실패한 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (PRODUCTION_CONFLICT)")
+                        "진행 중인 공정이 아님 (INVALID_STEP_STATUS), 취소된 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (PRODUCTION_CONFLICT)")
     })
     @PostMapping("/{workOrderId}/steps/{process}/complete")
     public ApiResponse<WorkOrderDetailResponse> completeStep(

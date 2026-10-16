@@ -103,8 +103,8 @@ public class Production extends BaseEntity {
         return true;
     }
 
-    /** 취소되었거나 설비 고장으로 실패해 더 진행하지 않는 생산 건. 늦게 온 예약은 풀어야 한다. */
+    /** 취소되어 더 진행하지 않는 생산 건. 늦게 온 예약은 풀어야 한다. */
     public boolean isClosed() {
-        return status == ProductionStatus.CANCELLED || status == ProductionStatus.FAILED;
+        return status == ProductionStatus.CANCELLED;
     }
 }

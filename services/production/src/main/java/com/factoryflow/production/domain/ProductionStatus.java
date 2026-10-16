@@ -13,7 +13,5 @@ public enum ProductionStatus {
     /** 검사 완료, VIN 발행 (completed_at 기록) */
     COMPLETED,
     /** 첫 공정 시작 전에 주문이 취소된 상태. 예약한 부품은 해제된다 */
-    CANCELLED,
-    /** 설비 고장으로 생산이 실패한 상태. 예약한 부품은 해제되고 자동 재생산은 없다 */
-    FAILED
+    CANCELLED
 }

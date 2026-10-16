@@ -248,6 +248,25 @@ public class WorkOrderService {
         productionService.completeProduction(workOrder.getProductionId(), vin);
     }
 
+    /**
+     * 설비가 고장·정지해 그 설비가 맡은 공정(배정·진행 중일 때만)을 시작 전으로 되돌린다 (EquipmentService 와 같은 트랜잭션). 작업지시 변경을 기록해
+     * 같은 작업지시를 동시에 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시·생산 건 상태는 그대로다.
+     */
+    @Transactional
+    public void interruptStep(Long stepId) {
+        WorkOrderStep step = findStep(stepId);
+        if (!step.isDispatched() && !step.isInProgress()) {
+            log.info(
+                    "배정·진행 중인 공정이 아니라 되돌리지 않음: workOrderId={} process={} status={}",
+                    step.getWorkOrderId(),
+                    step.getProcess(),
+                    step.getStatus());
+            return;
+        }
+        step.interrupt();
+        findWorkOrderById(step.getWorkOrderId()).recordStepChange(LocalDateTime.now());
+    }
+
     /** 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이어야 한다. 그래서 한 작업지시에서 진행 중인 공정은 하나뿐이다. */
     private static void requireStartable(List<WorkOrderStep> steps, WorkOrderStep step) {
         if (!step.isPending()) {
@@ -329,7 +348,7 @@ public class WorkOrderService {
                 .collect(Collectors.groupingBy(WorkOrderStep::getWorkOrderId));
     }
 
-    /** 공정을 바꿀 작업지시. 취소되었거나 실패했으면 WORK_ORDER_CLOSED. */
+    /** 공정을 바꿀 작업지시. 취소됐으면 WORK_ORDER_CLOSED. */
     private WorkOrder findOpenWorkOrder(Long workOrderId) {
         WorkOrder workOrder = findWorkOrderById(workOrderId);
         if (workOrder.isClosed()) {
@@ -347,6 +366,13 @@ public class WorkOrderService {
     private List<WorkOrder> findWorkOrdersAfter(WorkOrderStatus status, Long lastId, int limit) {
         return workOrderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
                 status, lastId, Limit.of(limit));
+    }
+
+    /** 설비가 맡은 공정. 없으면 데이터가 꼬인 것이라 원인이 보이게 STEP_NOT_FOUND. */
+    private WorkOrderStep findStep(Long stepId) {
+        return workOrderStepRepository
+                .findById(stepId)
+                .orElseThrow(() -> new CustomException(ProductionErrorCode.STEP_NOT_FOUND));
     }
 
     private List<WorkOrderStep> findSteps(Long workOrderId) {
