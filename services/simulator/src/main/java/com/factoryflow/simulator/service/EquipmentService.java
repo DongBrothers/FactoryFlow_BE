@@ -43,12 +43,15 @@ public class EquipmentService {
     private final Map<String, VirtualEquipment> fleet = createFleet();
     private final SeenEvents seen = new SeenEvents();
 
-    /** production 의 equipment 와 같은 코드: 공정마다 01, 02. */
+    /** 공정마다 설비 수. production 의 기본 설비 데이터(V4)와 같아야 한다. */
+    private static final int EQUIPMENT_PER_PROCESS = 2;
+
+    /** production 의 equipment 와 같은 코드: {공정}-{두 자리 번호} (예: PRESS-01). */
     private static Map<String, VirtualEquipment> createFleet() {
         Map<String, VirtualEquipment> fleet = new LinkedHashMap<>();
         for (LineProcess process : LineProcess.values()) {
-            for (int n = 1; n <= 2; n++) {
-                String code = process.name() + "-0" + n;
+            for (int n = 1; n <= EQUIPMENT_PER_PROCESS; n++) {
+                String code = String.format("%s-%02d", process.name(), n);
                 fleet.put(code, new VirtualEquipment(code, process));
             }
         }

@@ -29,10 +29,13 @@ public record SimulatorProperties(
         @DefaultValue("1s") Duration resendInterval,
         @DefaultValue("10000") int seenEventLimit) {
 
-    /** 공정의 작업 시간. 설정이 없으면 3초. */
+    /** 작업 시간 설정이 없는 공정의 작업 시간. */
+    public static final Duration DEFAULT_WORK_TIME = Duration.ofSeconds(3);
+
+    /** 공정의 작업 시간. 설정이 없으면 DEFAULT_WORK_TIME. */
     public Duration workTimeOf(LineProcess process) {
         return workTime == null
-                ? Duration.ofSeconds(3)
-                : workTime.getOrDefault(process, Duration.ofSeconds(3));
+                ? DEFAULT_WORK_TIME
+                : workTime.getOrDefault(process, DEFAULT_WORK_TIME);
     }
 }
