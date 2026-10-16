@@ -6,7 +6,10 @@ import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
+import com.factoryflow.inventory.domain.StockHistoryRefType;
+import com.factoryflow.inventory.domain.StockHistoryType;
 import com.factoryflow.inventory.event.listener.payload.MaterialRequestedPart;
+import com.factoryflow.inventory.event.listener.payload.PurchaseReceived;
 import com.factoryflow.inventory.event.publisher.payload.InventoryReserved;
 import com.factoryflow.inventory.event.publisher.payload.ReservationDeferred;
 import com.factoryflow.inventory.event.publisher.payload.ReservationShortage;
@@ -58,6 +61,69 @@ public class PartReservationService {
                         reserveOne(productionId, partsById.get(partId), qty, waitingQtyByPartId)
                                 .ifPresent(shortages::add));
         publishResult(productionId, shortages);
+    }
+
+    /**
+     * purchase.received: 재고를 늘리고(RECEIVE 이력) 그 부품을 기다리는 줄을 id 순서(먼저 기다린 순서)로 채운다. 앞 줄이 들어가지 않으면 거기서
+     * 멈춘다 (뒤의 작은 줄이 들어갈 수 있어도 새치기하지 않는다). 줄이 다 찬 생산 건은 inventory.reserved. 같은 구매 건의 입고는 한 번만 반영한다
+     * (docs/specs/purchase-receiving.md).
+     */
+    @Transactional
+    public void receive(PurchaseReceived event) {
+        if (isReceived(event.purchaseId())) {
+            log.info("이미 입고한 구매 건이라 건너뜀: purchaseId={}", event.purchaseId());
+            return;
+        }
+        Part part = loadParts(Set.of(event.partId())).get(event.partId());
+        part.receive(event.qty());
+        stockHistoryRepository.save(
+                StockHistory.receiveFromPurchase(part.getId(), event.qty(), event.purchaseId()));
+        List<Long> filled = fillWaitingLines(part);
+        Set<Long> stillWaiting = findStillWaiting(filled);
+        filled.stream()
+                .filter(productionId -> !stillWaiting.contains(productionId))
+                .forEach(
+                        productionId ->
+                                eventPublisher.publish(new InventoryReserved(productionId)));
+    }
+
+    /** 기다리는 줄을 먼저 온 순서로 RESERVED 로 바꾼다. 들어가지 않는 줄을 만나면 멈춘다. 채운 줄의 생산 건 id 를 돌려준다. */
+    private List<Long> fillWaitingLines(Part part) {
+        List<Long> filled = new ArrayList<>();
+        for (PartReservation line : findWaitingLines(part.getId())) {
+            if (part.getAvailable() < line.getQty()) {
+                break;
+            }
+            part.reserve(line.getQty());
+            line.reserve();
+            stockHistoryRepository.save(
+                    StockHistory.reserveForProduction(
+                            part.getId(), line.getQty(), line.getProductionId()));
+            filled.add(line.getProductionId());
+        }
+        return filled;
+    }
+
+    private boolean isReceived(Long purchaseId) {
+        return stockHistoryRepository.existsByTypeAndRefTypeAndRefId(
+                StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);
+    }
+
+    /** 채운 생산 건 중 다른 부품을 아직 기다리는(WAITING 줄이 남은) 생산 건. 생산 건마다 묻지 않고 한 번에 읽는다. */
+    private Set<Long> findStillWaiting(List<Long> productionIds) {
+        if (productionIds.isEmpty()) {
+            return Set.of();
+        }
+        return reservationRepository
+                .findAllByProductionIdInAndStatus(productionIds, ReservationStatus.WAITING)
+                .stream()
+                .map(PartReservation::getProductionId)
+                .collect(Collectors.toSet());
+    }
+
+    private List<PartReservation> findWaitingLines(Long partId) {
+        return reservationRepository.findAllByPartIdAndStatusOrderByIdAsc(
+                partId, ReservationStatus.WAITING);
     }
 
     /** 같은 부품 줄은 수량을 합치고, partId 순서로 처리하도록 정렬한다. */
