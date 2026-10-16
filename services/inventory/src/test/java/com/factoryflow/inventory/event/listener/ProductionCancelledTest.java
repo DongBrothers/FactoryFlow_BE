@@ -70,6 +70,7 @@ class ProductionCancelledTest {
                                 engine))
                 .extracting(h -> h.get("type"), h -> h.get("qty"), h -> h.get("ref_id"))
                 .containsExactly(tuple("RELEASE", 1, 100L), tuple("RESERVE", 1, 101L));
+        // 예약이 다 찬 101 은 outbox 에 inventory.reserved 1건
         assertThat(reservedProductionIds()).containsExactly(101L);
         assertReservedMatchesReservedLines();
     }
