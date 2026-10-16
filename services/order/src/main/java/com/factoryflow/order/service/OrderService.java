@@ -110,13 +110,23 @@ public class OrderService {
         return vehicles.stream().anyMatch(v -> wanted.contains(v.getStatus()));
     }
 
+    /** 차량을 품목별로 한 번만 묶는다. 묶음 안에서는 원래 순서(생산 건 id 순서)를 지킨다. */
+    private static Map<Long, List<OrderVehicle>> byItem(List<OrderVehicle> vehicles) {
+        return vehicles.stream().collect(Collectors.groupingBy(OrderVehicle::getOrderItemId));
+    }
+
+    private static List<OrderVehicle> vehiclesOf(
+            OrderItem item, Map<Long, List<OrderVehicle>> vehiclesByItem) {
+        return vehiclesByItem.getOrDefault(item.getId(), List.of());
+    }
+
     /** 차량들로 품목 상태를, 품목들로 주문 상태를 다시 계산한다. */
     private static void summarize(
             CustomerOrder order, List<OrderItem> items, List<OrderVehicle> vehicles) {
+        Map<Long, List<OrderVehicle>> vehiclesByItem = byItem(vehicles);
         for (OrderItem item : items) {
             item.refreshStatus(
-                    vehicles.stream()
-                            .filter(v -> v.getOrderItemId().equals(item.getId()))
+                    vehiclesOf(item, vehiclesByItem).stream()
                             .map(OrderVehicle::getStatus)
                             .toList());
         }
@@ -125,21 +135,11 @@ public class OrderService {
 
     private static OrderDetailResponse detail(
             CustomerOrder order, List<OrderItem> items, List<OrderVehicle> vehicles) {
+        Map<Long, List<OrderVehicle>> vehiclesByItem = byItem(vehicles);
         return OrderDetailResponse.of(
                 order,
                 items.stream()
-                        .map(
-                                item ->
-                                        OrderItemResponse.of(
-                                                item,
-                                                vehicles.stream()
-                                                        .filter(
-                                                                v ->
-                                                                        v.getOrderItemId()
-                                                                                .equals(
-                                                                                        item
-                                                                                                .getId()))
-                                                        .toList()))
+                        .map(item -> OrderItemResponse.of(item, vehiclesOf(item, vehiclesByItem)))
                         .toList());
     }
 
