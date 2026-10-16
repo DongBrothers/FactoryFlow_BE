@@ -52,9 +52,9 @@ class LineDispatchTest {
 
     @Test
     void pressIsDispatchedToFreeEquipmentInReleaseOrder() {
-        long first = releasedWorkOrder(true);
-        long second = releasedWorkOrder(true);
-        long third = releasedWorkOrder(true);
+        long first = releasedWorkOrder();
+        long second = releasedWorkOrder();
+        long third = releasedWorkOrder();
 
         dispatcher.dispatchAll();
 
@@ -74,7 +74,7 @@ class LineDispatchTest {
 
     @Test
     void pressDispatchStartsProductionAndClosesTheCancelWindow() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
 
         dispatcher.dispatchAll();
 
@@ -86,25 +86,26 @@ class LineDispatchTest {
     }
 
     @Test
-    void pressWaitsUntilTheHoldTimePasses() {
-        long workOrder = releasedWorkOrder(false);
+    void pressIsDispatchedAsSoonAsTheWorkOrderIsReleased() {
+        // 발행 직후에도 기다리지 않고 첫 배정 주기에 프레스가 배정된다 (취소할 틈을 두지 않는다)
+        long workOrder = releasedWorkOrder();
 
         dispatcher.dispatchAll();
 
-        assertThat(step(workOrder, "PRESS")).containsEntry("status", "PENDING");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("READY");
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
     }
 
     @Test
     void aCarThatKeepsFailingDoesNotBlockTheCarsBehindIt() {
         // 맨 앞 차는 생산 건이 취소됐는데 작업지시만 남아 배정할 때마다 실패한다 (WORK_ORDER_CLOSED)
-        long broken = releasedWorkOrder(true);
+        long broken = releasedWorkOrder();
         jdbc.update(
                 "UPDATE production SET status = 'CANCELLED' WHERE id ="
                         + " (SELECT production_id FROM work_order WHERE id = ?)",
                 broken);
-        long second = releasedWorkOrder(true);
-        long third = releasedWorkOrder(true);
+        long second = releasedWorkOrder();
+        long third = releasedWorkOrder();
 
         dispatcher.dispatchAll();
 
@@ -115,8 +116,8 @@ class LineDispatchTest {
 
     @Test
     void stoppedEquipmentGetsNothing() {
-        releasedWorkOrder(true);
-        releasedWorkOrder(true);
+        releasedWorkOrder();
+        releasedWorkOrder();
         jdbc.update("UPDATE equipment SET status = 'STOPPED' WHERE code = 'PRESS-02'");
 
         dispatcher.dispatchAll();
@@ -131,9 +132,9 @@ class LineDispatchTest {
 
     @Test
     void busyEquipmentGetsNoSecondCar() {
-        releasedWorkOrder(true);
-        releasedWorkOrder(true);
-        releasedWorkOrder(true);
+        releasedWorkOrder();
+        releasedWorkOrder();
+        releasedWorkOrder();
         dispatcher.dispatchAll();
 
         dispatcher.dispatchAll();
@@ -143,7 +144,7 @@ class LineDispatchTest {
 
     @Test
     void equipmentReportsMoveTheStepAndNextRobotStepIsDispatched() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
 
@@ -169,7 +170,7 @@ class LineDispatchTest {
 
     @Test
     void defectReportSendsStepBackAndItIsDispatchedAgain() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
         listener.onStepStarted(started(workOrder, "PRESS", press));
@@ -187,7 +188,7 @@ class LineDispatchTest {
 
     @Test
     void manualProcessIsNotDispatched() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         for (String process : List.of("PRESS", "BODY", "PAINT")) {
             dispatcher.dispatchAll();
             String equipment = (String) step(workOrder, process).get("equipment_code");
@@ -203,7 +204,7 @@ class LineDispatchTest {
 
     @Test
     void mismatchedReportsAreIgnored() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
         String other = press.equals("PRESS-01") ? "PRESS-02" : "PRESS-01";
@@ -221,7 +222,7 @@ class LineDispatchTest {
 
     @Test
     void sameReportTwiceIsAppliedOnce() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
         listener.onStepStarted(started(workOrder, "PRESS", press));
@@ -236,7 +237,7 @@ class LineDispatchTest {
 
     @Test
     void closedWorkOrderIsNotDispatched() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         jdbc.update("UPDATE work_order SET status = 'CANCELLED' WHERE id = ?", workOrder);
 
         dispatcher.dispatchAll();
@@ -246,7 +247,7 @@ class LineDispatchTest {
 
     @Test
     void workerCannotStartADispatchedStep() {
-        long workOrder = releasedWorkOrder(true);
+        long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
 
         assertThatThrownBy(
@@ -258,8 +259,8 @@ class LineDispatchTest {
                 .isEqualTo(ProductionErrorCode.INVALID_STEP_STATUS);
     }
 
-    /** 생산 건을 만들고 예약 완료를 반영해 작업지시를 발행한다. held 면 프레스 대기 시간이 지난 것으로 만든다. */
-    private long releasedWorkOrder(boolean held) {
+    /** 생산 건을 만들고 예약 완료를 반영해 작업지시를 발행한다. */
+    private long releasedWorkOrder() {
         long orderId = nextOrderId++;
         jdbc.update(
                 "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
@@ -274,11 +275,6 @@ class LineDispatchTest {
                         "SELECT id FROM work_order WHERE production_id = ?",
                         Long.class,
                         production);
-        if (held) {
-            jdbc.update(
-                    "UPDATE work_order SET released_at = NOW(6) - INTERVAL 10 MINUTE WHERE id = ?",
-                    workOrder);
-        }
         return workOrder;
     }
 

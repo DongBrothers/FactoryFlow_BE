@@ -70,7 +70,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 ### 2. 공정 진행 (MES, 혼합 자동화)
 - 공정은 라우팅 순서대로만 시작한다. 앞 공정이 DONE 이어야 다음 공정을 시작할 수 있다. 한 작업지시에서 동시에 하나만 DISPATCHED 또는 IN_PROGRESS
 - **로봇 공정 배정** (PRESS, BODY, PAINT): production 스케줄러가 주기적으로, 앞 공정이 모두 DONE 이고 이 공정이 PENDING 인 작업지시를 그 공정의 RUNNING 이고 비어 있는(배정·진행 중인 공정이 없는) 설비에 작업지시 id 순서(먼저 발행된 차)로 배정한다. 공정 DISPATCHED + `production.step-dispatched`
-  - 프레스는 작업지시 발행 후 설정 시간(`factoryflow.line.press-hold`, 기본 1분)이 지난 차만 배정한다 (취소할 틈)
+  - 프레스도 작업지시가 발행되자마자 배정한다 (기다리지 않는다)
   - 설비 보고: `equipment.step-started` → IN_PROGRESS, `equipment.step-completed` → 실적(작업자 없음, 설비) + 양품 DONE / 불량 PENDING(다시 배정)
   - 공정·설비가 맞지 않거나 상태가 맞지 않는 보고는 무시한다 (INFO 로그)
 - **사람 공정** (ASSEMBLY, INSPECTION): 작업자가 시작할 때 그 공정의 설비를 지정한다. 작업자 API 는 로봇 공정에도 쓸 수 있다 (설비 연동 장애 때 수동 개입)
