@@ -1,10 +1,13 @@
 package com.factoryflow.inventory.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
+import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -149,6 +152,31 @@ class ProductionCompletedTest {
                 .isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
                 .isZero();
+    }
+
+    @Test
+    void deletedPartIsPartNotFoundAndChangesNothing() {
+        // 잡아 둔 부품이 그사이 삭제됐으면 원인을 알 수 있게 PART_NOT_FOUND 로 실패한다 (재시도 후 DLQ)
+        jdbc.update("UPDATE part SET is_deleted = TRUE WHERE id = ?", tire);
+
+        assertThatThrownBy(
+                        () ->
+                                listener.onProductionCompleted(
+                                        completed(UUID.randomUUID(), 100L, VIN)))
+                .isInstanceOfSatisfying(
+                        CustomException.class,
+                        e ->
+                                assertThat(e.getErrorCode())
+                                        .isEqualTo(InventoryErrorCode.PART_NOT_FOUND));
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM finished_vehicle", Integer.class))
+                .isZero();
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT DISTINCT status FROM part_reservation WHERE production_id = 100",
+                                String.class))
+                .containsExactly("RESERVED");
+        assertThat(stock(engine)).containsEntry("reserved", 1);
     }
 
     private void assertAppliedOnce() {

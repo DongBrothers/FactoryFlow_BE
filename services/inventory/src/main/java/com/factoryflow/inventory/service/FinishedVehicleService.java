@@ -75,8 +75,14 @@ public class FinishedVehicleService {
                 productionId, ReservationStatus.RESERVED);
     }
 
+    /** 잡아 둔 부품을 한 번에 읽는다. 그사이 삭제된 부품이 있으면 PART_NOT_FOUND (원인을 알 수 있게, 재시도 후 DLQ). */
     private Map<Long, Part> findParts(List<Long> partIds) {
-        return partRepository.findAllByIdInAndIsDeletedFalse(partIds).stream()
-                .collect(Collectors.toMap(Part::getId, Function.identity()));
+        Map<Long, Part> partsById =
+                partRepository.findAllByIdInAndIsDeletedFalse(partIds).stream()
+                        .collect(Collectors.toMap(Part::getId, Function.identity()));
+        if (partsById.size() != partIds.stream().distinct().count()) {
+            throw new CustomException(InventoryErrorCode.PART_NOT_FOUND);
+        }
+        return partsById;
     }
 }

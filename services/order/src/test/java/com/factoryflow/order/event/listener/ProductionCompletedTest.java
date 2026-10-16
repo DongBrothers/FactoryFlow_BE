@@ -16,6 +16,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -39,6 +40,7 @@ class ProductionCompletedTest {
     static final String DLQ = "order.production-completed.dlq";
     static final long CAR_A = 1L;
     static final long CAR_B = 2L;
+    static final long CAR_C = 3L;
 
     @Autowired ProductionEventListener listener;
     @Autowired OrderVehicleService orderVehicleService;
@@ -115,6 +117,38 @@ class ProductionCompletedTest {
 
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> assertThat(itemStatus(CAR_B)).isEqualTo("COMPLETED"));
+    }
+
+    @Test
+    void notYetKnownVehicleIsAddedAndCompleted() {
+        // 큐가 달라 completed 가 차량을 만드는 status-changed(PLANNED) 보다 먼저 처리될 수 있다. status-changed 처럼 차량을
+        // 만든다
+        insertItem(CAR_C, 1, "IN_PRODUCTION");
+
+        listener.onProductionCompleted(completed(301L, CAR_C, "KMH000037TU000301"));
+
+        assertThat(vehicle(301L))
+                .containsEntry("status", "COMPLETED")
+                .containsEntry("vin", "KMH000037TU000301");
+        assertThat(itemStatus(CAR_C)).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void unknownItemIsDeadLettered() {
+        EventEnvelope event = completed(901L, 99L, "KMH000997TU000901");
+
+        send(event);
+
+        await().atMost(Duration.ofSeconds(10))
+                .until(() -> amqpAdmin.getQueueInfo(DLQ).getMessageCount() == 1);
+        Message dead = rabbitTemplate.receive(DLQ);
+        assertThat(dead.getMessageProperties().getMessageId())
+                .isEqualTo(event.eventId().toString());
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM order_vehicle WHERE production_id = 901",
+                                Integer.class))
+                .isZero();
     }
 
     @Test
