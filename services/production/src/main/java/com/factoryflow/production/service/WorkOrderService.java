@@ -249,12 +249,20 @@ public class WorkOrderService {
     }
 
     /**
-     * 설비가 고장·정지해 그 설비가 맡은 공정을 시작 전으로 되돌린다 (EquipmentService 와 같은 트랜잭션). 작업지시 변경을 기록해 같은 작업지시를 동시에
-     * 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시·생산 건 상태는 그대로다.
+     * 설비가 고장·정지해 그 설비가 맡은 공정(배정·진행 중일 때만)을 시작 전으로 되돌린다 (EquipmentService 와 같은 트랜잭션). 작업지시 변경을 기록해
+     * 같은 작업지시를 동시에 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시·생산 건 상태는 그대로다.
      */
     @Transactional
     public void interruptStep(Long stepId) {
         WorkOrderStep step = findStep(stepId);
+        if (!step.isDispatched() && !step.isInProgress()) {
+            log.info(
+                    "배정·진행 중인 공정이 아니라 되돌리지 않음: workOrderId={} process={} status={}",
+                    step.getWorkOrderId(),
+                    step.getProcess(),
+                    step.getStatus());
+            return;
+        }
         step.interrupt();
         findWorkOrderById(step.getWorkOrderId()).recordStepChange(LocalDateTime.now());
     }

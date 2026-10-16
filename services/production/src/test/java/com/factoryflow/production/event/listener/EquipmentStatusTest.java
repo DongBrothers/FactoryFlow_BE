@@ -7,6 +7,7 @@ import static org.awaitility.Awaitility.await;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.production.domain.ProductionProcess;
+import com.factoryflow.production.domain.StepResult;
 import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.scheduler.LineDispatcher;
 import com.factoryflow.production.service.ProductionService;
@@ -211,6 +212,27 @@ class EquipmentStatusTest {
         assertThat(history()).hasSize(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void finishedStepIsNotSentBackEvenIfTheEquipmentStillPointsAtIt() {
+        // 점유 기록이 꼬여 설비가 이미 끝난 공정을 가리켜도, 끝난 공정은 되돌리지 않고 설비만 비운다 (실적이 무효가 되지 않게)
+        long workOrder = releasedWorkOrder();
+        workOrderService.startStep(workOrder, ProductionProcess.PRESS, "PRESS-01");
+        workOrderService.completeStep(
+                workOrder, ProductionProcess.PRESS, StepResult.GOOD, null, WORKER);
+        jdbc.update(
+                "UPDATE equipment SET occupied_step_id = (SELECT id FROM work_order_step"
+                        + " WHERE work_order_id = ? AND process = 'PRESS') WHERE code = 'PRESS-01'",
+                workOrder);
+
+        listener.onStatusChanged(statusChanged("PRESS-01", "FAULT", Instant.now()));
+
+        assertThat(step(workOrder, "PRESS"))
+                .containsEntry("status", "DONE")
+                .containsEntry("equipment_code", "PRESS-01");
+        assertThat(occupiedStepOf("PRESS-01")).isNull();
+        assertThat(equipmentStatus("PRESS-01")).isEqualTo("FAULT");
     }
 
     @Test

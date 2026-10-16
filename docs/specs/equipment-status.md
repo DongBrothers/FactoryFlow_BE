@@ -34,6 +34,7 @@ production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 
 | 고장과 작업자의 공정 종료·시작이 동시에 같은 설비·작업지시를 바꿈 | 설비·작업지시 version 으로 한쪽만 반영. 리스너 쪽이 지면 재시도로 최신 상태를 보고 다시 판단 |
 | 모르는 status 값, 깨진 JSON | 처리 오류 → 재시도 → DLQ |
 | 같은 이벤트 두 번 | ProcessedEventGuard 로 한 번만 |
+| 설비가 가리키는 공정이 이미 끝났거나 시작 전 (점유 기록 꼬임) | 공정은 그대로 두고(실적이 무효가 되지 않게) 설비만 비운다 (INFO) |
 | 설비가 맡은 공정(occupied_step_id)이 없음 (데이터 꼬임) | 처리 오류 `STEP_NOT_FOUND` → 재시도 → DLQ. 아무것도 바뀌지 않는다 |
 | payload 의 process 가 설비의 공정과 다름 | 설비 코드로만 찾고 process 는 쓰지 않는다 (코드가 설비를 정한다) |
 
