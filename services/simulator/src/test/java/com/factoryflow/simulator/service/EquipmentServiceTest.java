@@ -124,6 +124,18 @@ class EquipmentServiceTest {
     }
 
     @Test
+    void manualProcessEquipmentDoesNotTakeADispatch() {
+        // 의장·검사는 사람 공정이라 설비가 배정을 받지 않는다 (작업자 API 로 진행)
+        support.send(support.dispatch(UUID.randomUUID(), "t", 19L, "ASSEMBLY", "ASSEMBLY-01"));
+
+        assertThat(support.next(1500)).isNull();
+        assertThat(equipmentService.findEquipments())
+                .filteredOn(e -> e.equipmentCode().equals("ASSEMBLY-01"))
+                .singleElement()
+                .satisfies(e -> assertThat(e.workOrderId()).isNull());
+    }
+
+    @Test
     void faultDuringWorkDropsTheJob() throws Exception {
         support.send(support.dispatch(UUID.randomUUID(), "t", 18L, "PRESS", "PRESS-01"));
         assertThat(field(support.next(5000), "$.eventName")).isEqualTo("equipment.step-started");
@@ -163,5 +175,10 @@ class EquipmentServiceTest {
         mockMvc.perform(post("/internal/simulator/equipments/NOPE-99/fault"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_NOT_FOUND"));
+        // 설비 코드 형식이 아니면 찾기 전에 400
+        mockMvc.perform(post("/internal/simulator/equipments/press-1/fault"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/internal/simulator/equipments/PRESS-01x/run"))
+                .andExpect(status().isBadRequest());
     }
 }

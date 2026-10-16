@@ -32,7 +32,7 @@ simulator 는 진짜 설비(프레스기, 용접·도장 로봇, 의장·검사 
    - 불량 확률(`defect-rate`, 기본 0.05)로 DEFECT, 사유는 공정별 목록에서 하나 (예: 프레스 "찍힘", 차체 "용접 불량", 도장 "도장 얼룩")
    - 보고하면 설비가 빈다
 6. 보고들은 받은 배정의 traceId 를 이어 쓴다
-7. 사람 공정 설비(ASSEMBLY, INSPECTION)는 배정을 받지 않는다 (production 이 배정하지 않음). 상태만 보낸다
+7. 사람 공정 설비(ASSEMBLY, INSPECTION)는 배정을 받지 않는다 (production 이 배정하지 않음. 잘못 와도 무시). 상태만 보낸다
 
 ### 3. 설비 상태 (고장·수리)
 - 고장 확률: `fault-check-interval`(기본 30초)마다 RUNNING 설비마다 `fault-rate`(기본 0, 끔) 확률로 FAULT. `repair-time`(기본 60초) 뒤 RUNNING
@@ -41,7 +41,7 @@ simulator 는 진짜 설비(프레스기, 용접·도장 로봇, 의장·검사 
   - `POST /internal/simulator/equipments/{code}/fault`: 고장 (FAULT)
   - `POST /internal/simulator/equipments/{code}/stop`: 정지 (STOPPED)
   - `POST /internal/simulator/equipments/{code}/run`: 가동 (RUNNING)
-  - 없는 설비 404 `EQUIPMENT_NOT_FOUND`. 같은 상태로 바꾸면 그대로 (이벤트 없음)
+  - 설비 코드 형식(`{공정}-{두 자리 번호}`, 예: PRESS-01)이 아니면 400. 없는 설비 404 `EQUIPMENT_NOT_FOUND`. 같은 상태로 바꾸면 그대로 (이벤트 없음)
 - 상태가 바뀌면 `equipment.status-changed { equipmentCode, process, status }`
 - FAULT·STOPPED 가 되면 하던 작업을 버린다 (시작·완료 보고를 보내지 않음). production 이 그 공정을 되돌려 다른 설비로 다시 배정한다 (docs/specs/equipment-status.md)
 

@@ -17,9 +17,9 @@ public class VirtualEquipment {
         this.status = EquipmentStatus.RUNNING;
     }
 
-    /** 배정을 받을 수 있는가: 가동 중이고 비어 있다. */
+    /** 배정을 받을 수 있는가: 로봇 공정 설비이고, 가동 중이고, 비어 있다. */
     public boolean canTake() {
-        return status == EquipmentStatus.RUNNING && job == null;
+        return process.isAutomated() && status == EquipmentStatus.RUNNING && job == null;
     }
 
     public void take(Job job) {

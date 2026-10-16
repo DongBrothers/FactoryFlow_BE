@@ -59,8 +59,8 @@ public class EquipmentService {
     }
 
     /**
-     * production.step-dispatched: 같은 메시지는 한 번만. 설비가 없거나 가동 중이 아니거나 다른 작업 중이면 무시한다 (production 이 시작
-     * 보고 시간 초과로 되돌린다). 맡으면 시작 지연 뒤 시작 보고를 보낸다.
+     * production.step-dispatched: 같은 메시지는 한 번만. 설비가 없거나, 사람 공정 설비이거나, 가동 중이 아니거나, 다른 작업 중이면 무시한다
+     * (production 이 시작 보고 시간 초과로 되돌린다). 맡으면 시작 지연 뒤 시작 보고를 보낸다.
      */
     public synchronized void acceptDispatch(UUID eventId, String traceId, StepDispatched dispatch) {
         if (!seen.markIfNew(eventId, properties.seenEventLimit())) {
