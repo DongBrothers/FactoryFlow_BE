@@ -78,11 +78,13 @@ public class PartReservationService {
         part.receive(event.qty());
         stockHistoryRepository.save(
                 StockHistory.receiveFromPurchase(part.getId(), event.qty(), event.purchaseId()));
-        for (Long productionId : fillWaitingLines(part)) {
-            if (!isStillWaiting(productionId)) {
-                eventPublisher.publish(new InventoryReserved(productionId));
-            }
-        }
+        List<Long> filled = fillWaitingLines(part);
+        Set<Long> stillWaiting = findStillWaiting(filled);
+        filled.stream()
+                .filter(productionId -> !stillWaiting.contains(productionId))
+                .forEach(
+                        productionId ->
+                                eventPublisher.publish(new InventoryReserved(productionId)));
     }
 
     /** 기다리는 줄을 먼저 온 순서로 RESERVED 로 바꾼다. 들어가지 않는 줄을 만나면 멈춘다. 채운 줄의 생산 건 id 를 돌려준다. */
@@ -107,9 +109,16 @@ public class PartReservationService {
                 StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);
     }
 
-    private boolean isStillWaiting(Long productionId) {
-        return reservationRepository.existsByProductionIdAndStatus(
-                productionId, ReservationStatus.WAITING);
+    /** 채운 생산 건 중 다른 부품을 아직 기다리는(WAITING 줄이 남은) 생산 건. 생산 건마다 묻지 않고 한 번에 읽는다. */
+    private Set<Long> findStillWaiting(List<Long> productionIds) {
+        if (productionIds.isEmpty()) {
+            return Set.of();
+        }
+        return reservationRepository
+                .findAllByProductionIdInAndStatus(productionIds, ReservationStatus.WAITING)
+                .stream()
+                .map(PartReservation::getProductionId)
+                .collect(Collectors.toSet());
     }
 
     private List<PartReservation> findWaitingLines(Long partId) {
