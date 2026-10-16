@@ -21,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("6");
+        jdbc = migrateTo("7");
     }
 
     @Test
@@ -140,6 +140,17 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertStep(workOrder, "PRESS", 1))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_step_process");
+    }
+
+    @Test
+    void v7AddsStepDispatchedAt() {
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM information_schema.COLUMNS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'work_order_step'"
+                                        + " AND COLUMN_NAME = 'dispatched_at' AND IS_NULLABLE = 'YES'",
+                                Integer.class))
+                .isEqualTo(1);
     }
 
     @Test

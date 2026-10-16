@@ -249,14 +249,19 @@ public final class FactoryFlowRules {
                     .haveSimpleNameEndingWith("Repository")
                     .because("진입점(Controller/Listener)은 service를 거친다");
 
+    /**
+     * simulator(가상 설비)는 DB 가 없어 Outbox 를 쓸 수 없으므로 RabbitTemplate 으로 바로 보낸다
+     * (docs/specs/simulator.md).
+     */
     public static final ArchRule NO_DIRECT_PUBLISH =
             noClasses()
                     .that()
-                    .resideOutsideOfPackage("com.factoryflow.common.event..")
+                    .resideOutsideOfPackages(
+                            "com.factoryflow.common.event..", "com.factoryflow.simulator..")
                     .should()
                     .dependOnClassesThat()
                     .haveFullyQualifiedName("org.springframework.amqp.rabbit.core.RabbitTemplate")
-                    .because("발행은 EventPublisher(Outbox)로만");
+                    .because("발행은 EventPublisher(Outbox)로만 (DB 없는 simulator 만 예외)");
 
     public static final ArchRule NO_FIELD_INJECTION =
             GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
@@ -804,10 +809,14 @@ public final class FactoryFlowRules {
 
     // ---- 이벤트 수신, 발행 ----
 
+    /** simulator(가상 설비)는 처리 기록 테이블(DB)이 없어 메모리로 중복을 거른다 (docs/specs/simulator.md). */
     public static final ArchRule LISTENER_USES_GUARD =
             methods()
                     .that()
                     .areAnnotatedWith(RABBIT_LISTENER)
+                    .and()
+                    .areDeclaredInClassesThat()
+                    .resideOutsideOfPackage("com.factoryflow.simulator..")
                     .should()
                     .beDeclaredInClassesThat()
                     .haveSimpleNameEndingWith("EventListener")

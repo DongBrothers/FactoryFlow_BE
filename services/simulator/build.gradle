@@ -9,4 +9,8 @@ dependencies {
 
     testImplementation project(':common:common-test')
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
+    testImplementation 'org.testcontainers:testcontainers-rabbitmq'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 }

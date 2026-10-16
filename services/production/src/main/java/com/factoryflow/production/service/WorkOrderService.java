@@ -7,6 +7,7 @@ import com.factoryflow.production.domain.Equipment;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionResult;
 import com.factoryflow.production.domain.StepResult;
+import com.factoryflow.production.domain.StepStatus;
 import com.factoryflow.production.domain.Vin;
 import com.factoryflow.production.domain.WorkOrder;
 import com.factoryflow.production.domain.WorkOrderStatus;
@@ -112,7 +113,11 @@ public class WorkOrderService {
      */
     @Transactional
     public void dispatch(Long workOrderId, ProductionProcess process, String equipmentCode) {
-        beginStep(workOrderId, process, equipmentCode, (step, now) -> step.dispatch(equipmentCode));
+        beginStep(
+                workOrderId,
+                process,
+                equipmentCode,
+                (step, now) -> step.dispatch(equipmentCode, now));
         eventPublisher.publish(new StepDispatched(workOrderId, process, equipmentCode));
     }
 
@@ -163,15 +168,56 @@ public class WorkOrderService {
             String equipmentCode,
             StepResult result,
             String defectReason) {
-        reportableStep(workOrderId, process, equipmentCode, WorkOrderStep::isInProgress)
+        reportableStep(
+                        workOrderId,
+                        process,
+                        equipmentCode,
+                        s -> s.isInProgress() || s.isDispatched())
                 .ifPresent(
                         step ->
-                                finishStep(
+                                finishReported(
                                         findWorkOrderById(workOrderId),
                                         step,
                                         result,
-                                        defectReason,
-                                        null));
+                                        defectReason));
+    }
+
+    /**
+     * 설비 완료 보고 반영. 시작·완료는 큐가 달라 순서가 바뀔 수 있어, 아직 DISPATCHED 면 시작을 먼저 반영한다 (시작 시각 = 지금). 뒤늦게 온 시작 보고는
+     * 공정이 이미 끝나 무시된다 (docs/specs/simulator.md).
+     */
+    private void finishReported(
+            WorkOrder workOrder, WorkOrderStep step, StepResult result, String defectReason) {
+        if (step.isDispatched()) {
+            step.startByEquipment(LocalDateTime.now());
+        }
+        finishStep(workOrder, step, result, defectReason, null);
+    }
+
+    /** 시작 보고 없이 deadline 전에 배정된 공정 id, 오래된 순서로 limit 개. 배정 스케줄러가 바퀴마다 되돌린다. */
+    @Transactional(readOnly = true)
+    public List<Long> findStaleDispatchedStepIds(LocalDateTime deadline, int limit) {
+        return findDispatchedBefore(deadline, limit).stream().map(WorkOrderStep::getId).toList();
+    }
+
+    /**
+     * 시작 보고가 오지 않은 배정을 되돌린다: 공정 PENDING, 설비 비움 (고장 때 되돌리기와 같음, 실적 없음). 그사이 시작 보고가 왔으면 그대로 둔다. 다음
+     * 바퀴에 다시 배정된다.
+     */
+    @Transactional
+    public void withdrawStaleDispatch(Long stepId, LocalDateTime deadline) {
+        WorkOrderStep step = findStep(stepId);
+        if (!step.isDispatchedBefore(deadline)) {
+            return;
+        }
+        log.info(
+                "시작 보고 없이 시간이 지나 배정을 되돌림: workOrderId={} process={} equipment={}",
+                step.getWorkOrderId(),
+                step.getProcess(),
+                step.getEquipmentCode());
+        findEquipment(step.getEquipmentCode()).release();
+        step.interrupt();
+        findWorkOrderById(step.getWorkOrderId()).recordStepChange(LocalDateTime.now());
     }
 
     /** 설비 보고를 반영할 공정. 작업지시가 없거나 끝났거나, 공정 상태·설비가 맞지 않으면 empty (늦거나 꼬인 보고, 수동 개입). */
@@ -373,6 +419,11 @@ public class WorkOrderService {
         return workOrderStepRepository
                 .findById(stepId)
                 .orElseThrow(() -> new CustomException(ProductionErrorCode.STEP_NOT_FOUND));
+    }
+
+    private List<WorkOrderStep> findDispatchedBefore(LocalDateTime deadline, int limit) {
+        return workOrderStepRepository.findAllByStatusAndDispatchedAtBeforeOrderByDispatchedAtAsc(
+                StepStatus.DISPATCHED, deadline, Limit.of(limit));
     }
 
     private List<WorkOrderStep> findSteps(Long workOrderId) {

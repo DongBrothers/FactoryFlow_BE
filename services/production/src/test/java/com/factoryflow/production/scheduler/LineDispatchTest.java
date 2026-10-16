@@ -209,8 +209,8 @@ class LineDispatchTest {
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
         String other = press.equals("PRESS-01") ? "PRESS-02" : "PRESS-01";
 
-        // 완료가 시작보다 먼저 옴, 다른 설비의 보고, 배정되지 않은 공정의 보고
-        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null));
+        // 다른 설비의 보고, 배정되지 않은 공정의 보고 (완료가 시작보다 먼저 오는 경우는 반영한다: 아래 테스트)
+        listener.onStepCompleted(completed(workOrder, "PRESS", other, "GOOD", null));
         listener.onStepStarted(started(workOrder, "PRESS", other));
         listener.onStepStarted(started(workOrder, "BODY", "BODY-01"));
 
@@ -218,6 +218,66 @@ class LineDispatchTest {
         assertThat(step(workOrder, "BODY")).containsEntry("status", "PENDING");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
                 .isZero();
+    }
+
+    @Test
+    void completedBeforeStartedIsAppliedAndTheLateStartIsIgnored() {
+        // 시작·완료는 큐가 달라 순서가 바뀔 수 있다. 같은 설비의 완료가 먼저 오면 시작과 완료를 함께 반영한다
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null));
+        listener.onStepStarted(started(workOrder, "PRESS", press));
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DONE");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT started_at IS NOT NULL FROM work_order_step"
+                                        + " WHERE work_order_id = ? AND process = 'PRESS'",
+                                Boolean.class,
+                                workOrder))
+                .isTrue();
+        assertThat(jdbc.queryForList("SELECT result FROM production_result", String.class))
+                .containsExactly("GOOD");
+    }
+
+    @Test
+    void dispatchWithoutAStartReportIsWithdrawnAfterTheTimeoutAndDispatchedAgain() {
+        // 설비가 배정을 잊었다 (simulator 재시작, 통신 끊김). 시작 보고 없이 시간이 지나면 되돌려 다시 배정한다
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        jdbc.update(
+                "UPDATE work_order_step SET dispatched_at = NOW(6) - INTERVAL 10 MINUTE"
+                        + " WHERE work_order_id = ? AND process = 'PRESS'",
+                workOrder);
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(dispatchedSecondsAgo(workOrder, "PRESS")).isLessThan(60);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM equipment WHERE occupied_step_id IS NOT NULL",
+                                Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
+                .isZero();
+        assertThat(outbox("production.step-dispatched")).hasSize(2);
+        assertThat(outbox("production.status-changed"))
+                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
+                .containsExactly("READY", "IN_PROGRESS");
+    }
+
+    @Test
+    void recentDispatchIsKept() {
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(outbox("production.step-dispatched")).hasSize(1);
     }
 
     @Test
@@ -309,6 +369,15 @@ class LineDispatchTest {
                 1,
                 Instant.now(),
                 objectMapper.valueToTree(payload));
+    }
+
+    private long dispatchedSecondsAgo(long workOrder, String process) {
+        return jdbc.queryForObject(
+                "SELECT TIMESTAMPDIFF(SECOND, dispatched_at, NOW(6)) FROM work_order_step"
+                        + " WHERE work_order_id = ? AND process = ?",
+                Long.class,
+                workOrder,
+                process);
     }
 
     private Map<String, Object> step(long workOrder, String process) {

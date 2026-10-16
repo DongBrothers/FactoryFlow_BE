@@ -3,6 +3,17 @@ spring:
     name: simulator
   profiles:
     default: local
+  rabbitmq:
+    # 보고는 Outbox 없이 바로 보낸다. 브로커 확인(ack)을 받을 때까지 메모리에 두고 다시 보낸다
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-retries: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 10s
 
 server:
   port: 8080
@@ -12,3 +23,19 @@ management:
     web:
       exposure:
         include: health
+
+# 가상 설비 (docs/specs/simulator.md)
+factoryflow:
+  simulator:
+    start-delay: 1s
+    work-time:
+      PRESS: 3s
+      BODY: 4s
+      PAINT: 5s
+    defect-rate: 0.05
+    fault-check-interval: 30s
+    # 0 이면 자동 고장 없음. 시연할 때는 내부 API 로 고장을 낸다
+    fault-rate: 0
+    repair-time: 60s
+    resend-interval: 1s
+    seen-event-limit: 10000

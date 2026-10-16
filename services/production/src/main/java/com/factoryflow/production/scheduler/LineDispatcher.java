@@ -1,9 +1,11 @@
 package com.factoryflow.production.scheduler;
 
 import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.production.config.LineProperties;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.service.WorkOrderService;
+import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
@@ -33,12 +35,33 @@ public class LineDispatcher {
                     ProductionErrorCode.EQUIPMENT_NOT_RUNNING,
                     ProductionErrorCode.EQUIPMENT_BUSY);
 
+    /** 한 바퀴에 되돌리는 오래된 배정의 최대 수. 남은 것은 다음 바퀴에 본다. */
+    private static final int STALE_DISPATCH_BATCH = 100;
+
     private final WorkOrderService workOrderService;
+    private final LineProperties lineProperties;
 
     public void dispatchAll() {
+        withdrawStaleDispatches();
         for (ProductionProcess process : ProductionProcess.values()) {
             if (process.isAutomated()) {
                 dispatch(process);
+            }
+        }
+    }
+
+    /**
+     * 시작 보고 없이 시간이 지난 배정을 되돌린다 (공정마다 따로 트랜잭션). 같은 바퀴의 배정에서 바로 다시 배정된다. 그사이 보고가 와서 실패하면 다음 바퀴에 다시
+     * 본다.
+     */
+    private void withdrawStaleDispatches() {
+        LocalDateTime deadline = LocalDateTime.now().minus(lineProperties.startReportTimeout());
+        for (Long stepId :
+                workOrderService.findStaleDispatchedStepIds(deadline, STALE_DISPATCH_BATCH)) {
+            try {
+                workOrderService.withdrawStaleDispatch(stepId, deadline);
+            } catch (CustomException | OptimisticLockingFailureException e) {
+                log.info("배정 되돌리기 건너뜀, 다음 바퀴에 다시 봄: stepId={} reason={}", stepId, e.getMessage());
             }
         }
     }

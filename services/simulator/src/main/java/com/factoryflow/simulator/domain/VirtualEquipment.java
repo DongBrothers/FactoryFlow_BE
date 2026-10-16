@@ -1,0 +1,58 @@
+package com.factoryflow.simulator.domain;
+
+import lombok.Getter;
+
+/** 가상 설비 한 대 (메모리). 상태와 지금 하는 작업(없거나 하나)을 갖는다. 동기화는 EquipmentService 가 한다. */
+@Getter
+public class VirtualEquipment {
+
+    private final String code;
+    private final LineProcess process;
+    private EquipmentStatus status;
+    private Job job;
+
+    /** 상태가 바뀔 때마다 오르는 회차. 자동 수리가 자기가 고친다고 예약한 고장인지 알아보는 데 쓴다. */
+    private long statusRound;
+
+    public VirtualEquipment(String code, LineProcess process) {
+        this.code = code;
+        this.process = process;
+        this.status = EquipmentStatus.RUNNING;
+    }
+
+    /** 배정을 받을 수 있는가: 로봇 공정 설비이고, 가동 중이고, 비어 있다. */
+    public boolean canTake() {
+        return process.isAutomated() && status == EquipmentStatus.RUNNING && job == null;
+    }
+
+    public void take(Job job) {
+        this.job = job;
+    }
+
+    /** 이 작업을 아직 하고 있는가 (고장으로 버렸거나 이미 끝났으면 false). */
+    public boolean isWorkingOn(Job job) {
+        return status == EquipmentStatus.RUNNING && this.job == job;
+    }
+
+    public void finish() {
+        this.job = null;
+    }
+
+    /** 지금이 그 회차의 고장인가. 그사이 가동했다가 다시 고장 났으면 다른 회차다. */
+    public boolean isInFaultRound(long round) {
+        return status == EquipmentStatus.FAULT && statusRound == round;
+    }
+
+    /** 상태를 바꾼다. 멈추면(FAULT, STOPPED) 하던 작업을 버린다. 바뀌었으면 true. */
+    public boolean changeStatus(EquipmentStatus status) {
+        if (this.status == status) {
+            return false;
+        }
+        this.status = status;
+        this.statusRound++;
+        if (status != EquipmentStatus.RUNNING) {
+            this.job = null;
+        }
+        return true;
+    }
+}

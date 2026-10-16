@@ -43,7 +43,7 @@
 - 검사(INSPECTION) GOOD 이면 공정 DONE 에 이어 VIN 발행, 작업지시·생산 건 COMPLETED, `production.completed` 까지 같은 트랜잭션에서 한다 (docs/specs/production-completion.md)
 
 ### 3. 로봇 공정 자동 진행 (배정 스케줄러 + 설비 보고)
-**배정** (production 스케줄러, `factoryflow.line.dispatch-interval` 기본 5초마다. `factoryflow.line.dispatch-enabled` 로 켜고 끈다. 배정을 받을 simulator 가 생길 때까지는 꺼 둔다)
+**배정** (production 스케줄러, `factoryflow.line.dispatch-interval` 기본 5초마다. `factoryflow.line.dispatch-enabled` 로 켜고 끈다(기본 켬, 테스트는 끔). 배정 뒤 `start-report-timeout`(기본 1분) 안에 시작 보고가 없으면 그 공정을 PENDING 으로 되돌려 다시 배정한다. 설비 쪽은 docs/specs/simulator.md)
 1. 로봇 공정(PRESS, BODY, PAINT)마다 비어 있는 설비를 찾는다: RUNNING 이고 맡은 공정이 없는(occupied_step_id 가 비어 있는) 설비
 2. 그 공정이 PENDING 이고 앞 공정이 모두 DONE 인 작업지시를, 비어 있는 설비 수만큼 작업지시 id 순서(먼저 발행된 차)로 고른다. 작업지시는 RELEASED 또는 IN_PROGRESS
    - PRESS 도 발행되자마자 고른다 (기다리지 않는다). 그래서 부품이 다 잡힌 차는 다음 배정 주기에 프레스가 배정되어 취소할 수 없게 된다

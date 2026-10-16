@@ -2,8 +2,10 @@
 - 역할: 현실의 설비(프레스기, 용접 로봇, 도장 로봇 등)를 흉내 낸다. 업무 판단은 하지 않는다 (docs/planning/production-flow.md)
   - 로봇 공정 배정(production.step-dispatched)을 받으면 작업 시간을 흉내 낸 뒤 시작·완료(가끔 불량)를 보고한다
   - 설비 상태(가동 RUNNING · 정지 STOPPED · 고장 FAULT)를 보낸다
-- DB: 없음 (JPA, Flyway 의존성 없음). 설비 10대와 진행 중인 작업은 메모리에 둔다
+- DB: 없음 (JPA, Flyway 의존성 없음). 설비 10대와 진행 중인 작업은 메모리에 둔다. common-event 도 쓰지 않고(JPA 필요) 메시지 모양(EventEnvelope JSON)만 맞춘다
 - 발행: equipment.step-started, equipment.step-completed, equipment.status-changed. Outbox 없이 RabbitMQ 로 바로 발행한다 ("발행은 Outbox 로만" 규칙의 유일한 예외). 작업 보고는 브로커가 받았다고 확인할 때까지 메모리에서 다시 보낸다
-- 수신: production.step-dispatched (받은 배정은 메모리에서 중복을 거른다)
+- 수신: production.step-dispatched (받은 배정은 메모리에서 중복을 거른다. ProcessedEventGuard 없음)
+- 내부 API: /internal/simulator/equipments (상태 보기, fault·stop·run). 시연·테스트용, gateway 에 노출하지 않음
+- 설정: factoryflow.simulator.* (작업 시간, 불량 확률, 자동 고장 확률(기본 0), 재전송 주기) (docs/specs/simulator.md)
 - 설비 코드와 공정은 production 의 equipment 와 같은 값을 쓴다 (예: PRESS-01, BODY-02)
 - 보상: 없음. 고장·정지 때 그 설비의 공정을 다른 설비로 재배정하는 건 production 이 판단한다 (docs/specs/equipment-status.md)
