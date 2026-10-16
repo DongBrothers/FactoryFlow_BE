@@ -248,6 +248,17 @@ public class WorkOrderService {
         productionService.completeProduction(workOrder.getProductionId(), vin);
     }
 
+    /**
+     * 설비가 고장·정지해 그 설비가 맡은 공정을 시작 전으로 되돌린다 (EquipmentService 와 같은 트랜잭션). 작업지시 변경을 기록해 같은 작업지시를 동시에
+     * 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시·생산 건 상태는 그대로다.
+     */
+    @Transactional
+    public void interruptStep(Long stepId) {
+        WorkOrderStep step = findStep(stepId);
+        step.interrupt();
+        findWorkOrderById(step.getWorkOrderId()).recordStepChange(LocalDateTime.now());
+    }
+
     /** 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이어야 한다. 그래서 한 작업지시에서 진행 중인 공정은 하나뿐이다. */
     private static void requireStartable(List<WorkOrderStep> steps, WorkOrderStep step) {
         if (!step.isPending()) {
@@ -329,7 +340,7 @@ public class WorkOrderService {
                 .collect(Collectors.groupingBy(WorkOrderStep::getWorkOrderId));
     }
 
-    /** 공정을 바꿀 작업지시. 취소되었거나 실패했으면 WORK_ORDER_CLOSED. */
+    /** 공정을 바꿀 작업지시. 취소됐으면 WORK_ORDER_CLOSED. */
     private WorkOrder findOpenWorkOrder(Long workOrderId) {
         WorkOrder workOrder = findWorkOrderById(workOrderId);
         if (workOrder.isClosed()) {
@@ -347,6 +358,12 @@ public class WorkOrderService {
     private List<WorkOrder> findWorkOrdersAfter(WorkOrderStatus status, Long lastId, int limit) {
         return workOrderRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
                 status, lastId, Limit.of(limit));
+    }
+
+    private WorkOrderStep findStep(Long stepId) {
+        return workOrderStepRepository
+                .findById(stepId)
+                .orElseThrow(() -> new CustomException(ProductionErrorCode.WORK_ORDER_NOT_FOUND));
     }
 
     private List<WorkOrderStep> findSteps(Long workOrderId) {

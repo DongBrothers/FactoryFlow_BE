@@ -175,19 +175,6 @@ class InventoryEventListenerTest {
     }
 
     @Test
-    void reservedForFailedProductionSendsCancelledAgain() {
-        // 설비 고장으로 실패한 생산 건에 늦게 온 예약도 풀게 한다
-        long production = insertProduction(42L, 1L, "FAILED", true);
-
-        listener.onReserved(reserved(production));
-
-        assertThat(statusOf(production)).isEqualTo("FAILED");
-        assertThat(number(onlyOutbox("production.cancelled"), "$.payload.productionId"))
-                .isEqualTo(production);
-        assertThat(outbox("production.status-changed")).isEmpty();
-    }
-
-    @Test
     void sameEventTwiceSendsStatusChangedOnce() {
         long production = insertProduction(42L, 1L, "PLANNED", false);
         EventEnvelope event = reserved(production);

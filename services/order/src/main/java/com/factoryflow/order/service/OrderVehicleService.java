@@ -121,7 +121,6 @@ public class OrderVehicleService {
             case "READY", "IN_PROGRESS" -> OrderStatus.IN_PRODUCTION;
             case "COMPLETED" -> OrderStatus.COMPLETED;
             case "CANCELLED" -> OrderStatus.CANCELLED;
-            case "FAILED" -> OrderStatus.FAILED;
             default -> throw new CustomException(OrderErrorCode.UNKNOWN_PRODUCTION_STATUS);
         };
     }

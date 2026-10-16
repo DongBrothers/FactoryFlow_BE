@@ -43,7 +43,7 @@ public class WorkOrderStep extends BaseEntity {
     @Column(nullable = false, length = 20)
     private StepStatus status;
 
-    /** 배정되었거나 진행 중인 설비. 고장 나면 이 설비의 차량만 실패한다 (#74). */
+    /** 배정되었거나 진행 중인 설비. 고장·정지 나면 이 설비의 공정만 되돌려 다른 설비로 재배정한다. */
     @Column(length = 30)
     private String equipmentCode;
 
@@ -98,6 +98,13 @@ public class WorkOrderStep extends BaseEntity {
     public void startByEquipment(LocalDateTime now) {
         this.status = StepStatus.IN_PROGRESS;
         this.startedAt = now;
+    }
+
+    /** 설비가 고장·정지해 중단됐다: 시작 전(PENDING)으로 돌아가 다른 설비로 다시 진행한다. 실적은 남기지 않는다. */
+    public void interrupt() {
+        this.status = StepStatus.PENDING;
+        this.equipmentCode = null;
+        this.startedAt = null;
     }
 
     /** 양품이면 끝(DONE), 불량이면 재작업을 위해 시작 전(PENDING)으로 돌아간다. */

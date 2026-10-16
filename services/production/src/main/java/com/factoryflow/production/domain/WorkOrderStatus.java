@@ -9,7 +9,5 @@ public enum WorkOrderStatus {
     /** 검사 완료, VIN 발행 */
     COMPLETED,
     /** 첫 공정 시작 전에 취소됨 */
-    CANCELLED,
-    /** 설비 고장으로 실패 */
-    FAILED
+    CANCELLED
 }

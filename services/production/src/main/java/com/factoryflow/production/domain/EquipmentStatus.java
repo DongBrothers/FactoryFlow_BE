@@ -4,8 +4,8 @@ package com.factoryflow.production.domain;
 public enum EquipmentStatus {
     /** 가동. 이 상태에서만 공정을 시작할 수 있다 */
     RUNNING,
-    /** 정지 */
+    /** 정지. 이 설비가 맡은 공정을 되돌려 다른 설비로 재배정한다 */
     STOPPED,
-    /** 고장. 이 설비에서 진행 중인 차량은 생산 실패 */
+    /** 고장. 정지처럼 이 설비가 맡은 공정을 되돌려 다른 설비로 재배정한다 (생산 실패 없음) */
     FAULT
 }

@@ -3,7 +3,6 @@ package com.factoryflow.order.domain;
 import static com.factoryflow.order.domain.OrderStatus.CANCELLED;
 import static com.factoryflow.order.domain.OrderStatus.CANCEL_REQUESTED;
 import static com.factoryflow.order.domain.OrderStatus.COMPLETED;
-import static com.factoryflow.order.domain.OrderStatus.FAILED;
 import static com.factoryflow.order.domain.OrderStatus.IN_PRODUCTION;
 import static com.factoryflow.order.domain.OrderStatus.RECEIVED;
 import static com.factoryflow.order.domain.OrderStatus.SHIPPED;
@@ -25,18 +24,6 @@ class OrderStatusTest {
     void anyCancelRequestedIsCancelRequested() {
         assertThat(OrderStatus.summarize(List.of(IN_PRODUCTION, CANCEL_REQUESTED)))
                 .isEqualTo(CANCEL_REQUESTED);
-    }
-
-    @Test
-    void remainingAllFailedIsFailedIgnoringCancelled() {
-        assertThat(OrderStatus.summarize(List.of(FAILED, CANCELLED, FAILED))).isEqualTo(FAILED);
-    }
-
-    @Test
-    void failedIsLeftOutWhenOthersRemain() {
-        assertThat(OrderStatus.summarize(List.of(FAILED, COMPLETED))).isEqualTo(COMPLETED);
-        assertThat(OrderStatus.summarize(List.of(FAILED, WAITING_MATERIAL)))
-                .isEqualTo(WAITING_MATERIAL);
     }
 
     @Test

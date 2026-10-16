@@ -103,18 +103,22 @@ class ProductionEventListenerTest {
     }
 
     @Test
-    void failedVehicleMakesItsOnlyItemFailed() {
-        listener.onStatusChanged(statusChanged(201L, CAR_B, "FAILED"));
-
-        assertThat(vehicleStatus(201L)).isEqualTo("FAILED");
-        assertThat(itemStatus(CAR_B)).isEqualTo("FAILED");
+    void failedIsNoLongerAProductionStatus() {
+        // 설비 고장은 생산 실패가 아니라 재배정이다 (docs/specs/equipment-status.md). FAILED 는 모르는 생산 상태로 처리 오류다
+        assertThatThrownBy(() -> listener.onStatusChanged(statusChanged(201L, CAR_B, "FAILED")))
+                .isInstanceOfSatisfying(
+                        CustomException.class,
+                        e ->
+                                assertThat(e.getErrorCode())
+                                        .isEqualTo(OrderErrorCode.UNKNOWN_PRODUCTION_STATUS));
+        assertThat(itemStatus(CAR_B)).isEqualTo("RECEIVED");
     }
 
     @Test
     void finishedVehicleIgnoresStatusChanged() {
         insertVehicle(CAR_A, 101L, "COMPLETED");
         insertVehicle(CAR_A, 102L, "CANCELLED");
-        insertVehicle(CAR_B, 201L, "FAILED");
+        insertVehicle(CAR_B, 201L, "SHIPPED");
 
         listener.onStatusChanged(statusChanged(101L, CAR_A, "WAITING_MATERIAL"));
         listener.onStatusChanged(statusChanged(102L, CAR_A, "READY"));
@@ -122,7 +126,7 @@ class ProductionEventListenerTest {
 
         assertThat(vehicleStatus(101L)).isEqualTo("COMPLETED");
         assertThat(vehicleStatus(102L)).isEqualTo("CANCELLED");
-        assertThat(vehicleStatus(201L)).isEqualTo("FAILED");
+        assertThat(vehicleStatus(201L)).isEqualTo("SHIPPED");
     }
 
     @Test

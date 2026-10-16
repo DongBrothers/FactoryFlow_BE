@@ -73,9 +73,9 @@ public class WorkOrder extends BaseEntity {
         return new WorkOrder(production, now);
     }
 
-    /** 취소되었거나 실패해 더 진행하지 않는 작업지시. */
+    /** 취소되어 더 진행하지 않는 작업지시. */
     public boolean isClosed() {
-        return status == WorkOrderStatus.CANCELLED || status == WorkOrderStatus.FAILED;
+        return status == WorkOrderStatus.CANCELLED;
     }
 
     /** 공정이 바뀌었다 (시작, 종료). 같은 작업지시의 공정을 동시에 바꾸면 늦은 쪽이 version 충돌로 실패한다. */
