@@ -64,7 +64,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 9. inventory: completed 수신 → 그 생산 건 줄 CONSUMED (reserved −, stock_history CONSUME), 완성차 재고 증가(VIN),
    소모한 부품 LOT ↔ VIN 연결
 10. order: status-changed / completed 수신 → 차량 상태 갱신 → 품목·주문 상태 요약 갱신 (같은 트랜잭션)
-11. 출고: 완성차를 출고하면 `shipment.completed` → order 가 차량을 SHIPPED 로 (주체와 세부는 출고 하위 이슈에서 정한다)
+11. 출고: inventory 가 완성차 한 대(VIN)를 출고하면 `shipment.completed` → order 가 차량을 SHIPPED 로 (상세: docs/specs/shipment.md)
 
 ### 2. 공정 진행 (MES, 혼합 자동화)
 - 공정은 라우팅 순서대로만 시작한다. 앞 공정이 DONE 이어야 다음 공정을 시작할 수 있다. 한 작업지시에서 동시에 하나만 DISPATCHED 또는 IN_PROGRESS
@@ -190,7 +190,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process |
 | equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result (GOOD, DEFECT), defectReason |
 | equipment.status-changed | simulator | production | equipmentCode, process, status (RUNNING, STOPPED, FAULT) |
-| shipment.completed | (출고 이슈에서 정함) | order | orderId, productionId, vin |
+| shipment.completed | inventory | order | orderId, productionId, productId, vin |
 
 ## 완료 조건 (테스트로 확인할 것)
 하위 이슈마다 나눠 확인한다.

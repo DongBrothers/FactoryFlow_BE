@@ -22,7 +22,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process |
 | equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result, defectReason |
 | equipment.status-changed | simulator | production | equipmentCode, process, status |
-| shipment.completed | (출고 이슈에서 정함) | order | orderId, productionId, vin |
+| shipment.completed | inventory | order | orderId, productionId, productId, vin |
 
 ## 흐름
 고객 주문(order) → 차량 1대마다 생산 건(production, BOM 전개) → 부품 예약(inventory)
