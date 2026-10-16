@@ -46,7 +46,7 @@
 **배정** (production 스케줄러, `factoryflow.line.dispatch-interval` 기본 5초마다. `factoryflow.line.dispatch-enabled` 로 켜고 끈다. 배정을 받을 simulator 가 생길 때까지는 꺼 둔다)
 1. 로봇 공정(PRESS, BODY, PAINT)마다 비어 있는 설비를 찾는다: RUNNING 이고 맡은 공정이 없는(occupied_step_id 가 비어 있는) 설비
 2. 그 공정이 PENDING 이고 앞 공정이 모두 DONE 인 작업지시를, 비어 있는 설비 수만큼 작업지시 id 순서(먼저 발행된 차)로 고른다. 작업지시는 RELEASED 또는 IN_PROGRESS
-   - PRESS 는 발행 후 `factoryflow.line.press-hold`(기본 1분)가 지난 작업지시만 고른다 (취소할 틈)
+   - PRESS 도 발행되자마자 고른다 (기다리지 않는다). 그래서 부품이 다 잡힌 차는 다음 배정 주기에 프레스가 배정되어 취소할 수 없게 된다
    - 다 읽지 않고 필요한 개수만 DB 에서 고른다
 3. 한 차씩 따로 트랜잭션으로 배정한다: 공정 DISPATCHED(설비 기록) + `production.step-dispatched { workOrderId, process, equipmentCode }`. 작업지시의 첫 시작이면 작업지시·생산 건 IN_PROGRESS + status-changed (취소 불가)
    - 배정하려는 순간 상태가 바뀌었으면(작업자가 먼저 시작 등) 그 차는 이번 주기에서 빼고 다음 후보로 그 설비를 채운다. 설비 쪽 이유(정지, 다른 차가 먼저 잡음)면 그 설비만 빼고 같은 차로 다음 설비를 시도한다 (먼저 발행된 차가 밀리지 않게). 계속 실패하는 차가 뒤의 차를 막지 않는다. 뺀 차는 다음 주기에 다시 본다
@@ -114,7 +114,7 @@
 - [ ] 동시에 같은 생산 건을 바꾸면 하나만 반영되고 늦은 쪽은 409 PRODUCTION_CONFLICT
 - [ ] 없는 작업지시는 404
 - [ ] 배정: 앞 공정이 끝난 로봇 공정을 비어 있는 RUNNING 설비에 먼저 발행된 차부터 배정, DISPATCHED + step-dispatched. 바쁜 설비·정지 설비에는 배정하지 않는다
-- [ ] 프레스는 press-hold 가 지나야 배정되고, 배정 때 작업지시·생산 건 IN_PROGRESS + status-changed
+- [ ] 프레스는 작업지시가 발행되자마자 배정되고, 배정 때 작업지시·생산 건 IN_PROGRESS + status-changed
 - [ ] step-started → IN_PROGRESS, step-completed GOOD → DONE(실적, 작업자 없음), DEFECT → PENDING 후 다시 배정
 - [ ] 상태·설비가 맞지 않는 보고는 무시, 같은 보고 두 번은 한 번만 반영
 - [ ] 작업자 API 로 DISPATCHED 공정을 시작하면 409

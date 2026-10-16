@@ -41,4 +41,3 @@ factoryflow:
   line:
     dispatch-enabled: false
     dispatch-interval: 5s
-    press-hold: 1m

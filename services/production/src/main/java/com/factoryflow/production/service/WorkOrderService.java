@@ -3,7 +3,6 @@ package com.factoryflow.production.service;
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.common.web.response.CursorPage;
-import com.factoryflow.production.config.LineProperties;
 import com.factoryflow.production.domain.Equipment;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionResult;
@@ -48,7 +47,6 @@ public class WorkOrderService {
     private final EquipmentRepository equipmentRepository;
     private final ProductionService productionService;
     private final EventPublisher eventPublisher;
-    private final LineProperties lineProperties;
 
     /** 작업지시 목록 (RELEASED 또는 IN_PROGRESS), id 순서로 lastId 다음부터 size 개. 다음 페이지가 있는지 알려고 하나 더 읽는다. */
     @Transactional(readOnly = true)
@@ -100,15 +98,11 @@ public class WorkOrderService {
                 .toList();
     }
 
-    /** 이 공정을 지금 배정할 수 있는 작업지시 id, 먼저 발행된 순서로 limit 개 (excludedIds 제외). 프레스는 발행 후 대기 시간이 지난 것만. */
+    /** 이 공정을 지금 배정할 수 있는 작업지시 id, 먼저 발행된 순서로 limit 개 (excludedIds 제외). */
     @Transactional(readOnly = true)
     public List<Long> findDispatchableWorkOrderIds(
             ProductionProcess process, Collection<Long> excludedIds, int limit) {
-        LocalDateTime releasedBefore =
-                process == ProductionProcess.PRESS
-                        ? LocalDateTime.now().minus(lineProperties.pressHold())
-                        : null;
-        return findDispatchable(process, releasedBefore, excludedIds, limit);
+        return findDispatchable(process, excludedIds, limit);
     }
 
     /**
@@ -360,12 +354,8 @@ public class WorkOrderService {
     }
 
     private List<Long> findDispatchable(
-            ProductionProcess process,
-            LocalDateTime releasedBefore,
-            Collection<Long> excludedIds,
-            int limit) {
-        return workOrderStepRepository.findDispatchableWorkOrderIds(
-                process, releasedBefore, excludedIds, limit);
+            ProductionProcess process, Collection<Long> excludedIds, int limit) {
+        return workOrderStepRepository.findDispatchableWorkOrderIds(process, excludedIds, limit);
     }
 
     private List<Equipment> findEquipmentsOf(ProductionProcess process) {
