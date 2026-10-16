@@ -108,6 +108,10 @@ class PartLotTest {
         mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-261017-999999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PART_LOT_NOT_FOUND"));
+        // 구매 건 id 가 999999 를 넘으면 끝자리가 7자리 이상이다. 형식 오류가 아니라 조회 대상이다
+        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-261017-1000000"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PART_LOT_NOT_FOUND"));
         mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", LOT_2))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(0));

@@ -15,7 +15,7 @@ VIN 으로 그 차에 쓰인 부품 LOT 을, LOT 으로 그 LOT 이 들어간 �
 ### 1. 입고 → LOT 부여 (inventory ← purchase.received, 지금 처리에 더함)
 입고 처리(docs/specs/purchase-receiving.md "3. 입고")와 같은 트랜잭션에서
 - `part_lot { partId, lotNo, purchaseId, receivedQty = qty, remainingQty = qty, receivedAt = 지금 }` 한 줄
-- LOT 번호: `LOT-{입고일 yyMMdd}-{purchaseId 6자리}` (예: `LOT-261017-000012`). 구매 건 하나 = 부품 하나 = 입고 한 번이라 겹치지 않는다
+- LOT 번호: `LOT-{입고일 yyMMdd}-{purchaseId, 6자리가 안 되면 앞을 0 으로 채움}` (예: `LOT-261017-000012`). 구매 건 하나 = 부품 하나 = 입고 한 번이라 겹치지 않는다
 - 같은 구매 건 입고를 다시 받으면 지금처럼 입고 이력으로 건너뛴다 (LOT 도 한 번만)
 
 ### 2. 생산 완료 → 소모 LOT 기록 (inventory ← production.completed, 지금 처리에 더함)
@@ -44,7 +44,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 [ { "vin": "KMH000017TU000012", "productId": 1, "status": "SHIPPED", "partCode": "ENG-G16", "qty": 1 } ]
 ```
 - 사용 기록 순서(먼저 완성된 차 먼저). status 는 완성차 상태 (IN_STOCK = 창고에 있음, SHIPPED = 출고됨)
-- lotNo 형식 400 (`LOT-` + 숫자 6자리 + `-` + 숫자 6자리), 없는 LOT 404 `PART_LOT_NOT_FOUND`, 아직 쓰인 차가 없으면 빈 목록
+- lotNo 형식 400 (`LOT-` + 숫자 6자리 + `-` + 숫자 6자리 이상. 구매 건 id 가 999999 를 넘으면 7자리 이상), 없는 LOT 404 `PART_LOT_NOT_FOUND`, 아직 쓰인 차가 없으면 빈 목록
 - 내부 id 는 내보내지 않는다
 
 ## 규칙 / 예외

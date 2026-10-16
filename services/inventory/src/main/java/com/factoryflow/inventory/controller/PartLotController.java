@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PartLotController {
 
-    /** LOT 번호 형식: LOT-{입고일 yyMMdd}-{구매 건 6자리}. */
-    private static final String LOT_NO = "LOT-\\d{6}-\\d{6}";
+    /** LOT 번호 형식: LOT-{입고일 yyMMdd}-{구매 건 id, 6자리 이상}. */
+    private static final String LOT_NO = "LOT-\\d{6}-\\d{6,}";
 
     private final PartLotService partLotService;
 
@@ -35,7 +35,7 @@ public class PartLotController {
                 description = "조회 성공. 아직 쓰인 차가 없으면 빈 목록"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "lotNo 가 LOT 번호 형식이 아님 (LOT-숫자 6자리-숫자 6자리)"),
+                description = "lotNo 가 LOT 번호 형식이 아님 (LOT-숫자 6자리-숫자 6자리 이상)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "LOT 없음 (PART_LOT_NOT_FOUND)")

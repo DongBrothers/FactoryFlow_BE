@@ -56,7 +56,7 @@ public class PartLot extends BaseEntity {
         this.receivedAt = receivedAt;
     }
 
-    /** 구매 건 하나의 입고로 LOT 을 만든다. 번호는 LOT-{입고일 yyMMdd}-{purchaseId 6자리}. */
+    /** 구매 건 하나의 입고로 LOT 을 만든다. 번호는 LOT-{입고일 yyMMdd}-{purchaseId, 6자리가 안 되면 앞을 0 으로 채움}. */
     public static PartLot receive(Long partId, Long purchaseId, int qty, LocalDateTime now) {
         return new PartLot(partId, purchaseId, qty, now);
     }
