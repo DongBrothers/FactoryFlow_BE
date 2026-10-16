@@ -16,11 +16,10 @@
 | IN_PROGRESS | 첫 공정(프레스)을 설비에 배정함(= 생산 순서 확정). 이후 취소할 수 없다 | 프레스 배정 (또는 작업자의 프레스 시작) |
 | COMPLETED | 검사 양품 → VIN 발행 | 검사 종료(양품) |
 | CANCELLED | 프레스 배정 전에 취소됨 | order.cancel-requested 승인 |
-| FAILED | 설비 고장으로 생산 실패 | equipment.status-changed(FAULT) |
 
 ### 작업지시 (MES)
 `work_order` 1 : N `work_order_step` 1 : N `production_result` (기획서 "공정 데이터 구조")
-- work_order: 생산 건 1건당 1건 (inventory.reserved 때 생성). 상태 RELEASED → IN_PROGRESS → COMPLETED / CANCELLED / FAILED. VIN 을 가진다
+- work_order: 생산 건 1건당 1건 (inventory.reserved 때 생성). 상태 RELEASED → IN_PROGRESS → COMPLETED / CANCELLED. VIN 을 가진다
 - work_order_step: 라우팅 순서대로 5개. PRESS → BODY → PAINT (로봇 공정) → ASSEMBLY → INSPECTION (사람 공정). 상태 PENDING → (DISPATCHED: 로봇 공정 배정) → IN_PROGRESS → DONE
 - production_result: 공정을 끝낼 때마다 한 줄. 양품(GOOD) 또는 불량(DEFECT, 사유), 작업자, 시각
 
@@ -78,12 +77,13 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 - 공정 종료는 실적과 함께 한다: 양품 → DONE, 불량(사유) → 실적만 남기고 PENDING 으로 돌아가 재작업
 - 시작·종료 시각과 작업자를 실적에 남긴다. 공정별 양품·불량 수는 실적에서 센다
 
-### 3. 설비 상태와 생산 실패 (보상)
+### 3. 설비 상태 (고장·정지 시 재배정)
+설비 고장은 공장 사정이라 고객 주문을 실패시키지 않는다. 생산 실패 상태는 없다 (2026-10-16 결정, 상세: docs/specs/equipment-status.md).
 1. simulator(가상 설비)가 설비 상태를 바꿀 때마다 `equipment.status-changed` 를 보낸다 (가동·정지·고장). simulator 는 production API 를 부르지 않고 DB 도 없다. 측정값이라 Outbox 없이 바로 발행한다
 2. production: 설비 상태와 이력을 저장한다 (OEE 데이터)
-3. 고장(FAULT)이면 **그 설비에** 배정되었거나(DISPATCHED) 진행 중(IN_PROGRESS)인 공정의 차량마다 작업지시·생산 건 FAILED → `production.failed`
-4. inventory: failed 수신 → 그 생산 건 예약 줄 RELEASED (RESERVED 줄은 available +, reserved −, stock_history RELEASE). 자동 재생산은 없다
-5. order: failed 수신 → 차량 FAILED
+3. 고장(FAULT)·정지(STOPPED)면 **그 설비에** 배정되었거나(DISPATCHED) 진행 중(IN_PROGRESS)인 공정을 PENDING 으로 되돌리고 설비를 비운다
+4. 되돌린 공정은 같은 공정의 다른 RUNNING 설비로 다시 배정된다 (사람 공정은 작업자가 다른 설비로 다시 시작). 다른 설비가 없으면 고쳐질 때까지 기다린다
+5. 생산 건·작업지시·주문 상태와 부품 예약은 그대로다. 이벤트는 없다. 고객에게는 계속 "생산 중" (늦어질 뿐)
 
 ### 4. 취소 (보상)
 첫 공정(프레스) 배정이 되돌릴 수 없는 지점이다. 프레스 배정이 생산 순서 확정이고, 순서가 확정되면 협력업체가 그 순서대로 부품을 보내기 때문이다 (기획서 "취소 기준").
@@ -113,7 +113,6 @@ order 는 차량(생산 건)마다 상태를 갖고, 품목 상태는 그 품목
 | READY, IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
-| FAILED | FAILED |
 
 출고되면 SHIPPED, 취소 응답 대기는 CANCEL_REQUESTED 가 더 있다.
 
@@ -121,21 +120,20 @@ order 는 차량(생산 건)마다 상태를 갖고, 품목 상태는 그 품목
 CANCELLED 는 빼고 남은 것으로 계산한다. 위에서부터 먼저 맞는 것을 쓴다.
 1. 남은 것이 없음 → CANCELLED
 2. 하나라도 CANCEL_REQUESTED → CANCEL_REQUESTED
-3. 남은 것이 모두 FAILED → FAILED (FAILED 는 아래 규칙에서 빼고 본다)
-4. 모두 SHIPPED → SHIPPED
-5. 모두 COMPLETED 또는 SHIPPED → COMPLETED
-6. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
-7. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
-8. 그 외 → RECEIVED
+3. 모두 SHIPPED → SHIPPED
+4. 모두 COMPLETED 또는 SHIPPED → COMPLETED
+5. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
+6. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
+7. 그 외 → RECEIVED
 
 ### 순서 꼬임과 중복
 - 같은 이벤트 중복 수신: ProcessedEventGuard 가 막는다
 - 상태 전이는 허용된 이전 상태에서만 한다. 허용되지 않은 상태에서 온 이벤트는 로그만 남기고 무시한다
   (예: CANCELLED 생산 건에 온 inventory.reserved)
-- 취소되거나 실패한 생산 건에 inventory.reserved 가 늦게 오면 production 은 `production.cancelled` 를 다시 보낸다
+- 취소된 생산 건에 inventory.reserved 가 늦게 오면 production 은 `production.cancelled` 를 다시 보낸다
   (inventory 해제는 RESERVED/WAITING 줄에만 적용되므로 여러 번 받아도 안전)
 - 취소가 생산 건 생성보다 먼저 도착하면 NOT_READY 로 거절한다. 고객은 다시 취소를 요청한다
-- 같은 생산 건을 동시에 바꾸는 것(프레스 배정 vs 취소 수신, 설비 고장 vs 공정 종료)은 생산 건의 낙관적 락(@Version)으로 막는다.
+- 같은 생산 건을 동시에 바꾸는 것(프레스 배정 vs 취소 수신)은 생산 건의 낙관적 락(@Version)으로, 설비 고장 vs 공정 시작·종료는 설비·작업지시의 낙관적 락으로 막는다.
   늦은 쪽 API 는 409, 리스너는 재시도로 최신 상태를 보고 다시 판단한다
 
 ### 부족 수량 (shortQty)
@@ -182,7 +180,6 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | production.status-changed | production | order | orderId, productionId, productId, status |
 | production.cancelled | production | inventory, order | orderId, productionId |
 | production.cancel-rejected | production | order | orderId, productionId, reason (ALREADY_STARTED, NOT_READY) |
-| production.failed | production | inventory, order | orderId, productionId, equipmentCode, reason (EQUIPMENT_FAULT) |
 | production.completed | production | inventory, order | orderId, productionId, productId, vin |
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
@@ -200,11 +197,11 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 - [ ] 같은 차 3대 주문은 생산 건 3건, 예약 요청 3건이 된다
 - [ ] inventory.reserved 를 받으면 작업지시 1건과 공정 5개가 라우팅 순서대로 생긴다
 - [ ] 공정은 순서대로만, 설비가 RUNNING 일 때만 시작된다
-- [ ] 로봇 공정은 production 이 비어 있는 설비에 배정하고 설비 보고로 진행된다. 프레스는 발행 후 설정 시간이 지나야 배정된다
+- [ ] 로봇 공정은 production 이 비어 있는 설비에 배정하고 설비 보고로 진행된다. 프레스도 작업지시가 발행되자마자 배정된다
 - [ ] 공정 불량은 실적에 남고 같은 공정을 다시 한다. 이벤트는 없다
 - [ ] 검사 양품 → VIN 발행, production.completed, 부품 CONSUMED, 완성차 재고 증가, 주문 COMPLETED
 - [ ] 재고 부족: WAITING + AUTO 구매, 입고 후 먼저 대기한 순서대로 RESERVED, 작업지시 생성
-- [ ] 설비 고장: 그 공정 진행 중 차량 FAILED, 예약 해제, 차량 FAILED
+- [ ] 설비 고장·정지: 그 설비의 공정이 PENDING 으로 돌아가 다른 설비로 재배정, 생산 건·주문 상태 그대로
 - [ ] 프레스 배정 전 취소: 예약 해제, 차량 CANCELLED, order.cancelled
 - [ ] 프레스 배정 후 취소: cancel-rejected, 차량 상태 복귀
 - [ ] 취소 후 늦게 온 inventory.reserved 는 해제로 정리된다

@@ -17,7 +17,7 @@
    - `work_order` 1건 (status = RELEASED)
    - `work_order_step` 5건, 라우팅 순서: PRESS(1) → BODY(2) → PAINT(3) → ASSEMBLY(4) → INSPECTION(5), 모두 PENDING
    - `production.status-changed`(READY) (기존과 같음)
-3. 그 밖의 상태는 지금 규칙 그대로다 (docs/specs/production-reservation-result.md): 끝난 생산 건(CANCELLED, FAILED)은 `production.cancelled` 재발행, 나머지는 무시
+3. 그 밖의 상태는 지금 규칙 그대로다 (docs/specs/production-reservation-result.md): 끝난 생산 건(CANCELLED)은 `production.cancelled` 재발행, 나머지는 무시
 
 ### 2. 작업자 API (사람 공정, 로봇 공정 수동 개입)
 밖 주소는 `/api/production/**`, gateway 가 `/api` 를 떼고 넘기므로 컨트롤러는 `/production/**` 이다. 작업자는 로그인한 직원이고, gateway 가 넣는 `X-User-Id`(JWT sub, public_id)를 실적의 작업자로 남긴다.
@@ -32,7 +32,7 @@
 
 **시작**
 - 앞 공정이 모두 DONE 이고, 이 공정이 PENDING 일 때만 시작한다. 한 작업지시에서 IN_PROGRESS 공정은 하나뿐이다
-- 지정한 설비는 이 공정의 설비여야 하고 RUNNING 이어야 한다. 공정에 설비를 기록한다 (고장 나면 이 설비에서 진행 중인 차량만 실패, #74)
+- 지정한 설비는 이 공정의 설비여야 하고 RUNNING 이어야 한다. 공정에 설비를 기록한다 (고장·정지 나면 이 설비의 공정만 PENDING 으로 되돌려 다른 설비로 재배정, docs/specs/equipment-status.md)
 - 공정 → IN_PROGRESS (started_at, equipment_code)
 - 작업지시의 첫 시작이면 (보통은 프레스 배정 때, 수동 개입이면 작업자의 프레스 시작 때) 작업지시 IN_PROGRESS, 생산 건 IN_PROGRESS(started_at) + `production.status-changed`(IN_PROGRESS). 이 순간부터 취소할 수 없다 (기획서 "취소 기준"). 불량 재작업으로 다시 시작할 때는 다시 일어나지 않는다
 
@@ -72,13 +72,13 @@
 | 두 차가 같은 설비를 동시에 잡음 (작업자끼리, 배정과 작업자) | 설비 `@Version` 으로 한쪽만 반영. 늦은 쪽 API 는 409 `PRODUCTION_CONFLICT`, 배정은 건너뛰고 다음 주기에 |
 | 앞 공정이 DONE 이 아닌데 시작 | 409 `STEP_OUT_OF_ORDER` |
 | PENDING 이 아닌 공정 시작, IN_PROGRESS 가 아닌 공정 종료 | 409 `INVALID_STEP_STATUS` |
-| 작업지시가 CANCELLED, FAILED | 409 `WORK_ORDER_CLOSED` |
+| 작업지시가 CANCELLED | 409 `WORK_ORDER_CLOSED` |
 | 같은 생산 건·작업지시를 동시에 바꿈 (공정 시작 vs 취소 수신 등) | 생산 건과 작업지시에 `@Version`. 늦은 쪽 API 는 409 `PRODUCTION_CONFLICT`, 리스너는 재시도 |
 | 작업자가 DISPATCHED 공정을 시작·종료하려 함 | 409 `INVALID_STEP_STATUS` (설비 보고를 기다린다) |
 | 배정과 작업자 시작이 동시에 같은 작업지시를 바꿈 | 작업지시 version 으로 한쪽만 반영. 배정 쪽은 건너뛰고 다음 주기에 다시 본다 |
 | 같은 생산 건에 inventory.reserved 가 두 번 옴 | 작업지시는 하나뿐이다 (`work_order.production_id` UNIQUE). 두 번째는 READY 가 아니라서 지금 규칙대로 무시된다 |
 
-- 설비 테이블과 "RUNNING 일 때만 시작" 조건은 이 작업에서 만든다. 설비 상태를 바꾸는 `equipment.status-changed` 수신과 고장 시 실패 처리는 #74 다. 그 전까지 설비는 모두 RUNNING 이다
+- 설비 테이블과 "RUNNING 일 때만 시작" 조건은 이 작업에서 만든다. 설비 상태를 바꾸는 `equipment.status-changed` 수신과 고장·정지 시 재배정은 docs/specs/equipment-status.md (#93) 다
 - 이 작업에서 새로 발행하는 이벤트는 없다 (status-changed 의 READY, IN_PROGRESS 시점만 정해진다)
 - 목록은 한 번에 다 읽지 않는다 (SAGA "목록 조회"). 공통 `CursorPage`(common-web)를 둔다: items, count, last, nextCursor
 

@@ -51,7 +51,7 @@ inventory 는 그 차에 잡아 둔 부품을 사용 처리(CONSUMED)하고 완�
 | production.completed 를 두 번 받음 (inventory) | 같은 eventId 는 Guard. 다른 eventId 면 finished_vehicle(production_id UNIQUE)이 이미 있으면 건너뜀 (INFO) |
 | 그 생산 건에 RESERVED 줄이 없음 (inventory) | 처리 오류 `RESERVATION_NOT_FOUND` → 재시도 → DLQ. 완료된 차는 반드시 부품이 다 잡혀 있었다 |
 | production.completed 를 두 번 받음 (order) | 같은 eventId 는 Guard. 이미 COMPLETED 면 바꾸지 않음 (INFO) |
-| 끝난 차량(CANCELLED, FAILED)에 completed 가 옴 (order) | 바꾸지 않음 (INFO). 끝난 상태는 되돌리지 않는다 |
+| 끝난 차량(CANCELLED)에 completed 가 옴 (order) | 바꾸지 않음 (INFO). 끝난 상태는 되돌리지 않는다 |
 | 처음 보는 차량 (order) | status-changed 처럼 품목에 차량을 만들고 완료한다. 큐가 달라 completed 가 차량을 만드는 status-changed(PLANNED) 보다 먼저 처리될 수 있어서다. 품목 수량을 넘으면 `ORDER_VEHICLE_OVERFLOW` → DLQ |
 | 없는 품목 (order) | 처리 오류 `ORDER_ITEM_NOT_FOUND` → 재시도 → DLQ |
 | 잡아 둔 부품이 그사이 삭제됨 (inventory) | 처리 오류 `PART_NOT_FOUND` → 재시도 → DLQ. 아무것도 바뀌지 않는다 |
