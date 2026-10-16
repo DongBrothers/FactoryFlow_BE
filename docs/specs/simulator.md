@@ -97,6 +97,7 @@ simulator 는 진짜 설비(프레스기, 용접·도장 로봇, 의장·검사 
 ### 사람 적용 (common-test)
 - `FactoryFlowRules.NO_DIRECT_PUBLISH`: `com.factoryflow.simulator..` 를 뺀다 (DB 가 없어 Outbox 를 쓸 수 없음)
 - `FactoryFlowRules.LISTENER_USES_GUARD`: `com.factoryflow.simulator..` 를 뺀다 (처리 기록 테이블이 없음. 메모리로 중복을 거름)
+- `TestContainersConfig`: MySQL 컨테이너는 JDBC 가 있는 서비스에만 띄운다 (`@ConditionalOnClass(JdbcConnectionDetails)`). DB 없는 simulator 테스트는 MySQL 연결 정보를 받을 곳이 없어 컨텍스트가 뜨지 않는다. 다른 서비스는 그대로
 
 ## 완료 조건 (테스트로 확인할 것)
 simulator (Testcontainers RabbitMQ, 시간은 설정으로 짧게)

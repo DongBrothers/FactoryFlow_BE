@@ -2,7 +2,6 @@ package com.factoryflow.simulator.domain;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,20 +27,17 @@ public class PendingMessages<T> {
 
     /** 다시 보낼 메시지, 보낸 순서로. 꺼낸 것은 보낸 시각을 now 로 바꾼다 (다음 주기까지 기다림). */
     public synchronized List<T> dueForResend(Instant now, Duration resendInterval) {
-        List<T> due = new ArrayList<>();
-        sentAt.forEach(
-                (id, at) -> {
-                    if (Duration.between(at, now).compareTo(resendInterval) >= 0) {
-                        due.add(messages.get(id));
-                    }
-                });
-        messages.forEach(
-                (id, message) -> {
-                    if (due.contains(message)) {
-                        sentAt.put(id, now);
-                    }
-                });
-        return due;
+        List<String> dueIds =
+                sentAt.entrySet().stream()
+                        .filter(
+                                e ->
+                                        Duration.between(e.getValue(), now)
+                                                        .compareTo(resendInterval)
+                                                >= 0)
+                        .map(Map.Entry::getKey)
+                        .toList();
+        dueIds.forEach(id -> sentAt.put(id, now));
+        return dueIds.stream().map(messages::get).toList();
     }
 
     public synchronized int size() {
