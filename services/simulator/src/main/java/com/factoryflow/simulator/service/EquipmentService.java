@@ -6,6 +6,7 @@ import com.factoryflow.simulator.domain.EquipmentStatus;
 import com.factoryflow.simulator.domain.Job;
 import com.factoryflow.simulator.domain.LineProcess;
 import com.factoryflow.simulator.domain.SeenEvents;
+import com.factoryflow.simulator.domain.StepResult;
 import com.factoryflow.simulator.domain.VirtualEquipment;
 import com.factoryflow.simulator.dto.response.InternalEquipmentResponse;
 import com.factoryflow.simulator.event.listener.payload.StepDispatched;
@@ -86,7 +87,6 @@ public class EquipmentService {
             return;
         }
         publisher.publish(
-                "equipment.step-started",
                 job.traceId(),
                 new EquipmentStepStarted(equipment.getCode(), job.workOrderId(), job.process()));
         later(properties.workTimeOf(job.process()), () -> reportCompleted(equipment, job));
@@ -100,13 +100,12 @@ public class EquipmentService {
         boolean defect = random.nextDouble() < properties.defectRate();
         equipment.finish();
         publisher.publish(
-                "equipment.step-completed",
                 job.traceId(),
                 new EquipmentStepCompleted(
                         equipment.getCode(),
                         job.workOrderId(),
                         job.process(),
-                        defect ? "DEFECT" : "GOOD",
+                        defect ? StepResult.DEFECT : StepResult.GOOD,
                         defect ? job.process().defectReason() : null));
     }
 
@@ -116,26 +115,29 @@ public class EquipmentService {
         VirtualEquipment equipment = findEquipment(code);
         if (equipment.changeStatus(status)) {
             publisher.publish(
-                    "equipment.status-changed",
                     UUID.randomUUID().toString(),
                     new EquipmentStatusChanged(code, equipment.getProcess(), status));
         }
         return InternalEquipmentResponse.from(equipment);
     }
 
-    /** 자동 고장: 가동 중인 설비마다 faultRate 확률로 고장, repairTime 뒤 (아직 고장이면) 가동. */
+    /**
+     * 자동 고장: 가동 중인 설비마다 faultRate 확률로 고장, repairTime 뒤 가동. 그사이 수동으로 가동했다가 다시 고장 냈으면 다른 고장이므로 풀지 않는다
+     * (상태 회차로 구분).
+     */
     public synchronized void rollFaults() {
         for (VirtualEquipment equipment : fleet.values()) {
             if (equipment.getStatus() == EquipmentStatus.RUNNING
                     && random.nextDouble() < properties.faultRate()) {
                 changeStatus(equipment.getCode(), EquipmentStatus.FAULT);
-                later(properties.repairTime(), () -> repair(equipment));
+                long round = equipment.getStatusRound();
+                later(properties.repairTime(), () -> repair(equipment, round));
             }
         }
     }
 
-    private synchronized void repair(VirtualEquipment equipment) {
-        if (equipment.getStatus() == EquipmentStatus.FAULT) {
+    private synchronized void repair(VirtualEquipment equipment, long round) {
+        if (equipment.isInFaultRound(round)) {
             changeStatus(equipment.getCode(), EquipmentStatus.RUNNING);
         }
     }

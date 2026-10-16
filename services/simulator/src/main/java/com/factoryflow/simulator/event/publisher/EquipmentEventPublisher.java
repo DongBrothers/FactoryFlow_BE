@@ -2,10 +2,12 @@ package com.factoryflow.simulator.event.publisher;
 
 import com.factoryflow.simulator.config.EventQueueConfig;
 import com.factoryflow.simulator.domain.PendingMessages;
+import com.factoryflow.simulator.event.publisher.payload.EquipmentEvent;
 import com.factoryflow.simulator.event.publisher.payload.OutgoingEvent;
 import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,9 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 @RequiredArgsConstructor
 public class EquipmentEventPublisher {
+
+    /** EventEnvelope 의 version 과 같은 값. */
+    private static final int ENVELOPE_VERSION = 1;
 
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
@@ -51,16 +56,21 @@ public class EquipmentEventPublisher {
     }
 
     /** 이벤트를 만들어 보낸다. 같은 흐름이면 받은 traceId 를 이어 쓴다. */
-    public void publish(String eventName, String traceId, Object payload) {
+    public void publish(String traceId, EquipmentEvent payload) {
         OutgoingEvent event =
                 new OutgoingEvent(
-                        UUID.randomUUID(), eventName, traceId, 1, clock.instant(), payload);
+                        UUID.randomUUID(),
+                        payload.eventName(),
+                        traceId,
+                        ENVELOPE_VERSION,
+                        clock.instant(),
+                        payload);
         pending.sent(event.eventId().toString(), event, clock.instant());
         send(event);
     }
 
     /** 확인을 못 받은 지 resendInterval 이 지난 메시지를 같은 eventId 로 다시 보낸다. */
-    public void resendPending(java.time.Duration resendInterval) {
+    public void resendPending(Duration resendInterval) {
         for (OutgoingEvent event : pending.dueForResend(clock.instant(), resendInterval)) {
             log.info("확인을 못 받아 다시 보냄: eventId={} eventName={}", event.eventId(), event.eventName());
             send(event);

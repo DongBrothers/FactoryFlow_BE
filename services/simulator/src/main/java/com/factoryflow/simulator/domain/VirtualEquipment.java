@@ -11,6 +11,9 @@ public class VirtualEquipment {
     private EquipmentStatus status;
     private Job job;
 
+    /** 상태가 바뀔 때마다 오르는 회차. 자동 수리가 자기가 고친다고 예약한 고장인지 알아보는 데 쓴다. */
+    private long statusRound;
+
     public VirtualEquipment(String code, LineProcess process) {
         this.code = code;
         this.process = process;
@@ -35,12 +38,18 @@ public class VirtualEquipment {
         this.job = null;
     }
 
+    /** 지금이 그 회차의 고장인가. 그사이 가동했다가 다시 고장 났으면 다른 회차다. */
+    public boolean isInFaultRound(long round) {
+        return status == EquipmentStatus.FAULT && statusRound == round;
+    }
+
     /** 상태를 바꾼다. 멈추면(FAULT, STOPPED) 하던 작업을 버린다. 바뀌었으면 true. */
     public boolean changeStatus(EquipmentStatus status) {
         if (this.status == status) {
             return false;
         }
         this.status = status;
+        this.statusRound++;
         if (status != EquipmentStatus.RUNNING) {
             this.job = null;
         }

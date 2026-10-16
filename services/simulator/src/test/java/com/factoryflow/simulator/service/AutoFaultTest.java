@@ -36,6 +36,9 @@ class AutoFaultTest {
         String fault = null;
         for (int i = 0; i < 50 && fault == null; i++) {
             String next = support.next(5000);
+            if (next == null) {
+                break;
+            }
             if ("FAULT".equals(field(next, "$.payload.status"))) {
                 fault = next;
             }
@@ -47,6 +50,9 @@ class AutoFaultTest {
         String repaired = null;
         for (int i = 0; i < 50 && repaired == null; i++) {
             String next = support.next(5000);
+            if (next == null) {
+                break;
+            }
             if (code.equals(field(next, "$.payload.equipmentCode"))
                     && "RUNNING".equals(field(next, "$.payload.status"))) {
                 repaired = next;
