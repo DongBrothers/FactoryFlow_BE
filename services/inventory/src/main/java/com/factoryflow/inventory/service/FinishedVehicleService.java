@@ -3,12 +3,15 @@ package com.factoryflow.inventory.service;
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.inventory.domain.FinishedVehicle;
+import com.factoryflow.inventory.domain.FinishedVehicleStatus;
 import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.domain.PartLot;
 import com.factoryflow.inventory.domain.PartLotUsage;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
+import com.factoryflow.inventory.dto.response.FinishedVehicleListResponse;
+import com.factoryflow.inventory.dto.response.FinishedVehicleSummaryResponse;
 import com.factoryflow.inventory.dto.response.ShipFinishedVehicleResponse;
 import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
 import com.factoryflow.inventory.event.publisher.payload.ShipmentCompleted;
@@ -27,6 +30,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -86,6 +90,30 @@ public class FinishedVehicleService {
                         vehicle.getProductId(),
                         vehicle.getVin()));
         return ShipFinishedVehicleResponse.from(vehicle);
+    }
+
+    /**
+     * 완성차 목록, 최신 먼저 size 개. status 가 있으면 그 상태만. lastVin 이 있으면 그 차보다 오래된 것부터 (밖으로는 VIN 만 쓰고 안에서 id 로
+     * 바꾼다). 다음 페이지가 있는지 알려고 하나 더 읽는다 (docs/specs/list-apis.md).
+     */
+    @Transactional(readOnly = true)
+    public FinishedVehicleListResponse findFinishedVehicles(
+            String status, String lastVin, int size) {
+        Long beforeId = lastVin == null ? Long.MAX_VALUE : findVehicleOrThrow(lastVin).getId();
+        List<FinishedVehicleSummaryResponse> rows =
+                findVehiclesBefore(status, beforeId, size + 1).stream()
+                        .map(FinishedVehicleSummaryResponse::from)
+                        .toList();
+        return FinishedVehicleListResponse.of(rows, size);
+    }
+
+    private List<FinishedVehicle> findVehiclesBefore(String status, Long beforeId, int limit) {
+        if (status == null) {
+            return finishedVehicleRepository.findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
+                    beforeId, Limit.of(limit));
+        }
+        return finishedVehicleRepository.findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+                FinishedVehicleStatus.valueOf(status), beforeId, Limit.of(limit));
     }
 
     /** 이벤트를 보내기 전에 저장해 version 을 확인한다. 다른 요청이 먼저 바꿨으면 FINISHED_VEHICLE_CONFLICT. */

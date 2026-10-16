@@ -5,7 +5,9 @@ import com.factoryflow.inventory.domain.FinishedVehicle;
 import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.domain.PartLot;
 import com.factoryflow.inventory.domain.PartLotUsage;
+import com.factoryflow.inventory.dto.response.LotStockResponse;
 import com.factoryflow.inventory.dto.response.LotVehicleResponse;
+import com.factoryflow.inventory.dto.response.PartLotStockResponse;
 import com.factoryflow.inventory.dto.response.VehiclePartLotResponse;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.inventory.repository.FinishedVehicleRepository;
@@ -71,6 +73,29 @@ public class PartLotService {
         return usages.stream()
                 .map(u -> LotVehicleResponse.of(vehicles.get(u.getVin()), part, u))
                 .toList();
+    }
+
+    /**
+     * 부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로, 창고 실물과 LOT 없는 재고(실물 − LOT 남은 수량)와 함께. 부품이 없으면 PART_NOT_FOUND
+     * (docs/specs/list-apis.md "5. LOT 별 재고").
+     */
+    @Transactional(readOnly = true)
+    public PartLotStockResponse findLotsOfPart(Long partId) {
+        Part part = findActivePartOrThrow(partId);
+        List<LotStockResponse> lots =
+                findOpenLots(partId).stream().map(LotStockResponse::from).toList();
+        return PartLotStockResponse.of(part, lots);
+    }
+
+    private Part findActivePartOrThrow(Long partId) {
+        return partRepository
+                .findByIdAndIsDeletedFalse(partId)
+                .orElseThrow(() -> new CustomException(InventoryErrorCode.PART_NOT_FOUND));
+    }
+
+    private List<PartLot> findOpenLots(Long partId) {
+        return partLotRepository.findAllByPartIdInAndRemainingQtyGreaterThanOrderByIdAsc(
+                List.of(partId), 0);
     }
 
     private boolean isStocked(String vin) {
