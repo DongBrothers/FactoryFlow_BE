@@ -13,7 +13,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | production.status-changed | production | order | orderId, productionId, productId, status |
 | production.step-dispatched | production | simulator | workOrderId, process, equipmentCode |
 | production.cancelled | production | inventory, order | orderId, productionId |
-| production.cancel-rejected | production | order | orderId, productionId, reason |
+| production.cancel-rejected | production | order | orderId, productionId, reason, status |
 | production.completed | production | inventory, order | orderId, productionId, productId, vin |
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |

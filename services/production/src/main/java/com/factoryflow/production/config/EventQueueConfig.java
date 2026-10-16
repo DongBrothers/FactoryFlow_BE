@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
 public class EventQueueConfig {
 
     public static final String ORDER_CREATED_QUEUE = "production.order-created";
+    public static final String ORDER_CANCEL_REQUESTED_QUEUE = "production.order-cancel-requested";
     public static final String INVENTORY_RESERVED_QUEUE = "production.inventory-reserved";
     public static final String RESERVATION_PENDING_QUEUE =
             "production.inventory-reservation-pending";
@@ -36,6 +37,12 @@ public class EventQueueConfig {
     @Bean
     Declarables orderCreatedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(factoryFlowEventsExchange, ORDER_CREATED_QUEUE, "order.created");
+    }
+
+    @Bean
+    Declarables orderCancelRequestedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, ORDER_CANCEL_REQUESTED_QUEUE, "order.cancel-requested");
     }
 
     @Bean

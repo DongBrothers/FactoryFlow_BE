@@ -4,6 +4,7 @@ import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.inventory.config.EventQueueConfig;
 import com.factoryflow.inventory.event.listener.payload.MaterialRequested;
+import com.factoryflow.inventory.event.listener.payload.ProductionCancelled;
 import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
 import com.factoryflow.inventory.service.FinishedVehicleService;
 import com.factoryflow.inventory.service.PartReservationService;
@@ -32,6 +33,15 @@ public class ProductionEventListener {
         processedEventGuard.runOnce(
                 envelope,
                 () -> partReservationService.reserve(event.productionId(), event.parts()));
+    }
+
+    /** 생산 취소: 그 차의 예약을 풀고, 풀린 부품을 기다리던 차에 먼저 온 순서로 넘긴다. 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_CANCELLED_QUEUE)
+    public void onProductionCancelled(EventEnvelope envelope) {
+        ProductionCancelled event =
+                objectMapper.treeToValue(envelope.payload(), ProductionCancelled.class);
+        processedEventGuard.runOnce(
+                envelope, () -> partReservationService.release(event.productionId()));
     }
 
     /** 생산 완료: 그 차에 잡아 둔 부품을 사용 처리하고 완성차 재고를 넣는다. 처리 기록과 같은 트랜잭션이다. */

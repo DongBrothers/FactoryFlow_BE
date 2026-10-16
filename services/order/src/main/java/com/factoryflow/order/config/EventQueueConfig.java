@@ -22,6 +22,9 @@ public class EventQueueConfig {
 
     public static final String STATUS_CHANGED_QUEUE = "order.production-status-changed";
     public static final String PRODUCTION_COMPLETED_QUEUE = "order.production-completed";
+    public static final String PRODUCTION_CANCELLED_QUEUE = "order.production-cancelled";
+    public static final String PRODUCTION_CANCEL_REJECTED_QUEUE =
+            "order.production-cancel-rejected";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -30,6 +33,20 @@ public class EventQueueConfig {
     Declarables statusChangedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
                 factoryFlowEventsExchange, STATUS_CHANGED_QUEUE, "production.status-changed");
+    }
+
+    @Bean
+    Declarables productionCancelledQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, PRODUCTION_CANCELLED_QUEUE, "production.cancelled");
+    }
+
+    @Bean
+    Declarables productionCancelRejectedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange,
+                PRODUCTION_CANCEL_REJECTED_QUEUE,
+                "production.cancel-rejected");
     }
 
     @Bean

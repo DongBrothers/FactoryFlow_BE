@@ -11,6 +11,7 @@ import com.factoryflow.production.domain.WorkOrderStep;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
+import com.factoryflow.production.event.publisher.payload.ProductionCancelRejected;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelled;
 import com.factoryflow.production.event.publisher.payload.ProductionCompleted;
 import com.factoryflow.production.event.publisher.payload.ProductionStatusChanged;
@@ -26,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -221,6 +223,47 @@ public class ProductionService {
                         production.getId(),
                         production.getProductId(),
                         vin));
+    }
+
+    /**
+     * order.cancel-requested: 주문의 생산 건마다 프레스 배정 전이면 취소(작업지시도) + production.cancelled, 배정 후면
+     * production.cancel-rejected(ALREADY_STARTED, 지금 상태). 이미 취소된 건은 cancelled 를 다시 보낸다. 생산 건이 없으면
+     * PRODUCTION_NOT_FOUND (order 가 차량을 다 알 때만 요청하므로 정상 흐름에서는 없음, docs/specs/order-cancel.md).
+     */
+    @Transactional
+    public void cancelAll(Long orderId) {
+        List<Production> productions = findProductionsOf(orderId);
+        if (productions.isEmpty()) {
+            throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND);
+        }
+        Map<Long, WorkOrder> workOrdersByProductionId =
+                findWorkOrdersOf(productions.stream().map(Production::getId).toList());
+        for (Production production : productions) {
+            if (production.isClosed() || production.cancel()) {
+                WorkOrder workOrder = workOrdersByProductionId.get(production.getId());
+                if (workOrder != null) {
+                    workOrder.cancel();
+                }
+                publishCancelled(production);
+            } else {
+                eventPublisher.publish(
+                        new ProductionCancelRejected(
+                                orderId,
+                                production.getId(),
+                                ProductionCancelRejected.ALREADY_STARTED,
+                                production.getStatus()));
+            }
+        }
+    }
+
+    private List<Production> findProductionsOf(Long orderId) {
+        return productionRepository.findAllByOrderIdOrderByIdAsc(orderId);
+    }
+
+    /** 생산 건들의 작업지시를 한 번에 읽는다 (작업지시가 아직 없는 생산 건은 빠진다). */
+    private Map<Long, WorkOrder> findWorkOrdersOf(List<Long> productionIds) {
+        return workOrderRepository.findAllByProductionIdIn(productionIds).stream()
+                .collect(Collectors.toMap(WorkOrder::getProductionId, Function.identity()));
     }
 
     /**

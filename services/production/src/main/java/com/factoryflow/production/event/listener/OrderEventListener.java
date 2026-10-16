@@ -3,6 +3,7 @@ package com.factoryflow.production.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.production.config.EventQueueConfig;
+import com.factoryflow.production.event.listener.payload.OrderCancelRequested;
 import com.factoryflow.production.event.listener.payload.OrderCreated;
 import com.factoryflow.production.service.ProductionService;
 import lombok.RequiredArgsConstructor;
@@ -27,5 +28,13 @@ public class OrderEventListener {
         OrderCreated event = objectMapper.treeToValue(envelope.payload(), OrderCreated.class);
         processedEventGuard.runOnce(
                 envelope, () -> productionService.planAll(event.orderId(), event.products()));
+    }
+
+    /** 주문 취소 요청: 생산 건마다 프레스 배정 전이면 취소, 아니면 거절. 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.ORDER_CANCEL_REQUESTED_QUEUE)
+    public void onCancelRequested(EventEnvelope envelope) {
+        OrderCancelRequested event =
+                objectMapper.treeToValue(envelope.payload(), OrderCancelRequested.class);
+        processedEventGuard.runOnce(envelope, () -> productionService.cancelAll(event.orderId()));
     }
 }

@@ -89,17 +89,18 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 첫 공정(프레스) 배정이 되돌릴 수 없는 지점이다. 프레스 배정이 생산 순서 확정이고, 순서가 확정되면 협력업체가 그 순서대로 부품을 보내기 때문이다 (기획서 "취소 기준").
 취소 요청은 주문 전체 단위이고, 판단은 차량마다 production 이 한다.
 1. order: 고객 취소 요청
-   - 차량 중 COMPLETED, SHIPPED 가 있으면 바로 거절 (409)
+   - 차량을 다 모르면(아직 생산 계획 중) 409 ORDER_NOT_READY, 차량 중 COMPLETED, SHIPPED 가 있으면 409 (상세: docs/specs/order-cancel.md)
    - 아니면 차량을 모두 CANCEL_REQUESTED 로 바꾸고 `order.cancel-requested`
    - order 가 가진 차량 상태는 늦을 수 있으므로, 취소 가능 여부의 최종 판단은 production 이 한다
 2. production: 그 주문의 생산 건마다 판단
    - 프레스 배정 전 (PLANNED, WAITING_MATERIAL, READY) → 생산 건·작업지시 CANCELLED + `production.cancelled`
-   - 프레스 배정 후 (IN_PROGRESS, COMPLETED) → 상태 유지 + `production.cancel-rejected`(reason = ALREADY_STARTED)
-   - 그 주문의 생산 건이 아직 없음 → `production.cancel-rejected`(reason = NOT_READY)
+   - 프레스 배정 후 (IN_PROGRESS, COMPLETED) → 상태 유지 + `production.cancel-rejected`(reason = ALREADY_STARTED, status = 지금 상태)
+   - 이미 취소된 생산 건 → `production.cancelled` 재발행
 3. inventory: cancelled 수신 → 그 생산 건의 RESERVED 줄 RELEASED (available +, reserved −, stock_history RELEASE),
-   WAITING 줄은 RELEASED (재고 변화 없음). 이미 들어간 AUTO 구매는 취소하지 않는다 (재고로 남음)
-4. order: 차량마다 cancelled → CANCELLED, cancel-rejected → 생산 건의 현재 상태로 되돌림.
-   그 주문에 CANCEL_REQUESTED 차량이 남지 않으면, 취소된 차량이 하나라도 있을 때 `order.cancelled`
+   WAITING 줄은 RELEASED (재고 변화 없음). 풀린 부품은 그 부품을 기다리던 줄에 먼저 온 순서로 넘긴다 (다 찬 생산 건은 inventory.reserved).
+   이미 들어간 AUTO 구매는 취소하지 않는다 (재고로 남음)
+4. order: 차량마다 cancelled → CANCELLED, cancel-rejected → payload 의 status(거절 때 생산 건 상태)로 되돌림.
+   그 주문에 CANCEL_REQUESTED 차량이 남지 않으면, 이번 요청 회차에 취소된 차량이 하나라도 있을 때 `order.cancelled` (회차당 한 번)
 
 ## 규칙 / 예외
 
@@ -132,7 +133,7 @@ CANCELLED 는 빼고 남은 것으로 계산한다. 위에서부터 먼저 맞�
   (예: CANCELLED 생산 건에 온 inventory.reserved)
 - 취소된 생산 건에 inventory.reserved 가 늦게 오면 production 은 `production.cancelled` 를 다시 보낸다
   (inventory 해제는 RESERVED/WAITING 줄에만 적용되므로 여러 번 받아도 안전)
-- 취소가 생산 건 생성보다 먼저 도착하면 NOT_READY 로 거절한다. 고객은 다시 취소를 요청한다
+- 차량(생산 건)을 다 알기 전에 온 취소 요청은 order 가 409 ORDER_NOT_READY 로 거절한다. 고객은 잠시 후 다시 요청한다
 - 같은 생산 건을 동시에 바꾸는 것(프레스 배정 vs 취소 수신)은 생산 건의 낙관적 락(@Version)으로, 설비 고장 vs 공정 시작·종료는 설비·작업지시의 낙관적 락으로 막는다.
   늦은 쪽 API 는 409, 리스너는 재시도로 최신 상태를 보고 다시 판단한다
 
@@ -179,7 +180,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | production.material-requested | production | inventory | productionId, parts[{partId, qty}] |
 | production.status-changed | production | order | orderId, productionId, productId, status |
 | production.cancelled | production | inventory, order | orderId, productionId |
-| production.cancel-rejected | production | order | orderId, productionId, reason (ALREADY_STARTED, NOT_READY) |
+| production.cancel-rejected | production | order | orderId, productionId, reason (ALREADY_STARTED), status |
 | production.completed | production | inventory, order | orderId, productionId, productId, vin |
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
