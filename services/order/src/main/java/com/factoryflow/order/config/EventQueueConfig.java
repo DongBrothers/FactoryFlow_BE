@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
 public class EventQueueConfig {
 
     public static final String STATUS_CHANGED_QUEUE = "order.production-status-changed";
+    public static final String PRODUCTION_COMPLETED_QUEUE = "order.production-completed";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -29,6 +30,12 @@ public class EventQueueConfig {
     Declarables statusChangedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
                 factoryFlowEventsExchange, STATUS_CHANGED_QUEUE, "production.status-changed");
+    }
+
+    @Bean
+    Declarables productionCompletedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, PRODUCTION_COMPLETED_QUEUE, "production.completed");
     }
 
     // ---- 실패 처리 ----

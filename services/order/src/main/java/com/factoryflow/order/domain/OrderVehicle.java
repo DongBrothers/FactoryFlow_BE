@@ -35,6 +35,10 @@ public class OrderVehicle extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private Long productionId;
 
+    /** 차대번호. 생산이 끝나면(production.completed) 기록한다. */
+    @Column(length = 17)
+    private String vin;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
@@ -62,6 +66,15 @@ public class OrderVehicle extends BaseEntity {
             return false;
         }
         this.status = next;
+        return true;
+    }
+
+    /** 생산이 끝났다: COMPLETED 로 바꾸고 VIN 을 기록한다. 바꾸는 규칙은 applyProductionStatus 와 같다. 바뀌었으면 true. */
+    public boolean complete(String vin) {
+        if (!applyProductionStatus(OrderStatus.COMPLETED)) {
+            return false;
+        }
+        this.vin = vin;
         return true;
     }
 

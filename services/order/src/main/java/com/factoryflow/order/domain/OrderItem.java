@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -51,6 +52,9 @@ public class OrderItem extends BaseEntity {
 
     @Column(length = 255)
     private String failReason;
+
+    /** 품목·주문 요약을 동시에 바꾸면(다른 큐의 차량 상태 변경) 늦은 쪽이 실패하고 재시도로 다시 요약한다. */
+    @Version private Long version;
 
     private OrderItem(
             Long orderId, Long productId, String productCode, String productName, int qty) {

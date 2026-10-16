@@ -48,6 +48,9 @@ public class Production extends BaseEntity {
     /** 첫 공정(프레스)을 시작한 시각. 이후에는 취소할 수 없다. */
     private LocalDateTime startedAt;
 
+    /** 검사 양품으로 완성된 시각 (VIN 발행). */
+    private LocalDateTime completedAt;
+
     /** 같은 생산 건을 동시에 바꾸면(프레스 시작 vs 취소 수신 등) 늦은 쪽이 실패한다. */
     @Version private Long version;
 
@@ -87,6 +90,16 @@ public class Production extends BaseEntity {
         }
         this.status = ProductionStatus.IN_PROGRESS;
         this.startedAt = now;
+        return true;
+    }
+
+    /** 검사 양품으로 차가 완성됐다. IN_PROGRESS 에서만 바뀐다. 바뀌었으면 true. */
+    public boolean complete(LocalDateTime now) {
+        if (status != ProductionStatus.IN_PROGRESS) {
+            return false;
+        }
+        this.status = ProductionStatus.COMPLETED;
+        this.completedAt = now;
         return true;
     }
 

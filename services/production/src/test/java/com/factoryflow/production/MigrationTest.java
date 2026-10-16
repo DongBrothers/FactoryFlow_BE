@@ -21,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("4");
+        jdbc = migrateTo("5");
     }
 
     @Test
@@ -140,6 +140,30 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertStep(workOrder, "PRESS", 1))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_step_process");
+    }
+
+    @Test
+    void v5MakesWorkOrderVinUnique() {
+        jdbc.update(
+                "INSERT INTO work_order (production_id, order_id, product_id, status, vin, released_at,"
+                        + " created_at, updated_at)"
+                        + " VALUES (800, 1, 1, 'COMPLETED', 'KMH000017TU000001', NOW(6), NOW(6), NOW(6))");
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO work_order (production_id, order_id, product_id, status,"
+                                                + " vin, released_at, created_at, updated_at)"
+                                                + " VALUES (801, 1, 1, 'COMPLETED', 'KMH000017TU000001',"
+                                                + " NOW(6), NOW(6), NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_work_order_vin");
+        // 완료 전 작업지시(vin NULL)는 여러 건이어도 된다
+        jdbc.update(
+                "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
+                        + " created_at, updated_at) VALUES (802, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
+        jdbc.update(
+                "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
+                        + " created_at, updated_at) VALUES (803, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
     }
 
     @Test

@@ -62,6 +62,15 @@ public class StockHistory {
         this.refId = refId;
     }
 
+    public static StockHistory consumeForProduction(Long partId, int qty, Long productionId) {
+        return new StockHistory(
+                partId,
+                qty,
+                StockHistoryType.CONSUME,
+                StockHistoryRefType.PRODUCTION,
+                productionId);
+    }
+
     public static StockHistory reserveForProduction(Long partId, int qty, Long productionId) {
         return new StockHistory(
                 partId,

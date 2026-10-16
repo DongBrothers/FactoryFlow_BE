@@ -4,6 +4,8 @@ import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.inventory.config.EventQueueConfig;
 import com.factoryflow.inventory.event.listener.payload.MaterialRequested;
+import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
+import com.factoryflow.inventory.service.FinishedVehicleService;
 import com.factoryflow.inventory.service.PartReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -16,6 +18,7 @@ public class ProductionEventListener {
 
     private final ProcessedEventGuard processedEventGuard;
     private final PartReservationService partReservationService;
+    private final FinishedVehicleService finishedVehicleService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -29,5 +32,13 @@ public class ProductionEventListener {
         processedEventGuard.runOnce(
                 envelope,
                 () -> partReservationService.reserve(event.productionId(), event.parts()));
+    }
+
+    /** 생산 완료: 그 차에 잡아 둔 부품을 사용 처리하고 완성차 재고를 넣는다. 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_COMPLETED_QUEUE)
+    public void onProductionCompleted(EventEnvelope envelope) {
+        ProductionCompleted event =
+                objectMapper.treeToValue(envelope.payload(), ProductionCompleted.class);
+        processedEventGuard.runOnce(envelope, () -> finishedVehicleService.stock(event));
     }
 }

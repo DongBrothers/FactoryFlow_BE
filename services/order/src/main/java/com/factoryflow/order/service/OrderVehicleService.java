@@ -34,8 +34,7 @@ public class OrderVehicleService {
             Long orderId, Long productionId, Long productId, String productionStatus) {
         OrderStatus next = vehicleStatusOf(productionStatus);
         OrderItem item = findItem(orderId, productId);
-        OrderVehicle vehicle =
-                findVehicle(productionId).orElseGet(() -> addVehicle(item, productionId));
+        OrderVehicle vehicle = vehicleOf(item, productionId);
         if (!vehicle.applyProductionStatus(next)) {
             log.info(
                     "차량 상태를 바꾸지 않음: orderId={} productionId={} vehicle={} production={}",
@@ -46,6 +45,30 @@ public class OrderVehicleService {
             return;
         }
         refreshStatuses(item);
+    }
+
+    /**
+     * production.completed: 차량을 COMPLETED 로 바꾸고 VIN 을 기록한 뒤, 바뀌었으면 같은 트랜잭션에서 품목·주문 상태를 다시 계산한다. 끝난
+     * 차량은 그대로 둔다 (docs/specs/production-completion.md).
+     */
+    @Transactional
+    public void complete(Long orderId, Long productionId, Long productId, String vin) {
+        OrderItem item = findItem(orderId, productId);
+        OrderVehicle vehicle = vehicleOf(item, productionId);
+        if (!vehicle.complete(vin)) {
+            log.info(
+                    "차량을 완료로 바꾸지 않음: orderId={} productionId={} vehicle={}",
+                    orderId,
+                    productionId,
+                    vehicle.getStatus());
+            return;
+        }
+        refreshStatuses(item);
+    }
+
+    /** 그 생산 건의 차량. 처음 보는 생산 건이면 품목에 차량을 만든다. */
+    private OrderVehicle vehicleOf(OrderItem item, Long productionId) {
+        return findVehicle(productionId).orElseGet(() -> addVehicle(item, productionId));
     }
 
     /** 품목 수량보다 많은 생산 건은 받지 않는다. 정상 흐름에서는 생기지 않는다. */

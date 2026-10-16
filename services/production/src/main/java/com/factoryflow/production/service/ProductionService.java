@@ -12,6 +12,7 @@ import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelled;
+import com.factoryflow.production.event.publisher.payload.ProductionCompleted;
 import com.factoryflow.production.event.publisher.payload.ProductionStatusChanged;
 import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.repository.BomRepository;
@@ -196,6 +197,30 @@ public class ProductionService {
         }
         flushOrConflict(productionId);
         publishStatusChanged(production);
+    }
+
+    /**
+     * 검사 양품으로 차가 완성됐다: 생산 건 IN_PROGRESS → COMPLETED 후 production.completed (inventory 는 부품 사용 처리와
+     * 완성차 재고, order 는 차량 COMPLETED). IN_PROGRESS 가 아니면 WORK_ORDER_CLOSED. 공정 종료(WorkOrderService)와
+     * 같은 트랜잭션에서 부른다 (docs/specs/production-completion.md).
+     */
+    @Transactional
+    public void completeProduction(Long productionId, String vin) {
+        Production production = findProduction(productionId);
+        if (!production.complete(LocalDateTime.now())) {
+            log.info(
+                    "IN_PROGRESS 가 아니라 생산을 완료할 수 없음: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            throw new CustomException(ProductionErrorCode.WORK_ORDER_CLOSED);
+        }
+        flushOrConflict(productionId);
+        eventPublisher.publish(
+                new ProductionCompleted(
+                        production.getOrderId(),
+                        production.getId(),
+                        production.getProductId(),
+                        vin));
     }
 
     /**

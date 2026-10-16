@@ -83,6 +83,13 @@ public class WorkOrder extends BaseEntity {
         this.stepChangedAt = now;
     }
 
+    /** 마지막 공정(검사)이 양품으로 끝나 차가 완성됐다: VIN 을 붙이고 COMPLETED. */
+    public void complete(String vin, LocalDateTime now) {
+        this.status = WorkOrderStatus.COMPLETED;
+        this.vin = vin;
+        this.completedAt = now;
+    }
+
     /** 첫 공정을 처음 시작했다. RELEASED 에서만 바뀐다 (불량 재작업으로 다시 시작할 때는 그대로). 바뀌었으면 true. */
     public boolean start(LocalDateTime now) {
         if (status != WorkOrderStatus.RELEASED) {

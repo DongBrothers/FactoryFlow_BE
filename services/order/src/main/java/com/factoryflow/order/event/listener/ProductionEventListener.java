@@ -3,6 +3,7 @@ package com.factoryflow.order.event.listener;
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.order.config.EventQueueConfig;
+import com.factoryflow.order.event.listener.payload.ProductionCompleted;
 import com.factoryflow.order.event.listener.payload.ProductionStatusChanged;
 import com.factoryflow.order.service.OrderVehicleService;
 import lombok.RequiredArgsConstructor;
@@ -33,5 +34,20 @@ public class ProductionEventListener {
                                 event.productionId(),
                                 event.productId(),
                                 event.status()));
+    }
+
+    /** 생산 완료: 차량 COMPLETED + VIN, 품목·주문 요약. 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_COMPLETED_QUEUE)
+    public void onProductionCompleted(EventEnvelope envelope) {
+        ProductionCompleted event =
+                objectMapper.treeToValue(envelope.payload(), ProductionCompleted.class);
+        processedEventGuard.runOnce(
+                envelope,
+                () ->
+                        orderVehicleService.complete(
+                                event.orderId(),
+                                event.productionId(),
+                                event.productId(),
+                                event.vin()));
     }
 }
