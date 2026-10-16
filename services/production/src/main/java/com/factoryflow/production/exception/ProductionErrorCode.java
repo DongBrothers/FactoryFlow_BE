@@ -11,6 +11,7 @@ public enum ProductionErrorCode implements ErrorCode {
     PRODUCTION_NOT_FOUND(HttpStatus.NOT_FOUND, "생산 건을 찾을 수 없습니다."),
     INVALID_ORDER_QTY(HttpStatus.BAD_REQUEST, "주문 수량은 1 이상이어야 합니다."),
     WORK_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "작업지시를 찾을 수 없습니다."),
+    STEP_NOT_FOUND(HttpStatus.NOT_FOUND, "공정을 찾을 수 없습니다."),
     EQUIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "설비를 찾을 수 없습니다."),
     WORK_ORDER_CLOSED(HttpStatus.CONFLICT, "취소된 작업지시입니다."),
     STEP_OUT_OF_ORDER(HttpStatus.CONFLICT, "앞 공정이 끝나지 않았습니다."),

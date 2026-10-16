@@ -360,10 +360,11 @@ public class WorkOrderService {
                 status, lastId, Limit.of(limit));
     }
 
+    /** 설비가 맡은 공정. 없으면 데이터가 꼬인 것이라 원인이 보이게 STEP_NOT_FOUND. */
     private WorkOrderStep findStep(Long stepId) {
         return workOrderStepRepository
                 .findById(stepId)
-                .orElseThrow(() -> new CustomException(ProductionErrorCode.WORK_ORDER_NOT_FOUND));
+                .orElseThrow(() -> new CustomException(ProductionErrorCode.STEP_NOT_FOUND));
     }
 
     private List<WorkOrderStep> findSteps(Long workOrderId) {

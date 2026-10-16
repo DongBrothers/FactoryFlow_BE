@@ -1,10 +1,13 @@
 package com.factoryflow.production.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
+import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.production.domain.ProductionProcess;
+import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.scheduler.LineDispatcher;
 import com.factoryflow.production.service.ProductionService;
 import com.factoryflow.production.service.WorkOrderService;
@@ -198,11 +201,35 @@ class EquipmentStatusTest {
     @Test
     void sameEventTwiceIsAppliedOnce() {
         EventEnvelope event = statusChanged("BODY-01", "FAULT", Instant.now());
+        listener.onStatusChanged(event);
+        // 두 번째가 "상태가 같으면 그대로" 규칙에 걸리지 않게 설비를 되돌려 둔다. 그래도 반영되지 않아야 ProcessedEventGuard 가 거른 것이다
+        jdbc.update("UPDATE equipment SET status = 'RUNNING' WHERE code = 'BODY-01'");
 
         listener.onStatusChanged(event);
-        listener.onStatusChanged(event);
 
+        assertThat(equipmentStatus("BODY-01")).isEqualTo("RUNNING");
         assertThat(history()).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
+                .isEqualTo(1);
+    }
+
+    @Test
+    void equipmentHoldingAMissingStepIsStepNotFound() {
+        // 정상 흐름에선 생기지 않는 데이터 꼬임이다. 원인이 보이게 STEP_NOT_FOUND 로 실패하고 아무것도 바뀌지 않는다
+        jdbc.update("UPDATE equipment SET occupied_step_id = 999999 WHERE code = 'PRESS-01'");
+
+        assertThatThrownBy(
+                        () ->
+                                listener.onStatusChanged(
+                                        statusChanged("PRESS-01", "FAULT", Instant.now())))
+                .isInstanceOfSatisfying(
+                        CustomException.class,
+                        e ->
+                                assertThat(e.getErrorCode())
+                                        .isEqualTo(ProductionErrorCode.STEP_NOT_FOUND));
+
+        assertThat(equipmentStatus("PRESS-01")).isEqualTo("RUNNING");
+        assertThat(history()).isEmpty();
     }
 
     @Test

@@ -34,6 +34,7 @@ production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 
 | 고장과 작업자의 공정 종료·시작이 동시에 같은 설비·작업지시를 바꿈 | 설비·작업지시 version 으로 한쪽만 반영. 리스너 쪽이 지면 재시도로 최신 상태를 보고 다시 판단 |
 | 모르는 status 값, 깨진 JSON | 처리 오류 → 재시도 → DLQ |
 | 같은 이벤트 두 번 | ProcessedEventGuard 로 한 번만 |
+| 설비가 맡은 공정(occupied_step_id)이 없음 (데이터 꼬임) | 처리 오류 `STEP_NOT_FOUND` → 재시도 → DLQ. 아무것도 바뀌지 않는다 |
 | payload 의 process 가 설비의 공정과 다름 | 설비 코드로만 찾고 process 는 쓰지 않는다 (코드가 설비를 정한다) |
 
 ### 생산 실패(FAILED) 제거
@@ -62,5 +63,5 @@ production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 
 - [ ] 되돌린 로봇 공정이 다음 배정 때 같은 공정의 다른 RUNNING 설비로 배정된다
 - [ ] 고장 전에 보낸 늦은 시작·완료 보고는 무시된다
 - [ ] RUNNING 으로 돌아오면 상태·이력만 바뀐다
-- [ ] 같은 이벤트 두 번 → 한 번만 반영. 없는 설비 → DLQ. 실제 브로커 경유 수신
+- [ ] 같은 이벤트 두 번 → 한 번만 반영 (두 번째가 같은 상태 규칙이 아니라 ProcessedEventGuard 로 걸러지는지). 없는 설비 → DLQ. 맡은 공정이 없으면 STEP_NOT_FOUND. 실제 브로커 경유 수신
 - [ ] FAILED 가 production·order 코드에서 없어지고, 요약 규칙·매핑 테스트가 새 규칙과 맞다
