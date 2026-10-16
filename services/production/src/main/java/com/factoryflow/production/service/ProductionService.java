@@ -26,8 +26,8 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -236,9 +236,14 @@ public class ProductionService {
         if (productions.isEmpty()) {
             throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND);
         }
+        Map<Long, WorkOrder> workOrdersByProductionId =
+                findWorkOrdersOf(productions.stream().map(Production::getId).toList());
         for (Production production : productions) {
             if (production.isClosed() || production.cancel()) {
-                findWorkOrderOf(production.getId()).ifPresent(WorkOrder::cancel);
+                WorkOrder workOrder = workOrdersByProductionId.get(production.getId());
+                if (workOrder != null) {
+                    workOrder.cancel();
+                }
                 publishCancelled(production);
             } else {
                 eventPublisher.publish(
@@ -255,8 +260,10 @@ public class ProductionService {
         return productionRepository.findAllByOrderIdOrderByIdAsc(orderId);
     }
 
-    private Optional<WorkOrder> findWorkOrderOf(Long productionId) {
-        return workOrderRepository.findByProductionId(productionId);
+    /** 생산 건들의 작업지시를 한 번에 읽는다 (작업지시가 아직 없는 생산 건은 빠진다). */
+    private Map<Long, WorkOrder> findWorkOrdersOf(List<Long> productionIds) {
+        return workOrderRepository.findAllByProductionIdIn(productionIds).stream()
+                .collect(Collectors.toMap(WorkOrder::getProductionId, Function.identity()));
     }
 
     /**
