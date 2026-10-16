@@ -82,6 +82,21 @@ public class OrderVehicle extends BaseEntity {
         return true;
     }
 
+    /**
+     * 출고됐다: SHIPPED 로 바꾸고, VIN 이 비어 있으면 기록한다. 출고는 생산이 끝났다는 뜻이라 생산 완료를 아직 못 받은 차량과, 완성된 차라 거절될 취소 요청
+     * 중 차량도 바꾼다. 출고·취소된 차량은 그대로. 바뀌었으면 true.
+     */
+    public boolean ship(String vin) {
+        if (status == OrderStatus.SHIPPED || status == OrderStatus.CANCELLED) {
+            return false;
+        }
+        this.status = OrderStatus.SHIPPED;
+        if (this.vin == null) {
+            this.vin = vin;
+        }
+        return true;
+    }
+
     /** 취소를 요청한다. 이미 취소된 차량은 그대로. 바뀌었으면 true. */
     public boolean requestCancel() {
         if (status == OrderStatus.CANCELLED) {

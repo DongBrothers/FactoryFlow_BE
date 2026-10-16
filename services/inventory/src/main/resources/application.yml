@@ -27,3 +27,8 @@ management:
     web:
       exposure:
         include: health
+
+springdoc:
+  override-with-generic-response: false
+  # 내부 API(/internal/**)는 서비스끼리만 부르고 프론트가 보지 않으므로 api-docs 에서 뺀다
+  paths-to-exclude: /internal/**

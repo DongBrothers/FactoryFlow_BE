@@ -70,6 +70,34 @@ public class OrderVehicleService {
         refreshStatuses(item);
     }
 
+    /**
+     * shipment.completed: 차량을 SHIPPED 로 바꾸고, 바뀌었으면 같은 트랜잭션에서 품목·주문 상태를 다시 계산한다. 처음 보는 생산 건이면 품목에
+     * 차량을 만든다. 출고·취소된 차량은 그대로 둔다 (docs/specs/shipment.md).
+     */
+    @Transactional
+    public void ship(Long orderId, Long productionId, Long productId, String vin) {
+        OrderItem item = findItem(orderId, productId);
+        OrderVehicle vehicle = vehicleOf(item, productionId);
+        if (!vehicle.ship(vin)) {
+            logNotShipped(orderId, productionId, vehicle.getStatus());
+            return;
+        }
+        refreshStatuses(item);
+    }
+
+    /** 이미 출고된 차량은 같은 출고를 다시 받은 것이고, 취소된 차량은 정상 흐름에서 생기지 않는다. */
+    private static void logNotShipped(Long orderId, Long productionId, OrderStatus status) {
+        if (status == OrderStatus.CANCELLED) {
+            log.warn("취소된 차량에 출고가 옴: orderId={} productionId={}", orderId, productionId);
+            return;
+        }
+        log.info(
+                "차량을 출고로 바꾸지 않음: orderId={} productionId={} vehicle={}",
+                orderId,
+                productionId,
+                status);
+    }
+
     /** production.cancelled: 차량을 CANCELLED 로 바꾸고 요약한다. 답이 다 왔으면 취소 요청 회차를 끝낸다. */
     @Transactional
     public void applyCancelled(Long orderId, Long productionId) {
