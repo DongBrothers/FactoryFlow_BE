@@ -20,7 +20,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("4");
+        jdbc = migrateTo("5");
     }
 
     @Test
@@ -155,6 +155,58 @@ class MigrationTest extends MigrationTestSupport {
                                 "KMH000017TU000003"))
                 .containsEntry("shipped_at", null)
                 .containsEntry("version", 0L);
+    }
+
+    @Test
+    void v5PartLotIsOnePerLotNoAndPerPurchase() {
+        insertLot("LOT-261017-000501", 501L, 5, 5);
+
+        assertThatThrownBy(() -> insertLot("LOT-261017-000501", 502L, 5, 5))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_part_lot_lot_no");
+        assertThatThrownBy(() -> insertLot("LOT-261017-000502", 501L, 5, 5))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_part_lot_purchase");
+    }
+
+    @Test
+    void v5PartLotQtyStaysInRange() {
+        assertThatThrownBy(() -> insertLot("LOT-261017-000511", 511L, 0, 0))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_part_lot_received_qty");
+        assertThatThrownBy(() -> insertLot("LOT-261017-000512", 512L, 5, -1))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_part_lot_remaining_qty");
+        assertThatThrownBy(() -> insertLot("LOT-261017-000513", 513L, 5, 6))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_part_lot_remaining_qty");
+    }
+
+    @Test
+    void v5PartLotUsageQtyIsPositiveAndLotIsOptional() {
+        jdbc.update(
+                "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
+                        + " VALUES ('KMH000017TU000521', 521, 1, NULL, 1, NOW(6))");
+
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO part_lot_usage (vin, production_id, part_id,"
+                                                + " lot_id, qty, created_at) VALUES"
+                                                + " ('KMH000017TU000522', 522, 1, NULL, 0, NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_part_lot_usage_qty");
+    }
+
+    private void insertLot(String lotNo, long purchaseId, int receivedQty, int remainingQty) {
+        jdbc.update(
+                "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
+                        + " received_at, created_at, updated_at)"
+                        + " VALUES (1, ?, ?, ?, ?, NOW(6), NOW(6), NOW(6))",
+                lotNo,
+                purchaseId,
+                receivedQty,
+                remainingQty);
     }
 
     @Test

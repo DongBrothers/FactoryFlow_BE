@@ -4,6 +4,8 @@ import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.inventory.domain.FinishedVehicle;
 import com.factoryflow.inventory.domain.Part;
+import com.factoryflow.inventory.domain.PartLot;
+import com.factoryflow.inventory.domain.PartLotUsage;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
@@ -12,6 +14,8 @@ import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
 import com.factoryflow.inventory.event.publisher.payload.ShipmentCompleted;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.inventory.repository.FinishedVehicleRepository;
+import com.factoryflow.inventory.repository.PartLotRepository;
+import com.factoryflow.inventory.repository.PartLotUsageRepository;
 import com.factoryflow.inventory.repository.PartRepository;
 import com.factoryflow.inventory.repository.PartReservationRepository;
 import com.factoryflow.inventory.repository.StockHistoryRepository;
@@ -38,11 +42,13 @@ public class FinishedVehicleService {
     private final PartReservationRepository reservationRepository;
     private final PartRepository partRepository;
     private final StockHistoryRepository stockHistoryRepository;
+    private final PartLotRepository partLotRepository;
+    private final PartLotUsageRepository partLotUsageRepository;
     private final EventPublisher eventPublisher;
 
     /**
      * production.completed: 그 생산 건의 RESERVED 예약 줄을 모두 CONSUMED 로 바꾸고(reserved −qty, available 그대로,
-     * stock_history CONSUME) 완성차 재고를 한 대 넣는다. 이미 완성차가 있으면 건너뛰고, RESERVED 줄이 없으면
+     * stock_history CONSUME, 쓴 부품 LOT 기록) 완성차 재고를 한 대 넣는다. 이미 완성차가 있으면 건너뛰고, RESERVED 줄이 없으면
      * RESERVATION_NOT_FOUND (완성된 차는 부품이 모두 잡혀 있었다).
      */
     @Transactional
@@ -55,7 +61,7 @@ public class FinishedVehicleService {
         if (reservations.isEmpty()) {
             throw new CustomException(InventoryErrorCode.RESERVATION_NOT_FOUND);
         }
-        consume(event.productionId(), reservations);
+        consume(event.productionId(), event.vin(), reservations);
         finishedVehicleRepository.save(
                 FinishedVehicle.stock(
                         event.vin(), event.productionId(), event.orderId(), event.productId()));
@@ -99,17 +105,61 @@ public class FinishedVehicleService {
                         () -> new CustomException(InventoryErrorCode.FINISHED_VEHICLE_NOT_FOUND));
     }
 
-    /** 예약 줄마다 부품의 잡은 수량을 줄이고 사용 이력을 남긴다. 부품은 한 번에 읽는다 (동시 예약과 version 으로 부딪힌다). */
-    private void consume(Long productionId, List<PartReservation> reservations) {
-        Map<Long, Part> partsById =
-                findParts(reservations.stream().map(PartReservation::getPartId).toList());
+    /**
+     * 예약 줄마다 쓴 부품 LOT 을 기록하고, 부품의 잡은 수량을 줄이고 사용 이력을 남긴다. 부품과 LOT 은 한 번에 읽는다 (동시 예약·입고와 부품 version
+     * 으로 부딪힌다).
+     */
+    private void consume(Long productionId, String vin, List<PartReservation> reservations) {
+        List<Long> partIds = reservations.stream().map(PartReservation::getPartId).toList();
+        Map<Long, Part> partsById = findParts(partIds);
+        Map<Long, List<PartLot>> lotsByPartId = findOpenLots(partIds);
         for (PartReservation reservation : reservations) {
-            partsById.get(reservation.getPartId()).consume(reservation.getQty());
+            Part part = partsById.get(reservation.getPartId());
+            recordLots(
+                    vin,
+                    productionId,
+                    part,
+                    reservation.getQty(),
+                    lotsByPartId.getOrDefault(part.getId(), List.of()));
+            part.consume(reservation.getQty());
             reservation.consume();
             stockHistoryRepository.save(
                     StockHistory.consumeForProduction(
                             reservation.getPartId(), reservation.getQty(), productionId));
         }
+    }
+
+    /**
+     * 부품 qty 를 어느 LOT 에서 썼는지 남긴다 (docs/specs/part-lot.md "2. 생산 완료"). 가장 오래된 LOT 없는 재고(창고 실물 − LOT
+     * 남은 수량)에서 먼저 쓰고, 모자라면 LOT 을 입고 순서로 쓴다. 부품 수량을 줄이기 전에 불러야 실물이 맞다.
+     */
+    private void recordLots(String vin, Long productionId, Part part, int qty, List<PartLot> lots) {
+        int lotted = lots.stream().mapToInt(PartLot::getRemainingQty).sum();
+        int left = qty;
+        int withoutLot = Math.min(left, Math.max(0, part.onHand() - lotted));
+        if (withoutLot > 0) {
+            saveUsage(vin, productionId, part.getId(), null, withoutLot);
+            left -= withoutLot;
+        }
+        for (PartLot lot : lots) {
+            int taken = lot.take(left);
+            if (taken > 0) {
+                saveUsage(vin, productionId, part.getId(), lot.getId(), taken);
+                left -= taken;
+            }
+        }
+    }
+
+    private void saveUsage(String vin, Long productionId, Long partId, Long lotId, int qty) {
+        partLotUsageRepository.save(PartLotUsage.use(vin, productionId, partId, lotId, qty));
+    }
+
+    /** 그 부품들의 아직 쓰지 않은 LOT 을 부품별로, 입고 순서대로. */
+    private Map<Long, List<PartLot>> findOpenLots(List<Long> partIds) {
+        return partLotRepository
+                .findAllByPartIdInAndRemainingQtyGreaterThanOrderByIdAsc(partIds, 0)
+                .stream()
+                .collect(Collectors.groupingBy(PartLot::getPartId));
     }
 
     private boolean isStocked(Long productionId) {

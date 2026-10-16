@@ -49,6 +49,7 @@ class PurchaseEventListenerTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM stock_history");
         jdbc.update("DELETE FROM part_reservation");
         jdbc.update("DELETE FROM part");
