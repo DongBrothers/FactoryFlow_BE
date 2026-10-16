@@ -51,8 +51,8 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
    - purchase: shortage 수신 시 같은 부품의 AUTO + REQUESTED 구매 건이 있으면 그 qty 에 더하고, 없으면 새로 만든다
    - 생산 건의 모든 줄이 RESERVED → `inventory.reserved`, 하나라도 WAITING → `inventory.reservation-pending`
 4. production: reservation-pending → WAITING_MATERIAL + `production.status-changed`
-5. 입고: purchase RECEIVED → `purchase.received` → inventory available + (stock_history RECEIVE),
-   그 부품의 WAITING 줄을 id 순서(먼저 온 순서)로 RESERVED 처리. 어떤 생산 건의 모든 줄이 RESERVED 가 되면 `inventory.reserved`
+5. 입고: 구매 담당자가 발주(ORDERED) 후 입고 처리(RECEIVED) → `purchase.received` → inventory available + (stock_history RECEIVE),
+   그 부품의 WAITING 줄을 id 순서(먼저 온 순서)로 RESERVED 처리 (앞 줄이 안 들어가면 거기서 멈춤). 어떤 생산 건의 모든 줄이 RESERVED 가 되면 `inventory.reserved` (상세: docs/specs/purchase-receiving.md)
 6. production: **inventory.reserved 가 생산의 트리거**다. 생산 건을 READY 로 바꾸고, 작업지시 1건(RELEASED)과
    라우팅 순서대로 공정 5개(PENDING)를 만든다 + `production.status-changed`(READY)
 7. 공정을 순서대로 진행한다 (아래 "공정 진행", 혼합 자동화)
@@ -184,7 +184,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
 | inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
-| purchase.received | purchase | inventory | partId, qty |
+| purchase.received | purchase | inventory | purchaseId, partId, qty |
 | production.step-dispatched | production | simulator | workOrderId, process, equipmentCode |
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process |
 | equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result (GOOD, DEFECT), defectReason |
