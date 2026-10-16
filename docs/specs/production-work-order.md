@@ -40,7 +40,7 @@
 - IN_PROGRESS 공정만 종료한다. `production_result` 1줄 (result, defectReason, 작업자, 공정 시작·종료 시각)
 - GOOD → 공정 DONE (ended_at). 다음 공정을 시작할 수 있다
 - DEFECT → 실적만 남기고 공정은 PENDING 으로 돌아간다 (같은 공정 재작업). 이벤트는 없다
-- 검사(INSPECTION) GOOD 이면 공정 DONE 까지만 한다. VIN 발행과 작업지시·생산 건 COMPLETED, `production.completed` 는 #73 에서 이 시점에 붙인다
+- 검사(INSPECTION) GOOD 이면 공정 DONE 에 이어 VIN 발행, 작업지시·생산 건 COMPLETED, `production.completed` 까지 같은 트랜잭션에서 한다 (docs/specs/production-completion.md)
 
 ### 3. 로봇 공정 자동 진행 (배정 스케줄러 + 설비 보고)
 **배정** (production 스케줄러, `factoryflow.line.dispatch-interval` 기본 5초마다. `factoryflow.line.dispatch-enabled` 로 켜고 끈다. 배정을 받을 simulator 가 생길 때까지는 꺼 둔다)
@@ -109,7 +109,7 @@
 - [ ] GOOD 종료 → 공정 DONE, 실적 1줄(작업자 = X-User-Id), 다음 공정 시작 가능
 - [ ] DEFECT 종료 → 실적 1줄(사유), 공정 PENDING, 다시 시작·종료 가능. 이벤트 없음
 - [ ] DEFECT 인데 사유 없음, 잘못된 process / result 는 400
-- [ ] 5개 공정을 모두 GOOD 으로 끝내면 공정이 모두 DONE (완료 처리는 #73)
+- [ ] 5개 공정을 모두 GOOD 으로 끝내면 공정이 모두 DONE (완료 처리는 production-completion.md)
 - [ ] 작업지시 목록은 status 별 id 커서로 나뉘고 last, nextCursor 가 맞다. 상세는 공정과 실적을 보여 준다
 - [ ] 동시에 같은 생산 건을 바꾸면 하나만 반영되고 늦은 쪽은 409 PRODUCTION_CONFLICT
 - [ ] 없는 작업지시는 404
