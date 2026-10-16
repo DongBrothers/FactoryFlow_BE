@@ -34,10 +34,10 @@ springdoc:
   # 내부 API(/internal/**)는 서비스끼리만 부르고 프론트가 보지 않으므로 api-docs 에서 뺀다
   paths-to-exclude: /internal/**
 
-# 로봇 공정 배정 (docs/specs/production-work-order.md "3. 로봇 공정 자동 진행")
-# 배정을 받아 일할 가상 설비(simulator)가 생기기 전까지는 끈다. 켜 두면 배정된 공정을 받을 설비가 없어 차가 멈춘다.
-# 그동안은 작업자 API 로 모든 공정을 진행한다
+# 로봇 공정 배정 (docs/specs/production-work-order.md "3. 로봇 공정 자동 진행", docs/specs/simulator.md)
+# 가상 설비(simulator)가 배정을 받아 보고한다. 시작 보고가 start-report-timeout 안에 없으면 그 배정을 되돌려 다시 배정한다
 factoryflow:
   line:
-    dispatch-enabled: false
+    dispatch-enabled: true
     dispatch-interval: 5s
+    start-report-timeout: 1m

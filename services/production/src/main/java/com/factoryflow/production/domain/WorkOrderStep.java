@@ -47,6 +47,9 @@ public class WorkOrderStep extends BaseEntity {
     @Column(length = 30)
     private String equipmentCode;
 
+    /** 설비에 배정한 시각. 시작 보고 없이 오래 지나면 되돌린다. */
+    private LocalDateTime dispatchedAt;
+
     private LocalDateTime startedAt;
 
     private LocalDateTime endedAt;
@@ -87,9 +90,10 @@ public class WorkOrderStep extends BaseEntity {
     }
 
     /** 로봇 공정을 설비에 배정한다. 설비의 시작 보고를 기다린다. */
-    public void dispatch(String equipmentCode) {
+    public void dispatch(String equipmentCode, LocalDateTime now) {
         this.status = StepStatus.DISPATCHED;
         this.equipmentCode = equipmentCode;
+        this.dispatchedAt = now;
         this.startedAt = null;
         this.endedAt = null;
     }
@@ -98,6 +102,11 @@ public class WorkOrderStep extends BaseEntity {
     public void startByEquipment(LocalDateTime now) {
         this.status = StepStatus.IN_PROGRESS;
         this.startedAt = now;
+    }
+
+    /** 배정 뒤 시작 보고 없이 시간이 지났는가. */
+    public boolean isDispatchedBefore(LocalDateTime deadline) {
+        return isDispatched() && dispatchedAt != null && dispatchedAt.isBefore(deadline);
     }
 
     /** 설비가 고장·정지해 중단됐다: 시작 전(PENDING)으로 돌아가 다른 설비로 다시 진행한다. 실적은 남기지 않는다. */
