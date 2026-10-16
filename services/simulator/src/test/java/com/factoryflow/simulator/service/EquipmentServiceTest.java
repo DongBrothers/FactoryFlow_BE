@@ -111,10 +111,15 @@ class EquipmentServiceTest {
         support.send(support.dispatch(UUID.randomUUID(), "t", 16L, "PRESS", "PRESS-01"));
         support.send(support.dispatch(UUID.randomUUID(), "t", 17L, "PRESS", "PRESS-01"));
 
+        // 연달아 보낸 메시지도 다른 채널로 나가면 브로커 도착 순서가 바뀔 수 있다. 16·17 중 먼저 온 것 하나만 받고, 다른 하나는 작업 중이라 무시한다
         String started = support.next(5000);
         assertThat(field(started, "$.eventName")).isEqualTo("equipment.step-started");
-        assertThat(field(started, "$.payload.workOrderId")).isEqualTo("16");
-        assertThat(field(support.next(5000), "$.payload.workOrderId")).isEqualTo("16");
+        String taken = field(started, "$.payload.workOrderId");
+        assertThat(taken).isIn("16", "17");
+        String completed = support.next(5000);
+        assertThat(field(completed, "$.eventName")).isEqualTo("equipment.step-completed");
+        assertThat(field(completed, "$.payload.workOrderId")).isEqualTo(taken);
+        // 정지 설비(14), 없는 설비(15), 작업 중이던 때 온 다른 하나는 보고가 없다
         assertThat(support.next(1000)).isNull();
     }
 
