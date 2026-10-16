@@ -62,7 +62,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
    - 양품이면 그 공정 DONE, 다음 공정으로. 불량이면 실적만 남기고 같은 공정을 다시 한다 (로봇 공정은 다시 배정)
 8. 검사 종료(양품) → VIN 발행 → 작업지시·생산 건 COMPLETED → `production.completed`
 9. inventory: completed 수신 → 그 생산 건 줄 CONSUMED (reserved −, stock_history CONSUME), 완성차 재고 증가(VIN),
-   소모한 부품 LOT ↔ VIN 연결
+   소모한 부품 LOT ↔ VIN 연결 (먼저 들어온 LOT 부터, 상세: docs/specs/part-lot.md)
 10. order: status-changed / completed 수신 → 차량 상태 갱신 → 품목·주문 상태 요약 갱신 (같은 트랜잭션)
 11. 출고: inventory 가 완성차 한 대(VIN)를 출고하면 `shipment.completed` → order 가 차량을 SHIPPED 로 (상세: docs/specs/shipment.md)
 

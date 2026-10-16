@@ -3,6 +3,7 @@ package com.factoryflow.inventory.service;
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.inventory.domain.Part;
+import com.factoryflow.inventory.domain.PartLot;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
@@ -15,9 +16,11 @@ import com.factoryflow.inventory.event.publisher.payload.ReservationDeferred;
 import com.factoryflow.inventory.event.publisher.payload.ReservationShortage;
 import com.factoryflow.inventory.event.publisher.payload.ShortageDetected;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
+import com.factoryflow.inventory.repository.PartLotRepository;
 import com.factoryflow.inventory.repository.PartRepository;
 import com.factoryflow.inventory.repository.PartReservationRepository;
 import com.factoryflow.inventory.repository.StockHistoryRepository;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,7 @@ public class PartReservationService {
     private final PartRepository partRepository;
     private final PartReservationRepository reservationRepository;
     private final StockHistoryRepository stockHistoryRepository;
+    private final PartLotRepository partLotRepository;
     private final EventPublisher eventPublisher;
 
     /**
@@ -64,9 +68,9 @@ public class PartReservationService {
     }
 
     /**
-     * purchase.received: 재고를 늘리고(RECEIVE 이력) 그 부품을 기다리는 줄을 id 순서(먼저 기다린 순서)로 채운다. 앞 줄이 들어가지 않으면 거기서
-     * 멈춘다 (뒤의 작은 줄이 들어갈 수 있어도 새치기하지 않는다). 줄이 다 찬 생산 건은 inventory.reserved. 같은 구매 건의 입고는 한 번만 반영한다
-     * (docs/specs/purchase-receiving.md).
+     * purchase.received: 재고를 늘리고(RECEIVE 이력, LOT 한 줄) 그 부품을 기다리는 줄을 id 순서(먼저 기다린 순서)로 채운다. 앞 줄이
+     * 들어가지 않으면 거기서 멈춘다 (뒤의 작은 줄이 들어갈 수 있어도 새치기하지 않는다). 줄이 다 찬 생산 건은 inventory.reserved. 같은 구매 건의
+     * 입고는 한 번만 반영한다 (docs/specs/purchase-receiving.md).
      */
     @Transactional
     public void receive(PurchaseReceived event) {
@@ -78,6 +82,9 @@ public class PartReservationService {
         part.receive(event.qty());
         stockHistoryRepository.save(
                 StockHistory.receiveFromPurchase(part.getId(), event.qty(), event.purchaseId()));
+        partLotRepository.save(
+                PartLot.receive(
+                        part.getId(), event.purchaseId(), event.qty(), LocalDateTime.now()));
         announceReserved(fillWaitingLines(part));
     }
 

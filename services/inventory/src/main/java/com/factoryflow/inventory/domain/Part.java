@@ -42,6 +42,11 @@ public class Part extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    /** 창고 실물 수량 (바로 쓸 수 있는 수량 + 생산에 잡혀 있는 수량). */
+    public int onHand() {
+        return available + reserved;
+    }
+
     /** 바로 쓸 수 있는 수량에서 qty 만큼 생산용으로 잡는다. */
     public void reserve(int qty) {
         this.available -= qty;
