@@ -126,6 +126,22 @@ class PartLotAllocationTest {
     }
 
     @Test
+    void initialLotMadeAfterAPurchaseLotIsStillTakenFirst() {
+        // V6 처럼 기존 LOT(id 작음) 뒤에 초기 재고 LOT(id 큼)이 생겨도, 입고 시각이 앞이라 먼저 쓴다
+        jdbc.update("DELETE FROM part_lot WHERE id = ?", engineInit);
+        long purchased = insertLot(engine, "LOT-261003-000003", 3L, 5);
+        long initial = insertLot(engine, "LOT-INIT-" + engine, null, 5);
+        jdbc.update(
+                "UPDATE part_lot SET received_at = NOW(6) - INTERVAL 1 DAY WHERE id = ?", initial);
+
+        productionListener.onProductionCompleted(completed(100L, VIN_1));
+
+        assertThat(usages(VIN_1)).contains(tuple(engine, initial, 1));
+        assertThat(remaining(initial)).isEqualTo(4);
+        assertThat(remaining(purchased)).isEqualTo(5);
+    }
+
+    @Test
     void lotsShortOfReservedStockFailWithoutRecordingUsage() {
         // 실물과 LOT 이 어긋난 데이터: 타이어 LOT 남은 수량 합이 잡아 둔 4 보다 적다
         jdbc.update("UPDATE part_lot SET remaining_qty = 0 WHERE part_id = ?", tire);

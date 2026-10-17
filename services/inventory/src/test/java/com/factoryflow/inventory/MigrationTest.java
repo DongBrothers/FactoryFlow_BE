@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.factoryflow.test.db.MigrationTestSupport;
 import java.sql.Connection;
+import java.sql.Timestamp;
 import java.util.Map;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -299,6 +300,18 @@ class MigrationTest extends MigrationTestSupport {
                                         + " ON l.id = u.lot_id ORDER BY u.id",
                                 String.class))
                 .containsExactly("LOT-INIT-1", "LOT-261001-000001", "LOT-INIT-3");
+        // 초기 재고 LOT 은 id 가 커도 입고 시각이 그 부품의 기존 LOT 보다 앞이라 가장 먼저 쓰인다
+        assertThat(
+                        db.queryForList(
+                                "SELECT lot_no FROM part_lot WHERE part_id = 1"
+                                        + " ORDER BY received_at, id",
+                                String.class))
+                .containsExactly("LOT-INIT-1", "LOT-261001-000001");
+        assertThat(
+                        db.queryForObject(
+                                "SELECT received_at FROM part_lot WHERE lot_no = 'LOT-INIT-3'",
+                                Timestamp.class))
+                .isNotNull();
         assertThat(
                         db.queryForObject(
                                 "SELECT COUNT(*) FROM part_lot WHERE lot_no LIKE 'LOT-INIT-%'"

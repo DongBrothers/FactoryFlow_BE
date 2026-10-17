@@ -187,7 +187,7 @@ public class FinishedVehicleService {
     /** 그 부품들의 아직 쓰지 않은 LOT 을 부품별로, 입고 순서대로. */
     private Map<Long, List<PartLot>> findOpenLots(List<Long> partIds) {
         return partLotRepository
-                .findAllByPartIdInAndRemainingQtyGreaterThanOrderByIdAsc(partIds, 0)
+                .findAllByPartIdInAndRemainingQtyGreaterThanOrderByReceivedAtAscIdAsc(partIds, 0)
                 .stream()
                 .collect(Collectors.groupingBy(PartLot::getPartId));
     }

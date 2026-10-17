@@ -46,6 +46,7 @@ public class PartLotService {
         return usages.stream()
                 .sorted(
                         Comparator.comparing((PartLotUsage u) -> parts.get(u.getPartId()).getCode())
+                                .thenComparing(u -> lots.get(u.getLotId()).getReceivedAt())
                                 .thenComparing(PartLotUsage::getLotId))
                 .map(
                         u ->
@@ -86,8 +87,9 @@ public class PartLotService {
     }
 
     private List<PartLot> findOpenLots(Long partId) {
-        return partLotRepository.findAllByPartIdInAndRemainingQtyGreaterThanOrderByIdAsc(
-                List.of(partId), 0);
+        return partLotRepository
+                .findAllByPartIdInAndRemainingQtyGreaterThanOrderByReceivedAtAscIdAsc(
+                        List.of(partId), 0);
     }
 
     private boolean isStocked(String vin) {

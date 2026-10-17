@@ -108,6 +108,19 @@ class PartLotTest {
     }
 
     @Test
+    void partLotsOfAVehicleFollowReceiptTimeNotId() throws Exception {
+        // 초기 재고 LOT 의 입고 시각을 LOT1 뒤로 옮기면 VIN_1 의 타이어는 LOT1 이 먼저 보인다
+        jdbc.update(
+                "UPDATE part_lot SET received_at = NOW(6) + INTERVAL 1 DAY WHERE lot_no = ?",
+                tireInitNo);
+
+        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN_1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].lotNo").value(LOT_1))
+                .andExpect(jsonPath("$.data[2].lotNo").value(tireInitNo));
+    }
+
+    @Test
     void vehiclesOfAnInitialStockLot() throws Exception {
         mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", tireInitNo))
                 .andExpect(status().isOk())

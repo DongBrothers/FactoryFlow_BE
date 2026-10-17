@@ -20,7 +20,7 @@ VIN 으로 그 차에 쓰인 부품 LOT 을, LOT 으로 그 LOT 이 들어간 �
 
 ### 2. 생산 완료 → 소모 LOT 기록 (inventory ← production.completed, 지금 처리에 더함)
 예약 줄을 CONSUMED 로 바꾸는 지금 처리(docs/specs/production-completion.md)와 같은 트랜잭션에서, 예약 줄(부품, qty)마다
-1. remainingQty > 0 인 LOT 을 입고 순서(id)로 빼 나간다 (초기 재고 LOT 이 가장 먼저). LOT 마다 remainingQty −, `part_lot_usage { vin, productionId, partId, lotId, qty }` 한 줄 (한 부품이 LOT 두 개에 걸칠 수 있다)
+1. remainingQty > 0 인 LOT 을 입고 순서(입고 시각, 같으면 id)로 빼 나간다 (초기 재고 LOT 이 가장 먼저). LOT 마다 remainingQty −, `part_lot_usage { vin, productionId, partId, lotId, qty }` 한 줄 (한 부품이 LOT 두 개에 걸칠 수 있다)
 2. LOT 이 모자라면 실물과 LOT 이 어긋난 데이터다. `PART_LOT_SHORTAGE` 로 실패시켜 트랜잭션을 되돌린다 (재시도 후 DLQ, ERROR 로그)
 3. 끝나면 그 부품의 LOT remainingQty 합 = available + reserved (소모 후) 가 유지된다
 
@@ -60,7 +60,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 |---|---|
 | inventory (V5) | `part_lot`: id, part_id, lot_no (VARCHAR(32), UNIQUE. 구매 건 id 가 Long 최대 19자리여도 들어감), purchase_id (UNIQUE), received_qty (> 0), remaining_qty (≥ 0, ≤ received_qty), received_at, created_at, updated_at, is_deleted. 인덱스 (part_id, id) |
 | inventory (V5) | `part_lot_usage`: id, vin, production_id, part_id, lot_id, qty (> 0), created_at. 인덱스 (vin) |
-| inventory (V6, #116) | `part_lot.purchase_id` NULL 허용 (초기 재고 LOT). 부품마다 `LOT-INIT-{부품 id}` 를 만든다: 남은 수량 = 실물 − 다른 LOT 남은 수량, 받은 수량 = 남은 수량 + LOT 없이 이미 쓴 수량 (둘 다 0 이면 만들지 않음). LOT 없던 사용 기록은 그 LOT 으로 옮기고 `part_lot_usage.lot_id` NOT NULL |
+| inventory (V6, #116) | `part_lot.purchase_id` NULL 허용 (초기 재고 LOT). 인덱스 (part_id, received_at, id). 초기 재고 LOT 의 입고 시각은 그 부품의 가장 이른 LOT 보다 1초 앞(LOT 이 없으면 지금)이라 id 가 커도 가장 먼저 쓴다. 부품마다 `LOT-INIT-{부품 id}` 를 만든다: 남은 수량 = 실물 − 다른 LOT 남은 수량, 받은 수량 = 남은 수량 + LOT 없이 이미 쓴 수량 (둘 다 0 이면 만들지 않음). LOT 없던 사용 기록은 그 LOT 으로 옮기고 `part_lot_usage.lot_id` NOT NULL |
 | dev 시드 | LOT 이 하나도 없는 시드 부품에 지금 재고만큼 `LOT-INIT-{부품 id}` (다시 돌려도 한 번) |
 
 ## 관련 이벤트 (events.md 참조)
