@@ -6,7 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface PartReservationRepository extends JpaRepository<PartReservation, Long> {
+public interface PartReservationRepository
+        extends JpaRepository<PartReservation, Long>, PartReservationRepositoryCustom {
 
     boolean existsByProductionId(Long productionId);
 

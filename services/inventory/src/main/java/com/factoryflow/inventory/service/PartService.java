@@ -1,19 +1,29 @@
 package com.factoryflow.inventory.service;
 
 import com.factoryflow.inventory.domain.Part;
+import com.factoryflow.inventory.dto.response.InternalPartResponse;
+import com.factoryflow.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.inventory.dto.response.PartStockResponse;
 import com.factoryflow.inventory.repository.PartRepository;
+import com.factoryflow.inventory.repository.PartReservationRepository;
+import com.factoryflow.inventory.repository.WaitingTotal;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 부품 재고 조회 (docs/specs/list-apis.md "3. 부품 재고 목록"). */
+/** 부품 재고 조회 (docs/specs/list-apis.md "3. 부품 재고 목록", docs/specs/purchase-manual.md). */
 @Service
 @RequiredArgsConstructor
 public class PartService {
 
     private final PartRepository partRepository;
+    private final PartReservationRepository reservationRepository;
 
     /** 삭제되지 않은 부품의 재고, 부품 코드 순. */
     @Transactional(readOnly = true)
@@ -21,7 +31,45 @@ public class PartService {
         return activeParts().stream().map(PartStockResponse::from).toList();
     }
 
+    /**
+     * 부족한 부품: 기다리는(WAITING) 수량 합이 바로 쓸 수 있는 수량보다 많은 부품. 부족 수량 큰 순, 같으면 코드 순. 구매 담당이 보고 직접 구매한다
+     * (docs/specs/purchase-manual.md "1. 부족 부품 조회").
+     */
+    @Transactional(readOnly = true)
+    public List<PartShortageResponse> findShortages() {
+        Map<Long, WaitingTotal> waitingByPartId =
+                sumWaitingByPart().stream()
+                        .collect(Collectors.toMap(WaitingTotal::partId, Function.identity()));
+        return findActiveParts(waitingByPartId.keySet()).stream()
+                .map(part -> shortageOf(part, waitingByPartId.get(part.getId())))
+                .filter(shortage -> shortage.shortQty() > 0)
+                .sorted(
+                        Comparator.comparingInt(PartShortageResponse::shortQty)
+                                .reversed()
+                                .thenComparing(PartShortageResponse::code))
+                .toList();
+    }
+
+    /** 내부 API: 있는 부품만 (삭제된 부품은 빠진다). purchase 가 구매 건의 부품을 확인하고 스냅샷을 남긴다. */
+    @Transactional(readOnly = true)
+    public List<InternalPartResponse> findPartsByIds(List<Long> ids) {
+        return findActiveParts(ids).stream().map(InternalPartResponse::from).toList();
+    }
+
+    private static PartShortageResponse shortageOf(Part part, WaitingTotal waiting) {
+        return PartShortageResponse.of(
+                part, waiting.waitingQty().intValue(), waiting.waitingProductions().intValue());
+    }
+
     private List<Part> activeParts() {
         return partRepository.findAllByIsDeletedFalseOrderByCodeAsc();
+    }
+
+    private List<Part> findActiveParts(Collection<Long> ids) {
+        return partRepository.findAllByIdInAndIsDeletedFalseOrderByCodeAsc(ids);
+    }
+
+    private List<WaitingTotal> sumWaitingByPart() {
+        return reservationRepository.sumWaitingByPart();
     }
 }

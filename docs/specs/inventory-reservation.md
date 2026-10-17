@@ -3,7 +3,7 @@
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 3번이다.
 inventory 가 `production.material-requested` 를 받아 생산 건에 필요한 부품을 예약하고, 결과를 production 에 알린다.
-재고가 모자라면 기다리는 줄(WAITING)을 만들고, 새로 늘어난 부족분만 purchase 에 `inventory.shortage` 로 알린다.
+재고가 모자라면 기다리는 줄(WAITING)을 만든다. (처음에는 새로 늘어난 부족분을 `inventory.shortage` 로 알렸지만 #114 에서 없앴다. 구매 담당이 부족 부품 조회로 본다, docs/specs/purchase-manual.md)
 
 ## 흐름
 1. production 이 `production.material-requested` 를 발행한다: `{ productionId, parts: [{ partId, qty }] }`
@@ -12,7 +12,7 @@ inventory 가 `production.material-requested` 를 받아 생산 건에 필요한
 4. 부품마다 예약 줄(`part_reservation`)을 만든다. 부품은 partId 순서로 처리한다
    - 같은 부품에 WAITING 줄이 없고 `available >= qty` 이면 **RESERVED**: available −qty, reserved +qty, stock_history RESERVE
    - 그 외에는 **WAITING**: 재고는 그대로. 앞에 기다리는 줄이 있으면 재고가 있어도 뒤에 선다 (먼저 온 순서 보장)
-5. WAITING 줄을 만들면서 부족이 늘었으면 부품마다 `inventory.shortage` 를 발행한다
+5. (#114 에서 없앰) ~~WAITING 줄을 만들면서 부족이 늘었으면 부품마다 `inventory.shortage` 를 발행한다~~
    - 이전 부족 = max(0, 그 부품의 WAITING qty 합 − available), 이후 부족 = max(0, WAITING qty 합 + 이번 qty − available)
    - shortQty = 이후 − 이전. 0 이면 보내지 않는다 (예: available 3, 대기 2, 새 요청 2 → shortQty 1)
    - payload: `{ partId, partCode, partName, shortQty }`
@@ -44,7 +44,7 @@ inventory 가 `production.material-requested` 를 받아 생산 건에 필요한
 | production.material-requested | production → inventory | productionId, parts[{partId, qty}] |
 | inventory.reserved | inventory → production | productionId |
 | inventory.reservation-pending | inventory → production | productionId, shortages[{partId, shortQty}] |
-| inventory.shortage | inventory → purchase | partId, partCode, partName, shortQty |
+| ~~inventory.shortage~~ | (#114 에서 없앰) | |
 
 SAGA 흐름 중 이 작업은 inventory 의 예약만 다룬다. production 의 reserved / reservation-pending 수신(SAGA 4번)과 purchase 의 shortage 수신은 각각 다음 작업이다.
 

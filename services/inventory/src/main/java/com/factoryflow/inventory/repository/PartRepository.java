@@ -19,5 +19,8 @@ public interface PartRepository extends JpaRepository<Part, Long> {
 
     List<Part> findAllByIsDeletedFalseOrderByCodeAsc();
 
+    /** 조회용 (version 을 올리지 않는다). 삭제된 부품은 빠진다. */
+    List<Part> findAllByIdInAndIsDeletedFalseOrderByCodeAsc(Collection<Long> ids);
+
     Optional<Part> findByIdAndIsDeletedFalse(Long id);
 }

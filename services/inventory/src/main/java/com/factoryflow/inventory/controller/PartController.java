@@ -2,6 +2,7 @@ package com.factoryflow.inventory.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.inventory.dto.response.PartLotStockResponse;
+import com.factoryflow.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.inventory.dto.response.PartStockResponse;
 import com.factoryflow.inventory.service.PartLotService;
 import com.factoryflow.inventory.service.PartService;
@@ -17,7 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "부품 재고", description = "부품 재고와 LOT 별 재고")
+@Tag(name = "부품 재고", description = "부품 재고, 부족 부품, LOT 별 재고")
 @RestController
 @RequestMapping("/inventory/parts")
 @RequiredArgsConstructor
@@ -38,6 +39,21 @@ public class PartController {
     public ApiResponse<List<PartStockResponse>> findParts() {
         List<PartStockResponse> parts = partService.findParts();
         return ApiResponse.ok(parts);
+    }
+
+    @Operation(
+            summary = "부족 부품",
+            description =
+                    "기다리는 예약 수량이 바로 쓸 수 있는 수량보다 많은 부품을 부족 수량 큰 순으로 본다. 구매 담당이 보고 구매 건을 만든다. 이미 발주한 수량은 빼지 않으므로 발주 중인 구매 목록과 함께 본다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공. 부족한 부품이 없으면 빈 목록")
+    })
+    @GetMapping("/shortages")
+    public ApiResponse<List<PartShortageResponse>> findShortages() {
+        List<PartShortageResponse> shortages = partService.findShortages();
+        return ApiResponse.ok(shortages);
     }
 
     @Operation(

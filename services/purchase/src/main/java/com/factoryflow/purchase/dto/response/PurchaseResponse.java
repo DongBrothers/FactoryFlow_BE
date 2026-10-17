@@ -10,13 +10,16 @@ import java.time.LocalDateTime;
 public record PurchaseResponse(
         @Schema(description = "구매 번호", example = "31") Long purchaseId,
         @Schema(description = "부품 번호", example = "1012") Long partId,
-        @Schema(description = "부품 코드 (요청 당시)", example = "TIRE-18") String partCode,
-        @Schema(description = "부품 이름 (요청 당시)", example = "타이어 18인치") String partName,
+        @Schema(description = "부품 코드 (발주 당시)", example = "TIRE-18") String partCode,
+        @Schema(description = "부품 이름 (발주 당시)", example = "타이어 18인치") String partName,
         @Schema(description = "수량", example = "6") int qty,
-        @Schema(description = "상태 (REQUESTED, ORDERED, RECEIVED)", example = "REQUESTED")
+        @Schema(description = "상태 (ORDERED, RECEIVED, CANCELLED)", example = "ORDERED")
                 PurchaseStatus status,
-        @Schema(description = "생긴 곳 (AUTO: 재고 부족 자동 요청)", example = "AUTO") PurchaseSource source,
-        @Schema(description = "발주한 공급업체 번호 (발주 전에는 없음)", example = "1") Long supplierId,
+        @Schema(description = "생긴 곳 (MANUAL: 구매 담당 발주, AUTO: 없앤 자동 요청)", example = "MANUAL")
+                PurchaseSource source,
+        @Schema(description = "발주한 공급업체 번호", example = "2") Long supplierId,
+        @Schema(description = "발주한 직원 번호 (public_id). 자동 요청 시절 건은 없음", example = "6c1e2f3a-…")
+                String orderedBy,
         @Schema(description = "발주 시각", example = "2026-10-16T09:00:00") LocalDateTime orderedAt,
         @Schema(description = "입고 시각", example = "2026-10-17T14:00:00") LocalDateTime receivedAt) {
 
@@ -30,6 +33,7 @@ public record PurchaseResponse(
                 purchase.getStatus(),
                 purchase.getSource(),
                 purchase.getSupplierId(),
+                purchase.getOrderedBy(),
                 purchase.getOrderedAt(),
                 purchase.getReceivedAt());
     }

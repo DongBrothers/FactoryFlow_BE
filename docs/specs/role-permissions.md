@@ -19,7 +19,7 @@
 | `POST /api/orders/{orderNo}/cancel` | 주문 취소 요청 | SALES |
 | `POST /api/production/work-orders/{id}/steps/{process}/start` | 공정 시작 | WORKER, PRODUCTION |
 | `POST /api/production/work-orders/{id}/steps/{process}/complete` | 공정 종료·실적 | WORKER, PRODUCTION |
-| `POST /api/purchases/{id}/order` | 발주 | PURCHASE |
+| `POST /api/purchases` | 구매 건 만들기 = 발주 (#114) | PURCHASE |
 | `POST /api/purchases/{id}/receive` | 입고 | PURCHASE |
 | `POST /api/inventory/finished-vehicles/{vin}/ship` | 완성차 출고 | PRODUCTION |
 | `/api/auth/admin/**` | 계정 발급 (지금 규칙) | ADMIN |

@@ -15,7 +15,6 @@ import com.factoryflow.inventory.event.publisher.payload.InventoryReserved;
 import com.factoryflow.inventory.event.publisher.payload.ReservationDeferred;
 import com.factoryflow.inventory.event.publisher.payload.ReservationFailed;
 import com.factoryflow.inventory.event.publisher.payload.ReservationShortage;
-import com.factoryflow.inventory.event.publisher.payload.ShortageDetected;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.inventory.repository.PartLotRepository;
 import com.factoryflow.inventory.repository.PartRepository;
@@ -48,9 +47,10 @@ public class PartReservationService {
 
     /**
      * 생산 건에 필요한 부품을 partId 순서로 예약한다 (docs/specs/inventory-reservation.md). 같은 부품에 기다리는 줄이 없고 재고가
-     * 충분하면 RESERVED, 아니면 WAITING 으로 뒤에 선다. 부족이 늘어난 부품은 inventory.shortage, 생산 건 결과는
-     * inventory.reserved 또는 inventory.reservation-pending 으로 알린다. 이미 예약 줄이 있는 생산 건은 건너뛴다. 없거나 삭제된
-     * 부품이 있으면 아무것도 잡지 않고 inventory.reservation-failed (docs/specs/stalled-flows.md S18).
+     * 충분하면 RESERVED, 아니면 WAITING 으로 뒤에 선다. 생산 건 결과는 inventory.reserved 또는
+     * inventory.reservation-pending 으로 알린다. 부족한 부품은 구매 담당이 부족 부품 조회로 보고 직접 구매한다
+     * (docs/specs/purchase-manual.md). 이미 예약 줄이 있는 생산 건은 건너뛴다. 없거나 삭제된 부품이 있으면 아무것도 잡지 않고
+     * inventory.reservation-failed (docs/specs/stalled-flows.md S18).
      */
     @Transactional
     public void reserve(Long productionId, List<MaterialRequestedPart> parts) {
@@ -224,10 +224,7 @@ public class PartReservationService {
                                 PartReservation::getPartId, PartReservation::getQty, Integer::sum));
     }
 
-    /**
-     * 기다리는 줄이 없고 재고가 충분하면 RESERVED 로 재고를 잡고 empty 를 돌려준다. 아니면 WAITING 줄을 만들고, 부족이 늘었으면
-     * inventory.shortage 를 발행한 뒤 그 줄을 돌려준다.
-     */
+    /** 기다리는 줄이 없고 재고가 충분하면 RESERVED 로 재고를 잡고 empty 를 돌려준다. 아니면 WAITING 줄을 만들고 그 줄을 돌려준다. */
     private Optional<ReservationShortage> reserveOne(
             Long productionId, Part part, int qty, Map<Long, Integer> waitingQtyByPartId) {
         int waiting = waitingQtyByPartId.getOrDefault(part.getId(), 0);
@@ -239,11 +236,6 @@ public class PartReservationService {
             return Optional.empty();
         }
         reservationRepository.save(PartReservation.waiting(productionId, part.getId(), qty));
-        int shortQty = shortQty(part.getAvailable(), waiting, qty);
-        if (shortQty > 0) {
-            eventPublisher.publish(
-                    new ShortageDetected(part.getId(), part.getCode(), part.getName(), shortQty));
-        }
         return Optional.of(new ReservationShortage(part.getId(), qty));
     }
 
@@ -253,12 +245,5 @@ public class PartReservationService {
         } else {
             eventPublisher.publish(new ReservationDeferred(productionId, shortages));
         }
-    }
-
-    /** 대기 수량까지 포함해 이번 요청으로 새로 늘어난 부족분. 같은 부족을 두 번 구매하지 않기 위해서다. */
-    private static int shortQty(int available, int waiting, int qty) {
-        int before = Math.max(0, waiting - available);
-        int after = Math.max(0, waiting + qty - available);
-        return after - before;
     }
 }

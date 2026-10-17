@@ -5,6 +5,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
+import com.factoryflow.inventory.service.PartService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +38,7 @@ class ProductionEventListenerTest {
     static final String DLQ = "inventory.production-material-requested.dlq";
 
     @Autowired ProductionEventListener listener;
+    @Autowired PartService partService;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
     @Autowired RabbitTemplate rabbitTemplate;
@@ -89,7 +91,7 @@ class ProductionEventListenerTest {
     }
 
     @Test
-    void shortPartWaitsAndPublishesPendingAndShortage() {
+    void shortPartWaitsAndPublishesPendingWithoutAShortageEvent() {
         listener.onMaterialRequested(
                 materialRequested(100L, List.of(line(engine, 4), line(tire, 5))));
 
@@ -108,11 +110,17 @@ class ProductionEventListenerTest {
         assertThat(JsonPath.<List<Integer>>read(pending, "$.payload.shortages[*].shortQty"))
                 .containsExactly(5);
 
-        String shortage = outbox("inventory.shortage").get(0);
-        assertThat(number(shortage, "$.payload.partId")).isEqualTo(tire);
-        assertThat(JsonPath.<String>read(shortage, "$.payload.partCode")).isEqualTo("TIRE-T");
-        assertThat(JsonPath.<String>read(shortage, "$.payload.partName")).isEqualTo("테스트 타이어");
-        assertThat(number(shortage, "$.payload.shortQty")).isEqualTo(2L);
+        // 자동 구매는 없다. 구매 담당이 부족 부품 조회로 본다 (docs/specs/purchase-manual.md)
+        assertThat(outbox("inventory.shortage")).isEmpty();
+        assertThat(partService.findShortages())
+                .singleElement()
+                .satisfies(
+                        s -> {
+                            assertThat(s.partId()).isEqualTo(tire);
+                            assertThat(s.code()).isEqualTo("TIRE-T");
+                            assertThat(s.name()).isEqualTo("테스트 타이어");
+                            assertThat(s.shortQty()).isEqualTo(2);
+                        });
         assertReservedMatchesReservedLines();
     }
 
@@ -124,29 +132,39 @@ class ProductionEventListenerTest {
 
         assertThat(statusOf(100L, engine)).isEqualTo("WAITING");
         assertThat(stock(engine)).containsEntry("available", 10).containsEntry("reserved", 0);
-        // 이전 부족 max(0, 20 - 10) = 10, 이후 부족 max(0, 21 - 10) = 11 → 1
-        assertThat(number(outbox("inventory.shortage").get(0), "$.payload.shortQty")).isEqualTo(1L);
+        // 기다리는 수량 20 + 1 = 21, 재고 10 → 부족 11
+        assertThat(partService.findShortages())
+                .singleElement()
+                .satisfies(
+                        s -> {
+                            assertThat(s.waitingQty()).isEqualTo(21);
+                            assertThat(s.shortQty()).isEqualTo(11);
+                            assertThat(s.waitingProductions()).isEqualTo(2);
+                        });
     }
 
     @Test
-    void shortQtyCountsOnlyTheIncrease() {
-        // 명세 예: available 3, 대기 2, 새 요청 2 → 이전 0, 이후 1 → shortQty 1
+    void shortQtyIsWhatTheWaitingLinesStillNeed() {
+        // available 3, 대기 2, 새 요청 2 → 기다리는 수량 4 − 재고 3 = 부족 1
         insertReservation(50L, tire, 2, "WAITING");
 
         listener.onMaterialRequested(materialRequested(100L, List.of(line(tire, 2))));
 
-        assertThat(number(outbox("inventory.shortage").get(0), "$.payload.shortQty")).isEqualTo(1L);
+        assertThat(partService.findShortages())
+                .singleElement()
+                .satisfies(s -> assertThat(s.shortQty()).isEqualTo(1));
     }
 
     @Test
-    void noShortageWhenStockCoversWaitingAndNewRequest() {
+    void partIsNotShortWhenStockCoversTheWaitingLines() {
         insertReservation(50L, engine, 2, "WAITING");
 
         listener.onMaterialRequested(materialRequested(100L, List.of(line(engine, 3))));
 
         assertThat(statusOf(100L, engine)).isEqualTo("WAITING");
         assertThat(outbox("inventory.reservation-pending")).hasSize(1);
-        assertThat(outbox("inventory.shortage")).isEmpty();
+        // 기다리는 수량 5 ≤ 재고 10 이라 부족 부품이 아니다
+        assertThat(partService.findShortages()).isEmpty();
     }
 
     @Test
@@ -208,7 +226,8 @@ class ProductionEventListenerTest {
                 jdbc.queryForList("SELECT payload FROM outbox", String.class).stream()
                         .map(p -> JsonPath.<String>read(p, "$.traceId"))
                         .toList();
-        assertThat(traceIds).hasSize(2).containsOnly(event.traceId());
+        // 나가는 이벤트는 예약 결과(reservation-pending) 하나다 (부족 알림 inventory.shortage 는 없앰)
+        assertThat(traceIds).hasSize(1).containsOnly(event.traceId());
     }
 
     @Test

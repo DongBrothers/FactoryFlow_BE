@@ -3,19 +3,17 @@ package com.factoryflow.purchase.service;
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.common.web.response.CursorPage;
+import com.factoryflow.purchase.client.inventory.PartClient;
+import com.factoryflow.purchase.client.inventory.dto.response.PartResponse;
 import com.factoryflow.purchase.domain.Purchase;
-import com.factoryflow.purchase.domain.PurchaseSource;
 import com.factoryflow.purchase.domain.PurchaseStatus;
-import com.factoryflow.purchase.domain.Supplier;
+import com.factoryflow.purchase.dto.request.CreatePurchaseRequest;
 import com.factoryflow.purchase.dto.response.PurchaseResponse;
-import com.factoryflow.purchase.event.listener.payload.ShortageDetected;
 import com.factoryflow.purchase.event.publisher.payload.PurchaseReceived;
 import com.factoryflow.purchase.exception.PurchaseErrorCode;
 import com.factoryflow.purchase.repository.PurchaseRepository;
-import com.factoryflow.purchase.repository.SupplierRepository;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -23,30 +21,32 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 구매 건: 부족 자동 요청, 발주, 입고 (docs/specs/purchase-receiving.md). */
+/** 구매 건: 구매 담당의 발주, 입고 (docs/specs/purchase-manual.md, docs/specs/purchase-receiving.md). */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PurchaseService {
 
     private final PurchaseRepository purchaseRepository;
-    private final SupplierRepository supplierRepository;
+    private final PurchaseWriter purchaseWriter;
+    private final PartClient partClient;
     private final EventPublisher eventPublisher;
 
     /**
-     * inventory.shortage: 같은 부품의 AUTO + REQUESTED 구매 건이 있으면 수량을 더하고, 없으면 새로 만든다. 이미 발주한 건은 공급업체에 보낸
-     * 수량이 바뀌면 안 되므로 건드리지 않는다. 같은 구매 건을 발주와 동시에 바꾸면 version 충돌로 실패하고 재시도 때 새 건을 만든다.
+     * 구매 담당의 구매 건 만들기 = 발주 (docs/specs/purchase-manual.md "2"). 부품은 트랜잭션 밖에서 inventory 에 확인해 코드·이름을
+     * 스냅샷으로 받고, 저장은 PurchaseWriter 가 한다. 없는 부품이면 PART_NOT_FOUND, inventory 가 응답하지 않으면
+     * INVENTORY_UNAVAILABLE.
      */
-    @Transactional
-    public void requestForShortage(ShortageDetected event) {
-        Optional<Purchase> requested = findRequestedAuto(event.partId());
-        if (requested.isPresent()) {
-            requested.get().addQty(event.shortQty());
-            return;
-        }
-        purchaseRepository.save(
-                Purchase.requestForShortage(
-                        event.partId(), event.partCode(), event.partName(), event.shortQty()));
+    public PurchaseResponse create(CreatePurchaseRequest request, String orderedBy) {
+        PartResponse part = findPartOrThrow(request.partId());
+        return purchaseWriter.save(part, request, orderedBy);
+    }
+
+    private PartResponse findPartOrThrow(Long partId) {
+        return partClient.findParts(List.of(partId)).stream()
+                .filter(part -> part.id().equals(partId))
+                .findFirst()
+                .orElseThrow(() -> new CustomException(PurchaseErrorCode.PART_NOT_FOUND));
     }
 
     /** 상태별 구매 목록, id 순서로 lastId 다음부터 size 개. 다음 페이지가 있는지 알려고 하나 더 읽는다. */
@@ -57,19 +57,6 @@ public class PurchaseService {
                         .map(PurchaseResponse::from)
                         .toList();
         return CursorPage.of(rows, size, PurchaseResponse::purchaseId);
-    }
-
-    /** 발주: REQUESTED → ORDERED. 공급업체가 있어야 한다. */
-    @Transactional
-    public PurchaseResponse order(Long purchaseId, Long supplierId) {
-        Purchase purchase = findPurchase(purchaseId);
-        if (!purchase.isRequested()) {
-            throw invalidStatus(purchase);
-        }
-        Supplier supplier = findSupplier(supplierId);
-        purchase.order(supplier.getId(), LocalDateTime.now());
-        flushOrConflict(purchaseId);
-        return PurchaseResponse.from(purchase);
     }
 
     /**
@@ -105,11 +92,6 @@ public class PurchaseService {
         }
     }
 
-    private Optional<Purchase> findRequestedAuto(Long partId) {
-        return purchaseRepository.findFirstByPartIdAndSourceAndStatusOrderByIdAsc(
-                partId, PurchaseSource.AUTO, PurchaseStatus.REQUESTED);
-    }
-
     private List<Purchase> findPurchasesAfter(PurchaseStatus status, Long lastId, int limit) {
         return purchaseRepository.findAllByStatusAndIdGreaterThanOrderByIdAsc(
                 status, lastId, Limit.of(limit));
@@ -119,11 +101,5 @@ public class PurchaseService {
         return purchaseRepository
                 .findById(purchaseId)
                 .orElseThrow(() -> new CustomException(PurchaseErrorCode.PURCHASE_NOT_FOUND));
-    }
-
-    private Supplier findSupplier(Long supplierId) {
-        return supplierRepository
-                .findByIdAndIsDeletedFalse(supplierId)
-                .orElseThrow(() -> new CustomException(PurchaseErrorCode.SUPPLIER_NOT_FOUND));
     }
 }

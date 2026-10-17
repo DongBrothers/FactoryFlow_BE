@@ -17,7 +17,10 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/** 구매 건: 부품을 사 온다. partId 는 inventory 의 부품 (논리 참조), partCode·partName 은 요청 당시 스냅샷이다. */
+/**
+ * 구매 건: 부품을 사 온다. 구매 담당이 부품·수량·공급업체를 넣어 만들면 바로 발주(ORDERED)다 (docs/specs/purchase-manual.md). partId
+ * 는 inventory 의 부품 (논리 참조), partCode·partName 은 발주 당시 스냅샷이다.
+ */
 @Getter
 @Entity
 @Table(name = "purchase")
@@ -44,6 +47,10 @@ public class Purchase extends BaseEntity {
 
     private Long requestedBy;
 
+    /** 발주한 직원 public_id (gateway 의 X-User-Id). 자동 요청 시절의 구매 건은 비어 있다. */
+    @Column(length = 36, updatable = false)
+    private String orderedBy;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
@@ -58,42 +65,42 @@ public class Purchase extends BaseEntity {
 
     private LocalDateTime receivedAt;
 
-    /** 부족 합치기와 발주·입고가 같은 구매 건을 동시에 바꾸면 늦은 쪽이 실패한다. */
+    /** 같은 구매 건을 동시에 입고하면 늦은 쪽이 실패한다. */
     @Version private Long version;
 
-    private Purchase(Long partId, String partCode, String partName, int qty) {
+    private Purchase(
+            Long partId,
+            String partCode,
+            String partName,
+            int qty,
+            Long supplierId,
+            String orderedBy,
+            LocalDateTime now) {
         this.partId = partId;
         this.partCode = partCode;
         this.partName = partName;
         this.qty = qty;
-        this.status = PurchaseStatus.REQUESTED;
-        this.source = PurchaseSource.AUTO;
+        this.supplierId = supplierId;
+        this.orderedBy = orderedBy;
+        this.status = PurchaseStatus.ORDERED;
+        this.source = PurchaseSource.MANUAL;
+        this.orderedAt = now;
     }
 
-    /** 재고 부족으로 자동 요청한다. */
-    public static Purchase requestForShortage(
-            Long partId, String partCode, String partName, int qty) {
-        return new Purchase(partId, partCode, partName, qty);
-    }
-
-    public boolean isRequested() {
-        return status == PurchaseStatus.REQUESTED;
+    /** 구매 담당이 공급업체에 바로 발주한다. 부품 코드·이름은 inventory 에서 받은 스냅샷이다. */
+    public static Purchase order(
+            Long partId,
+            String partCode,
+            String partName,
+            int qty,
+            Long supplierId,
+            String orderedBy,
+            LocalDateTime now) {
+        return new Purchase(partId, partCode, partName, qty, supplierId, orderedBy, now);
     }
 
     public boolean isOrdered() {
         return status == PurchaseStatus.ORDERED;
-    }
-
-    /** 같은 부품의 부족이 더 왔다. 요청 상태일 때만 서비스가 부른다. */
-    public void addQty(int qty) {
-        this.qty += qty;
-    }
-
-    /** 공급업체에 발주했다. 요청 상태인지는 서비스가 먼저 확인한다. */
-    public void order(Long supplierId, LocalDateTime now) {
-        this.status = PurchaseStatus.ORDERED;
-        this.supplierId = supplierId;
-        this.orderedAt = now;
     }
 
     /** 물건이 들어왔다. 발주 상태인지는 서비스가 먼저 확인한다. */

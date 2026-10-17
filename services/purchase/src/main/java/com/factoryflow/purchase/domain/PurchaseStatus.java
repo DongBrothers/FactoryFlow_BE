@@ -1,13 +1,11 @@
 package com.factoryflow.purchase.domain;
 
-/** 구매 건 상태. REQUESTED(요청) → ORDERED(발주) → RECEIVED(입고). CANCELLED 는 이후 기능. */
+/** 구매 건 상태. ORDERED(발주) → RECEIVED(입고). 만들 때 바로 발주다 (docs/specs/purchase-manual.md). */
 public enum PurchaseStatus {
-    /** 요청됨. 같은 부품의 부족이 더 오면 수량을 합친다 */
-    REQUESTED,
-    /** 공급업체에 발주함. 수량을 더 바꾸지 않는다 */
+    /** 공급업체에 발주함 */
     ORDERED,
     /** 입고됨. purchase.received 로 inventory 재고가 늘어난다 */
     RECEIVED,
-    /** 취소됨 (이후 기능) */
+    /** 취소됨. 자동 요청 시절 발주되지 않은 건을 V4 에서 이 상태로 바꿨다 */
     CANCELLED
 }
