@@ -13,6 +13,7 @@ import com.factoryflow.inventory.event.listener.payload.MaterialRequestedPart;
 import com.factoryflow.inventory.event.listener.payload.PurchaseReceived;
 import com.factoryflow.inventory.event.publisher.payload.InventoryReserved;
 import com.factoryflow.inventory.event.publisher.payload.ReservationDeferred;
+import com.factoryflow.inventory.event.publisher.payload.ReservationFailed;
 import com.factoryflow.inventory.event.publisher.payload.ReservationShortage;
 import com.factoryflow.inventory.event.publisher.payload.ShortageDetected;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
@@ -48,7 +49,8 @@ public class PartReservationService {
     /**
      * 생산 건에 필요한 부품을 partId 순서로 예약한다 (docs/specs/inventory-reservation.md). 같은 부품에 기다리는 줄이 없고 재고가
      * 충분하면 RESERVED, 아니면 WAITING 으로 뒤에 선다. 부족이 늘어난 부품은 inventory.shortage, 생산 건 결과는
-     * inventory.reserved 또는 inventory.reservation-pending 으로 알린다. 이미 예약 줄이 있는 생산 건은 건너뛴다.
+     * inventory.reserved 또는 inventory.reservation-pending 으로 알린다. 이미 예약 줄이 있는 생산 건은 건너뛴다. 없거나 삭제된
+     * 부품이 있으면 아무것도 잡지 않고 inventory.reservation-failed (docs/specs/stalled-flows.md S18).
      */
     @Transactional
     public void reserve(Long productionId, List<MaterialRequestedPart> parts) {
@@ -57,7 +59,11 @@ public class PartReservationService {
             return;
         }
         Map<Long, Integer> qtyByPartId = mergeByPartId(parts);
-        Map<Long, Part> partsById = loadParts(qtyByPartId.keySet());
+        Map<Long, Part> partsById = findActiveParts(qtyByPartId.keySet());
+        if (partsById.size() != qtyByPartId.size()) {
+            failReservation(productionId, qtyByPartId.keySet(), partsById.keySet());
+            return;
+        }
         Map<Long, Integer> waitingQtyByPartId = waitingQtyByPartId(qtyByPartId.keySet());
         List<ReservationShortage> shortages = new ArrayList<>();
         qtyByPartId.forEach(
@@ -185,11 +191,23 @@ public class PartReservationService {
                                 TreeMap::new));
     }
 
+    /** 없거나 삭제된 부품(id 순)을 알리고 아무것도 잡지 않는다. 처리 오류로 던지지 않아 DLQ 로 가지 않는다. */
+    private void failReservation(Long productionId, Set<Long> requested, Set<Long> found) {
+        List<Long> missing = requested.stream().filter(id -> !found.contains(id)).sorted().toList();
+        log.warn("부품이 없어 예약할 수 없음: productionId={} partIds={}", productionId, missing);
+        eventPublisher.publish(
+                new ReservationFailed(productionId, ReservationFailed.PART_NOT_FOUND, missing));
+    }
+
+    /** 요청한 부품 중 있는 것을 한 번에 읽는다 (예약과 같은 version 올림). */
+    private Map<Long, Part> findActiveParts(Set<Long> partIds) {
+        return partRepository.findAllByIdInAndIsDeletedFalse(partIds).stream()
+                .collect(Collectors.toMap(Part::getId, Function.identity()));
+    }
+
     /** 요청한 부품을 한 번에 읽는다. 하나라도 없거나 삭제됐으면 PART_NOT_FOUND. */
     private Map<Long, Part> loadParts(Set<Long> partIds) {
-        Map<Long, Part> partsById =
-                partRepository.findAllByIdInAndIsDeletedFalse(partIds).stream()
-                        .collect(Collectors.toMap(Part::getId, Function.identity()));
+        Map<Long, Part> partsById = findActiveParts(partIds);
         if (partsById.size() != partIds.size()) {
             throw new CustomException(InventoryErrorCode.PART_NOT_FOUND);
         }

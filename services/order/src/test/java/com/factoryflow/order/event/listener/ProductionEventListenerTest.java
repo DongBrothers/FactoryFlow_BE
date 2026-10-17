@@ -93,6 +93,18 @@ class ProductionEventListenerTest {
     }
 
     @Test
+    void rejectedProductMakesCancelledVehiclesAndCancelsTheItem() {
+        // 주문 뒤 제품이 사라져 production 이 처음부터 취소된 생산 건으로 알린다 (docs/specs/stalled-flows.md S8)
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "CANCELLED"));
+
+        assertThat(vehicleStatus(201L)).isEqualTo("CANCELLED");
+        assertThat(itemStatus(CAR_B)).isEqualTo("CANCELLED");
+        assertThat(itemStatus(CAR_A)).isEqualTo("RECEIVED");
+        assertThat(orderStatus()).isEqualTo("RECEIVED");
+    }
+
+    @Test
     void itemsCanDifferAndOrderShowsInProduction() {
         listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
         listener.onStatusChanged(statusChanged(201L, CAR_B, "WAITING_MATERIAL"));

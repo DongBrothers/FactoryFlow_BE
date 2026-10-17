@@ -19,7 +19,8 @@ public enum ProductionErrorCode implements ErrorCode {
     EQUIPMENT_PROCESS_MISMATCH(HttpStatus.CONFLICT, "이 공정의 설비가 아닙니다."),
     EQUIPMENT_NOT_RUNNING(HttpStatus.CONFLICT, "설비가 가동 중이 아닙니다."),
     EQUIPMENT_BUSY(HttpStatus.CONFLICT, "설비가 다른 차를 작업 중입니다."),
-    PRODUCTION_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요.");
+    PRODUCTION_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요."),
+    VIN_RANGE_EXCEEDED(HttpStatus.INTERNAL_SERVER_ERROR, "차대번호 자리를 넘어 발행할 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

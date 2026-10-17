@@ -25,6 +25,7 @@ public class EventQueueConfig {
     public static final String INVENTORY_RESERVED_QUEUE = "production.inventory-reserved";
     public static final String RESERVATION_PENDING_QUEUE =
             "production.inventory-reservation-pending";
+    public static final String RESERVATION_FAILED_QUEUE = "production.inventory-reservation-failed";
     public static final String EQUIPMENT_STEP_STARTED_QUEUE = "production.equipment-step-started";
     public static final String EQUIPMENT_STEP_COMPLETED_QUEUE =
             "production.equipment-step-completed";
@@ -56,6 +57,14 @@ public class EventQueueConfig {
                 factoryFlowEventsExchange,
                 RESERVATION_PENDING_QUEUE,
                 "inventory.reservation-pending");
+    }
+
+    @Bean
+    Declarables reservationFailedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange,
+                RESERVATION_FAILED_QUEUE,
+                "inventory.reservation-failed");
     }
 
     @Bean

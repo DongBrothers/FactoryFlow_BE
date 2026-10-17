@@ -40,6 +40,14 @@ class VinTest {
     }
 
     @Test
+    void fitsTellsWhetherProductAndWorkOrderIdsFitTheirPlaces() {
+        assertThat(Vin.fits(99_999L, 999_999L)).isTrue();
+        assertThat(Vin.fits(100_000L, 1L)).isFalse();
+        assertThat(Vin.fits(1L, 1_000_000L)).isFalse();
+        assertThat(Vin.fits(-1L, 1L)).isFalse();
+    }
+
+    @Test
     void numbersThatDoNotFitAreRejected() {
         assertThatThrownBy(() -> Vin.issue(100_000L, 1L, 2026))
                 .isInstanceOf(IllegalArgumentException.class);

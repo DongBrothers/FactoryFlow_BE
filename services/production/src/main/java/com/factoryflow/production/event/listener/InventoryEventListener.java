@@ -4,6 +4,7 @@ import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.event.ProcessedEventGuard;
 import com.factoryflow.production.config.EventQueueConfig;
 import com.factoryflow.production.event.listener.payload.InventoryReserved;
+import com.factoryflow.production.event.listener.payload.ReservationFailed;
 import com.factoryflow.production.event.listener.payload.ReservationPending;
 import com.factoryflow.production.service.ProductionService;
 import lombok.RequiredArgsConstructor;
@@ -34,5 +35,17 @@ public class InventoryEventListener {
                 objectMapper.treeToValue(envelope.payload(), ReservationPending.class);
         processedEventGuard.runOnce(
                 envelope, () -> productionService.markWaitingForMaterial(event.productionId()));
+    }
+
+    /** 부품이 없어 예약할 수 없다: 생산 건 취소 (docs/specs/stalled-flows.md S18). */
+    @RabbitListener(queues = EventQueueConfig.RESERVATION_FAILED_QUEUE)
+    public void onReservationFailed(EventEnvelope envelope) {
+        ReservationFailed event =
+                objectMapper.treeToValue(envelope.payload(), ReservationFailed.class);
+        processedEventGuard.runOnce(
+                envelope,
+                () ->
+                        productionService.cancelForMissingParts(
+                                event.productionId(), event.partIds()));
     }
 }

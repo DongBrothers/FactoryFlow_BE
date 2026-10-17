@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -153,25 +154,59 @@ class OrderEventListenerTest {
     }
 
     @Test
-    void productWithoutBomIsSkippedAndOthersAreCreated() {
+    void productWithoutBomGetsCancelledVehiclesAndOthersAreCreated() {
+        // 주문 뒤 BOM 이 지워졌다: 건너뛰지 않고 수량만큼 취소된 생산 건을 만들어 order 에 알린다 (docs/specs/stalled-flows.md S8)
         jdbc.update("UPDATE bom SET is_deleted = TRUE WHERE product_id = ?", carB);
 
-        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1)));
+        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 2)));
 
-        assertThat(productions()).extracting(r -> r.get("product_id")).containsOnly(carA);
-        assertThat(materialRequestsByProductionId())
-                .containsOnlyKeys(productionIdsOf(carA).toArray(Long[]::new));
+        assertRejectedProduct(carB, 2);
     }
 
     @Test
-    void deletedProductIsSkippedAndOthersAreCreated() {
+    void deletedProductGetsCancelledVehiclesAndOthersAreCreated() {
         jdbc.update("UPDATE product SET is_deleted = TRUE WHERE id = ?", carB);
 
-        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 1)));
+        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 2)));
 
-        assertThat(productions()).extracting(r -> r.get("product_id")).containsOnly(carA);
+        assertRejectedProduct(carB, 2);
+    }
+
+    @Test
+    void rejectedProductIsCancelledOnceWhenOrderCreatedComesAgain() {
+        jdbc.update("UPDATE product SET is_deleted = TRUE WHERE id = ?", carB);
+
+        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 2)));
+        listener.onOrderCreated(orderCreated(UUID.randomUUID(), 10L, Map.of(carA, 2, carB, 2)));
+
+        assertRejectedProduct(carB, 2);
+    }
+
+    /** 문제 제품은 수량만큼 CANCELLED 생산 건과 status-changed(CANCELLED) 만 있고 부품 요청은 없다. 다른 제품은 그대로 진행한다. */
+    private void assertRejectedProduct(long productId, int qty) {
+        assertThat(productions())
+                .filteredOn(r -> r.get("product_id").equals(productId))
+                .extracting(r -> r.get("seq"), r -> r.get("status"))
+                .containsExactlyInAnyOrderElementsOf(
+                        IntStream.rangeClosed(1, qty)
+                                .mapToObj(seq -> tuple(seq, "CANCELLED"))
+                                .toList());
+        assertThat(productions())
+                .filteredOn(r -> r.get("product_id").equals(carA))
+                .extracting(r -> r.get("status"))
+                .containsExactly("PLANNED", "PLANNED");
         assertThat(materialRequestsByProductionId())
                 .containsOnlyKeys(productionIdsOf(carA).toArray(Long[]::new));
+        List<Long> rejected = productionIdsOf(productId);
+        assertThat(outbox("production.status-changed"))
+                .filteredOn(
+                        c ->
+                                rejected.contains(
+                                        ((Number) JsonPath.read(c, "$.payload.productionId"))
+                                                .longValue()))
+                .hasSize(qty)
+                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
+                .containsOnly("CANCELLED");
     }
 
     @Test

@@ -289,6 +289,13 @@ public class WorkOrderService {
 
     /** 마지막 공정(검사)이 양품으로 끝났다: VIN 을 발행하고 작업지시·생산 건을 완료한다 (docs/specs/production-completion.md). */
     private void completeWorkOrder(WorkOrder workOrder, LocalDateTime now) {
+        if (!Vin.fits(workOrder.getProductId(), workOrder.getId())) {
+            log.error(
+                    "VIN_RANGE_EXCEEDED workOrderId={} productId={}",
+                    workOrder.getId(),
+                    workOrder.getProductId());
+            throw new CustomException(ProductionErrorCode.VIN_RANGE_EXCEEDED);
+        }
         String vin = Vin.issue(workOrder.getProductId(), workOrder.getId(), now.getYear());
         workOrder.complete(vin, now);
         productionService.completeProduction(workOrder.getProductionId(), vin);
