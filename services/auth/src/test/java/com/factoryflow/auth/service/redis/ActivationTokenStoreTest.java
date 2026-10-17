@@ -7,6 +7,7 @@ import com.factoryflow.auth.domain.PendingAccount;
 import com.factoryflow.auth.domain.Role;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
@@ -79,6 +80,20 @@ class ActivationTokenStoreTest {
 
         assertThat(store.consume(oldToken)).isNull();
         assertThat(store.consume(newToken)).isEqualTo(KIM);
+    }
+
+    @Test
+    void pendingWorkerIssueActivatesAsProduction() {
+        // WORKER 를 PRODUCTION 으로 합치기 전에 발급해 둔 대기 정보 (#118)
+        redisTemplate
+                .opsForHash()
+                .putAll(
+                        "auth:activation:old-token",
+                        Map.of("email", "lee@gmail.com", "name", "이영희", "role", "WORKER"));
+        redisTemplate.opsForValue().set("auth:pending:lee@gmail.com", "old-token");
+
+        assertThat(store.consume("old-token"))
+                .isEqualTo(new PendingAccount("lee@gmail.com", "이영희", Role.PRODUCTION));
     }
 
     @Test

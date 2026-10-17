@@ -74,7 +74,7 @@ public class ActivationTokenStore {
                 new PendingAccount(
                         (String) fields.get("email"),
                         (String) fields.get("name"),
-                        Role.valueOf((String) fields.get("role")));
+                        Role.fromStored((String) fields.get("role")));
         redis.execute(
                 RedisScripts.DELETE_IF_EQUALS, List.of(EMAIL_PREFIX + pending.email()), token);
         return pending;

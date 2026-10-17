@@ -169,7 +169,7 @@
 - **허용 도메인**: 설정값(`auth.allowed-email-domain`). 로컬·데모는 `gmail.com`, 운영은 회사 도메인.
   gmail 제한은 데모용 placeholder 이며 실제 직원 증명이 아니다
 - **로그인 실패 잠금**: N회 연속 실패 시 일시 잠금 (Redis 카운터, 이메일 기준). 무차별 대입 차단
-- **역할**: 1인 1역할. 값 집합 `SALES, PURCHASE, PRODUCTION, WORKER, ADMIN`. enum 컬럼으로 저장
+- **역할**: 1인 1역할. 값 집합 `SALES, PURCHASE, PRODUCTION, ADMIN`. enum 컬럼으로 저장. WORKER 는 #118 에서 PRODUCTION 으로 합쳤다 (V3). ADMIN 은 계정 발급만 한다 (docs/specs/role-permissions.md)
 
 ### 검증·로그·문서
 

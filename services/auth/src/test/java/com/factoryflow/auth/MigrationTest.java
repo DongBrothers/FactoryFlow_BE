@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.factoryflow.test.db.MigrationTestSupport;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 class MigrationTest extends MigrationTestSupport {
 
@@ -16,7 +18,27 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("2");
+        // V3 가 이미 있던 WORKER 계정을 PRODUCTION 으로 바꾸는지 보려고, V2 까지 올려 한 명 넣은 뒤 끝까지 적용한다
+        var v2 =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
+        Flyway.configure().dataSource(v2).target("2").load().migrate();
+        new JdbcTemplate(v2)
+                .update(
+                        "INSERT INTO user_account (public_id, email, password, name, role, status,"
+                                + " created_at, updated_at) VALUES (?, 'worker@gmail.com', 'hash',"
+                                + " '작업자', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
+                        UUID.randomUUID().toString());
+        jdbc = migrateTo("3");
+    }
+
+    @Test
+    void v3MergesWorkerIntoProduction() {
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT role FROM user_account WHERE email = 'worker@gmail.com'",
+                                String.class))
+                .isEqualTo("PRODUCTION");
     }
 
     @Test
@@ -75,7 +97,7 @@ class MigrationTest extends MigrationTestSupport {
         jdbc.update(
                 "INSERT INTO user_account (public_id, email, password, name, role, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (?, ?, ?, '홍길동', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
+                        + " VALUES (?, ?, ?, '홍길동', 'PRODUCTION', 'ACTIVE', NOW(6), NOW(6))",
                 UUID.randomUUID().toString(),
                 email,
                 password);

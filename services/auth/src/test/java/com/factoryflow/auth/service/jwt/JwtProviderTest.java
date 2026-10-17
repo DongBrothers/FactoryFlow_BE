@@ -35,7 +35,7 @@ class JwtProviderTest {
 
     @Test
     void accessTokenIsSignedWithPublicKeyAndCarriesClaims() throws Exception {
-        var account = UserAccount.create("a@gmail.com", "홍길동", Role.WORKER, "hash");
+        var account = UserAccount.create("a@gmail.com", "홍길동", Role.PRODUCTION, "hash");
 
         String token = provider.createAccessToken(account);
 
@@ -45,7 +45,7 @@ class JwtProviderTest {
 
         var claims = jwt.getJWTClaimsSet();
         assertThat(claims.getSubject()).isEqualTo(account.getPublicId());
-        assertThat(claims.getStringClaim("role")).isEqualTo("WORKER");
+        assertThat(claims.getStringClaim("role")).isEqualTo("PRODUCTION");
         assertThat(claims.getExpirationTime()).isAfter(new Date());
         // 이메일(개인정보)은 토큰에 넣지 않는다
         assertThat(claims.getClaims()).doesNotContainKeys("email", "employeeNo");
