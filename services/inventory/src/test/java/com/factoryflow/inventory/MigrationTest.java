@@ -268,7 +268,9 @@ class MigrationTest extends MigrationTestSupport {
                         + " ('KMH000017TU000541', 541, 1, 1, 2, NOW(6)),"
                         + " ('KMH000017TU000542', 542, 3, NULL, 2, NOW(6))");
 
+        Timestamp before = db.queryForObject("SELECT NOW(6)", Timestamp.class);
         Flyway.configure().dataSource(upgrade).target("6").load().migrate();
+        Timestamp after = db.queryForObject("SELECT NOW(6)", Timestamp.class);
 
         assertThat(
                         db.queryForList(
@@ -307,11 +309,21 @@ class MigrationTest extends MigrationTestSupport {
                                         + " ORDER BY received_at, id",
                                 String.class))
                 .containsExactly("LOT-INIT-1", "LOT-261001-000001");
+        // LOT 이 없던 부품의 초기 재고 LOT 은 마이그레이션 시각에 들어온 것으로 본다
         assertThat(
                         db.queryForObject(
                                 "SELECT received_at FROM part_lot WHERE lot_no = 'LOT-INIT-3'",
                                 Timestamp.class))
-                .isNotNull();
+                .isBetween(before, after);
+        // 기존 LOT 이 있던 부품의 초기 재고 LOT 은 가장 이른 LOT 보다 정확히 1초 앞이다
+        assertThat(
+                        db.queryForObject(
+                                "SELECT TIMESTAMPDIFF(MICROSECOND, i.received_at, l.received_at)"
+                                        + " FROM part_lot i JOIN part_lot l"
+                                        + " ON l.lot_no = 'LOT-261001-000001'"
+                                        + " WHERE i.lot_no = 'LOT-INIT-1'",
+                                Long.class))
+                .isEqualTo(1_000_000L);
         assertThat(
                         db.queryForObject(
                                 "SELECT COUNT(*) FROM part_lot WHERE lot_no LIKE 'LOT-INIT-%'"
