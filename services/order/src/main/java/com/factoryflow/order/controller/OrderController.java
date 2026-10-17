@@ -82,12 +82,12 @@ public class OrderController {
     public ApiResponse<OrderListResponse> findOrders(
             @Parameter(
                             description =
-                                    "주문 상태 (RECEIVED, WAITING_MATERIAL, IN_PRODUCTION, COMPLETED, SHIPPED, CANCEL_REQUESTED, CANCELLED). 없으면 전체",
+                                    "주문 상태 (RECEIVED, IN_PRODUCTION, COMPLETED, SHIPPED, CANCEL_REQUESTED, CANCELLED). 없으면 전체",
                             example = "IN_PRODUCTION")
                     @RequestParam(value = "status", required = false)
                     @Pattern(
                             regexp =
-                                    "RECEIVED|WAITING_MATERIAL|IN_PRODUCTION|COMPLETED|SHIPPED|CANCEL_REQUESTED|CANCELLED")
+                                    "RECEIVED|IN_PRODUCTION|COMPLETED|SHIPPED|CANCEL_REQUESTED|CANCELLED")
                     String status,
             @Parameter(
                             description = "이 주문보다 오래된 것부터 (처음이면 없음)",

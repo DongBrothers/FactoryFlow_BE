@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("6");
+        jdbc = migrateTo("7");
     }
 
     @Test
@@ -42,6 +42,47 @@ class MigrationTest extends MigrationTestSupport {
         assertThat(result.targetSchemaVersion).isEqualTo("3");
         var orderNos = db.queryForList("SELECT order_no FROM customer_order", String.class);
         assertThat(orderNos).hasSize(2).doesNotHaveDuplicates().allMatch(no -> no.length() == 36);
+    }
+
+    @Test
+    void v7TurnsWaitingMaterialIntoReceived() {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE order_v7");
+        var upgrade =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/order_v7"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("6").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        db.update(
+                "INSERT INTO customer_order (order_no, customer_id, status, created_at, updated_at)"
+                        + " VALUES (UUID(), 7, 'WAITING_MATERIAL', NOW(6), NOW(6))");
+        db.update(
+                "INSERT INTO order_item (order_id, product_id, product_code, product_name, qty,"
+                        + " status, created_at, updated_at)"
+                        + " SELECT id, 1, 'CAR-1', '차 1', 2, 'WAITING_MATERIAL', NOW(6), NOW(6)"
+                        + " FROM customer_order");
+        db.update(
+                "INSERT INTO order_vehicle (order_id, order_item_id, production_id, status,"
+                        + " created_at, updated_at) SELECT order_id, id, 101, 'WAITING_MATERIAL',"
+                        + " NOW(6), NOW(6) FROM order_item");
+        db.update(
+                "INSERT INTO order_vehicle (order_id, order_item_id, production_id, status,"
+                        + " created_at, updated_at) SELECT order_id, id, 102, 'IN_PRODUCTION',"
+                        + " NOW(6), NOW(6) FROM order_item");
+
+        Flyway.configure().dataSource(upgrade).target("7").load().migrate();
+
+        assertThat(db.queryForObject("SELECT status FROM customer_order", String.class))
+                .isEqualTo("RECEIVED");
+        assertThat(db.queryForObject("SELECT status FROM order_item", String.class))
+                .isEqualTo("RECEIVED");
+        assertThat(
+                        db.queryForList(
+                                "SELECT status FROM order_vehicle ORDER BY production_id",
+                                String.class))
+                .containsExactly("RECEIVED", "IN_PRODUCTION");
     }
 
     @Test

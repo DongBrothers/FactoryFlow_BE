@@ -8,10 +8,8 @@ import java.util.List;
  * (docs/specs/saga-order-fulfillment.md).
  */
 public enum OrderStatus {
-    /** 접수. 생산 건이 아직 없거나 PLANNED 다. */
+    /** 접수. 생산 건이 아직 없거나 PLANNED·WAITING_MATERIAL(부품 대기)이다. 부품 대기는 고객에게 따로 보이지 않는다 (#117). */
     RECEIVED,
-    /** 부품 대기. 생산 건이 WAITING_MATERIAL 이다. */
-    WAITING_MATERIAL,
     /** 생산 중. 생산 건이 READY(작업지시 발행) 또는 IN_PROGRESS 다. */
     IN_PRODUCTION,
     /** 생산 완료 (VIN 발행). 끝난 상태라 이후 상태 변경 이벤트는 무시한다. */
@@ -53,9 +51,6 @@ public enum OrderStatus {
         }
         if (alive.stream().anyMatch(s -> s == IN_PRODUCTION || s == COMPLETED || s == SHIPPED)) {
             return IN_PRODUCTION;
-        }
-        if (alive.contains(WAITING_MATERIAL)) {
-            return WAITING_MATERIAL;
         }
         return RECEIVED;
     }

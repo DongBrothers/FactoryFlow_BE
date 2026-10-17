@@ -4,7 +4,7 @@
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 10번 중 status-changed 부분이다.
 생산 건은 차량 1대 단위다 (기획서). order 는 차량(생산 건)마다 상태를 갖고, 품목 상태는 그 품목 차량들의 요약,
 주문(customer_order) 상태는 품목들의 요약이다. 셋을 같은 트랜잭션에서 갱신한다.
-고객이 주문을 조회하면 "부품 대기", "생산 중" 같은 진행 상태를 볼 수 있게 된다.
+고객이 주문을 조회하면 "접수", "생산 중" 같은 진행 상태를 볼 수 있게 된다. 부품 대기는 고객에게 따로 보이지 않고 접수로 보인다 (#117).
 
 ## 흐름
 1. production 이 생산 건이 생길 때(PLANNED)와 상태가 바뀔 때마다 발행한다: `production.status-changed { orderId, productionId, productId, status }`
@@ -15,8 +15,7 @@
 
 | production.status | 차량 상태 |
 |---|---|
-| PLANNED | RECEIVED |
-| WAITING_MATERIAL | WAITING_MATERIAL |
+| PLANNED, WAITING_MATERIAL | RECEIVED (부품 대기는 주문 쪽 상태가 아니다, #117) |
 | READY, IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
@@ -29,8 +28,7 @@
    3. 모두 SHIPPED → SHIPPED
    4. 모두 COMPLETED 또는 SHIPPED → COMPLETED
    5. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
-   6. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
-   7. 그 외 → RECEIVED
+   6. 그 외 → RECEIVED (#117 에서 "하나라도 WAITING_MATERIAL → WAITING_MATERIAL" 을 없앰)
 
 ## 규칙 / 예외
 | 상황 | 처리 |
@@ -55,7 +53,7 @@
 ## 완료 조건 (테스트로 확인할 것)
 - [ ] status-changed(PLANNED) 를 처음 받으면 차량이 RECEIVED 로 생긴다
 - [ ] 2대 품목에서 한 대만 READY → 차량 IN_PRODUCTION, 품목·주문 IN_PRODUCTION
-- [ ] 2대 품목에서 한 대만 WAITING_MATERIAL, 나머지는 아직 모름 → 품목 WAITING_MATERIAL
+- [ ] 2대 품목에서 한 대만 WAITING_MATERIAL, 나머지는 아직 모름 → 품목 RECEIVED (#117)
 - [ ] 품목 2개 중 하나 READY, 하나 WAITING_MATERIAL → 품목 상태가 각각 다르고 주문은 IN_PRODUCTION
 - [ ] 끝난 차량(COMPLETED, CANCELLED)에 온 status-changed 는 무시한다
 - [ ] CANCEL_REQUESTED 차량에는 CANCELLED 만 반영된다

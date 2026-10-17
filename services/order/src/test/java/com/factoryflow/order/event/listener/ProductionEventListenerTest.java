@@ -86,10 +86,21 @@ class ProductionEventListenerTest {
     @Test
     void notYetKnownVehicleCountsAsReceived() {
         // 품목 A 는 2대인데 한 대만 알려졌다. 모르는 한 대는 RECEIVED 로 보고 요약한다
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+
+        assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
+        assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
+    }
+
+    @Test
+    void waitingForMaterialShowsAsReceived() {
+        // 부품 대기(WAITING_MATERIAL)는 주문 쪽 상태가 아니다. 고객에게는 접수로 보인다 (#117)
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
         listener.onStatusChanged(statusChanged(101L, CAR_A, "WAITING_MATERIAL"));
 
-        assertThat(itemStatus(CAR_A)).isEqualTo("WAITING_MATERIAL");
-        assertThat(orderStatus()).isEqualTo("WAITING_MATERIAL");
+        assertThat(vehicleStatus(101L)).isEqualTo("RECEIVED");
+        assertThat(itemStatus(CAR_A)).isEqualTo("RECEIVED");
+        assertThat(orderStatus()).isEqualTo("RECEIVED");
     }
 
     @Test
@@ -110,7 +121,7 @@ class ProductionEventListenerTest {
         listener.onStatusChanged(statusChanged(201L, CAR_B, "WAITING_MATERIAL"));
 
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
-        assertThat(itemStatus(CAR_B)).isEqualTo("WAITING_MATERIAL");
+        assertThat(itemStatus(CAR_B)).isEqualTo("RECEIVED");
         assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
     }
 

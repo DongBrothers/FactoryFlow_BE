@@ -6,9 +6,9 @@ import static com.factoryflow.order.domain.OrderStatus.COMPLETED;
 import static com.factoryflow.order.domain.OrderStatus.IN_PRODUCTION;
 import static com.factoryflow.order.domain.OrderStatus.RECEIVED;
 import static com.factoryflow.order.domain.OrderStatus.SHIPPED;
-import static com.factoryflow.order.domain.OrderStatus.WAITING_MATERIAL;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -40,16 +40,17 @@ class OrderStatusTest {
 
     @Test
     void anyInProductionCompletedOrShippedIsInProduction() {
-        assertThat(OrderStatus.summarize(List.of(IN_PRODUCTION, WAITING_MATERIAL)))
+        assertThat(OrderStatus.summarize(List.of(IN_PRODUCTION, RECEIVED)))
                 .isEqualTo(IN_PRODUCTION);
         assertThat(OrderStatus.summarize(List.of(COMPLETED, RECEIVED))).isEqualTo(IN_PRODUCTION);
         assertThat(OrderStatus.summarize(List.of(SHIPPED, RECEIVED))).isEqualTo(IN_PRODUCTION);
     }
 
     @Test
-    void anyWaitingMaterialIsWaitingMaterial() {
-        assertThat(OrderStatus.summarize(List.of(WAITING_MATERIAL, RECEIVED)))
-                .isEqualTo(WAITING_MATERIAL);
+    void waitingForMaterialIsNotAnOrderStatus() {
+        // 부품을 기다리는 차도 고객에게는 접수로 보인다 (docs/specs/order-production-status.md, #117)
+        assertThat(Arrays.stream(OrderStatus.values()).map(Enum::name))
+                .doesNotContain("WAITING_MATERIAL");
     }
 
     @Test

@@ -26,7 +26,7 @@ gateway `/api/orders`
 { "items": [ { "orderNo": "…", "customerId": 7, "status": "IN_PRODUCTION", "createdAt": "2026-10-17T10:00:00" } ],
   "count": 1, "last": false, "nextOrderNo": "…" }
 ```
-- 최신 주문 먼저. status 가 있으면 그 상태만 (주문 상태 값: RECEIVED, WAITING_MATERIAL, IN_PRODUCTION, COMPLETED, SHIPPED, CANCEL_REQUESTED, CANCELLED)
+- 최신 주문 먼저. status 가 있으면 그 상태만 (주문 상태 값: RECEIVED, IN_PRODUCTION, COMPLETED, SHIPPED, CANCEL_REQUESTED, CANCELLED)
 - 처음엔 lastOrderNo 없이, 다음 페이지는 응답의 nextOrderNo 를 lastOrderNo 로 넘긴다. last = true 면 nextOrderNo 는 null
 - 품목·차량은 주문 상세(`GET /orders/{orderNo}`)에서 본다
 
