@@ -67,7 +67,7 @@ class OrderCancelTest {
         jdbc.update("DELETE FROM customer_order");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
-        // 주문: A 2대(생산 중, 부품 대기) + B 1대(부품 대기)
+        // 주문: A 2대(생산 중, 접수) + B 1대(접수)
         orderNo = UUID.randomUUID().toString();
         jdbc.update(
                 "INSERT INTO customer_order (order_no, customer_id, status, created_at, updated_at)"
@@ -77,10 +77,10 @@ class OrderCancelTest {
                 jdbc.queryForObject(
                         "SELECT id FROM customer_order WHERE order_no = ?", Long.class, orderNo);
         insertItem(CAR_A, 2, "IN_PRODUCTION");
-        insertItem(CAR_B, 1, "WAITING_MATERIAL");
+        insertItem(CAR_B, 1, "RECEIVED");
         insertVehicle(CAR_A, 101L, "IN_PRODUCTION");
-        insertVehicle(CAR_A, 102L, "WAITING_MATERIAL");
-        insertVehicle(CAR_B, 201L, "WAITING_MATERIAL");
+        insertVehicle(CAR_A, 102L, "RECEIVED");
+        insertVehicle(CAR_B, 201L, "RECEIVED");
     }
 
     @Test
@@ -124,7 +124,7 @@ class OrderCancelTest {
                 .andExpect(jsonPath("$.code").value("ORDER_ALREADY_CANCELLED"));
 
         // 차량을 다 모른다 (생산 계획 중)
-        jdbc.update("UPDATE order_vehicle SET status = 'WAITING_MATERIAL'");
+        jdbc.update("UPDATE order_vehicle SET status = 'RECEIVED'");
         jdbc.update("DELETE FROM order_vehicle WHERE production_id = 201");
         cancel(orderNo)
                 .andExpect(status().isConflict())
@@ -224,8 +224,7 @@ class OrderCancelTest {
                 .andExpect(jsonPath("$.data.items[0].vehicles[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.items[0].vehicles[0].vin").value("KMH000017TU000101"))
                 .andExpect(jsonPath("$.data.items[0].vehicles[0].productionId").doesNotExist())
-                .andExpect(
-                        jsonPath("$.data.items[0].vehicles[1].status").value("WAITING_MATERIAL"));
+                .andExpect(jsonPath("$.data.items[0].vehicles[1].status").value("RECEIVED"));
 
         mockMvc.perform(get("/orders/{orderNo}", UUID.randomUUID().toString()))
                 .andExpect(status().isNotFound())

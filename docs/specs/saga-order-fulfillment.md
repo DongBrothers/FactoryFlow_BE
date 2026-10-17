@@ -108,8 +108,7 @@ order 는 차량(생산 건)마다 상태를 갖고, 품목 상태는 그 품목
 
 | 생산 건 | order 의 차량 |
 |---|---|
-| PLANNED | RECEIVED |
-| WAITING_MATERIAL | WAITING_MATERIAL |
+| PLANNED, WAITING_MATERIAL | RECEIVED (부품 대기는 주문 쪽 상태가 아니다, #117) |
 | READY, IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
@@ -123,8 +122,7 @@ CANCELLED 는 빼고 남은 것으로 계산한다. 위에서부터 먼저 맞�
 3. 모두 SHIPPED → SHIPPED
 4. 모두 COMPLETED 또는 SHIPPED → COMPLETED
 5. 하나라도 IN_PRODUCTION, COMPLETED, SHIPPED → IN_PRODUCTION
-6. 하나라도 WAITING_MATERIAL → WAITING_MATERIAL
-7. 그 외 → RECEIVED
+6. 그 외 → RECEIVED
 
 ### 순서 꼬임과 중복
 - 같은 이벤트 중복 수신: ProcessedEventGuard 가 막는다

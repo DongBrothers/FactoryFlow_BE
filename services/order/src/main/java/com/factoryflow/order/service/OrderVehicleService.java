@@ -204,8 +204,7 @@ public class OrderVehicleService {
     /** 생산 건 상태를 차량 상태로 바꾼다 (docs/specs/saga-order-fulfillment.md "상태 매핑"). */
     private static OrderStatus vehicleStatusOf(String productionStatus) {
         return switch (productionStatus) {
-            case "PLANNED" -> OrderStatus.RECEIVED;
-            case "WAITING_MATERIAL" -> OrderStatus.WAITING_MATERIAL;
+            case "PLANNED", "WAITING_MATERIAL" -> OrderStatus.RECEIVED;
             case "READY", "IN_PROGRESS" -> OrderStatus.IN_PRODUCTION;
             case "COMPLETED" -> OrderStatus.COMPLETED;
             case "CANCELLED" -> OrderStatus.CANCELLED;
