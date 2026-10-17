@@ -35,8 +35,8 @@ class RolePermissionTest {
         "/api/production/work-orders/1/steps/INSPECTION/complete, WORKER",
         "/api/production/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
         "/api/production/work-orders/1/steps/INSPECTION/complete, ADMIN",
-        "/api/purchases/1/order, PURCHASE",
-        "/api/purchases/1/order, ADMIN",
+        "/api/purchases, PURCHASE",
+        "/api/purchases, ADMIN",
         "/api/purchases/1/receive, PURCHASE",
         "/api/purchases/1/receive, ADMIN",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION",
@@ -55,8 +55,8 @@ class RolePermissionTest {
         "/api/production/work-orders/1/steps/PRESS/start, SALES",
         "/api/production/work-orders/1/steps/PRESS/start, PURCHASE",
         "/api/production/work-orders/1/steps/INSPECTION/complete, SALES",
-        "/api/purchases/1/order, SALES",
-        "/api/purchases/1/order, PRODUCTION",
+        "/api/purchases, SALES",
+        "/api/purchases, PRODUCTION",
         "/api/purchases/1/receive, WORKER",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, SALES",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, WORKER",
@@ -86,7 +86,7 @@ class RolePermissionTest {
         for (String path :
                 new String[] {
                     "/api/orders",
-                    "/api/purchases?status=REQUESTED",
+                    "/api/purchases?status=ORDERED",
                     "/api/production/work-orders",
                     "/api/inventory/parts"
                 }) {

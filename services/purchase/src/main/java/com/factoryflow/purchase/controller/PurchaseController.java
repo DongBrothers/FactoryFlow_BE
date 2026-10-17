@@ -2,7 +2,7 @@ package com.factoryflow.purchase.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.common.web.response.CursorPage;
-import com.factoryflow.purchase.dto.request.OrderPurchaseRequest;
+import com.factoryflow.purchase.dto.request.CreatePurchaseRequest;
 import com.factoryflow.purchase.dto.response.PurchaseResponse;
 import com.factoryflow.purchase.service.PurchaseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,15 +17,18 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "구매", description = "부품 구매: 재고 부족 자동 요청을 발주하고 입고한다")
+@Tag(name = "구매", description = "부품 구매: 구매 담당이 부족 부품을 보고 발주하고 입고한다")
 @RestController
 @RequestMapping("/purchases")
 @RequiredArgsConstructor
@@ -36,22 +39,21 @@ public class PurchaseController {
     @Operation(
             summary = "구매 목록",
             description =
-                    "상태별 구매 건을 id 커서(lastId, size)로 나눠 준다. 재고 부족으로 자동 요청된 건(AUTO)이 REQUESTED 로 쌓인다.")
+                    "상태별 구매 건을 id 커서(lastId, size)로 나눠 준다. 발주 중(ORDERED)인 건을 부족 부품 조회와 함께 보고 더 살지 정한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
                 description = "조회 성공"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description =
-                        "status 가 없거나 REQUESTED, ORDERED, RECEIVED 가 아님, lastId 음수, size 1~100 밖")
+                description = "status 가 없거나 ORDERED, RECEIVED 가 아님, lastId 음수, size 1~100 밖")
     })
     @GetMapping
     public ApiResponse<CursorPage<PurchaseResponse>> findPurchases(
-            @Parameter(description = "구매 상태 (REQUESTED, ORDERED, RECEIVED)", example = "REQUESTED")
+            @Parameter(description = "구매 상태 (ORDERED, RECEIVED)", example = "ORDERED")
                     @RequestParam(value = "status", required = false)
                     @NotNull
-                    @Pattern(regexp = "REQUESTED|ORDERED|RECEIVED")
+                    @Pattern(regexp = "ORDERED|RECEIVED")
                     String status,
             @Parameter(description = "이 id 다음부터 (처음이면 0)", example = "0")
                     @RequestParam(value = "lastId", defaultValue = "0")
@@ -68,31 +70,32 @@ public class PurchaseController {
     }
 
     @Operation(
-            summary = "발주",
+            summary = "구매 건 만들기 (발주)",
             description =
-                    "요청(REQUESTED) 구매 건을 공급업체에 발주한다(ORDERED). 발주한 뒤에는 같은 부품의 부족이 와도 이 건의 수량을 바꾸지 않고 새 건이 생긴다.")
+                    "구매 담당이 부족 부품 조회를 보고 부품·수량·공급업체를 넣어 발주한다. 만들면 바로 발주(ORDERED) 상태이고 수량은 부족분보다 많이 살 수 있다. 부품은 inventory 에 확인해 코드·이름을 남기고, 발주한 직원은 로그인한 직원(X-User-Id)이다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
+                responseCode = "201",
                 description = "발주함. 구매 건을 돌려준다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "purchaseId 가 양수가 아님, supplierId 없음 또는 1 미만"),
+                description = "X-User-Id 없음, partId·qty·supplierId 없음 또는 1 미만"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "구매 건 없음 (PURCHASE_NOT_FOUND), 공급업체 없음 (SUPPLIER_NOT_FOUND)"),
+                description = "부품 없음 (PART_NOT_FOUND), 공급업체 없음 (SUPPLIER_NOT_FOUND)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "409",
-                description =
-                        "요청 상태가 아님 (INVALID_PURCHASE_STATUS), 다른 작업이 먼저 바꿈 (PURCHASE_CONFLICT)")
+                responseCode = "503",
+                description = "inventory 응답 없음, 3초 초과, 본문이나 data 없는 응답 (INVENTORY_UNAVAILABLE)")
     })
-    @PostMapping("/{purchaseId}/order")
-    public ApiResponse<PurchaseResponse> order(
-            @Parameter(description = "구매 번호", example = "31") @PathVariable("purchaseId") @Positive
-                    Long purchaseId,
-            @Valid @RequestBody OrderPurchaseRequest request) {
-        PurchaseResponse purchase = purchaseService.order(purchaseId, request.supplierId());
-        return ApiResponse.ok(purchase);
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<PurchaseResponse> create(
+            @Parameter(description = "발주한 직원 (gateway 가 넣는 로그인 직원 번호)", example = "6c1e2f3a-…")
+                    @RequestHeader("X-User-Id")
+                    String orderedBy,
+            @Valid @RequestBody CreatePurchaseRequest request) {
+        PurchaseResponse purchase = purchaseService.create(request, orderedBy);
+        return ApiResponse.created(purchase);
     }
 
     @Operation(

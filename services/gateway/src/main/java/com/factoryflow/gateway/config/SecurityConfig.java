@@ -87,7 +87,7 @@ public class SecurityConfig {
                         "/api/production/work-orders/*/steps/*/start",
                         "/api/production/work-orders/*/steps/*/complete")
                 .hasAnyRole("WORKER", "PRODUCTION", ADMIN)
-                .pathMatchers(HttpMethod.POST, "/api/purchases/*/order", "/api/purchases/*/receive")
+                .pathMatchers(HttpMethod.POST, "/api/purchases", "/api/purchases/*/receive")
                 .hasAnyRole("PURCHASE", ADMIN)
                 .pathMatchers(HttpMethod.POST, "/api/inventory/finished-vehicles/*/ship")
                 .hasAnyRole("PRODUCTION", ADMIN)

@@ -1,7 +1,7 @@
 # inventory 서비스
 - DB: inventory_db (Flyway: src/main/resources/db/migration). 테이블: part (재고 수량 포함), part_reservation, stock_history, 완성차 재고(finished_vehicle), 부품 LOT(part_lot), 완성차에 쓰인 LOT(part_lot_usage)
 - part.reserved 는 part_reservation 의 RESERVED 합계와 같다. 예약 변경과 같은 트랜잭션에서 갱신
-- 발행: inventory.reserved, inventory.reservation-pending, inventory.reservation-failed (BOM 부품이 없을 때, docs/specs/stalled-flows.md), inventory.shortage, shipment.completed
+- 발행: inventory.reserved, inventory.reservation-pending, inventory.reservation-failed (BOM 부품이 없을 때, docs/specs/stalled-flows.md), shipment.completed. 부족은 이벤트로 알리지 않고 부족 부품 조회 GET /inventory/parts/shortages 로 보여 준다 (docs/specs/purchase-manual.md). 내부 API GET /internal/parts (purchase 의 부품 확인)
 - 수신: production.material-requested, production.cancelled, production.completed, purchase.received
 - 완료: production.completed 수신 시 예약 부품 CONSUMED, 완성차 재고 증가(VIN), 소모 부품 LOT ↔ VIN 연결
 - LOT: 입고 한 번에 LOT 하나, 생산 완료 때 LOT 없는 재고부터 그다음 LOT 입고 순으로 써서 기록. 조회 GET /inventory/finished-vehicles/{vin}/part-lots, GET /inventory/part-lots/{lotNo}/vehicles (docs/specs/part-lot.md)

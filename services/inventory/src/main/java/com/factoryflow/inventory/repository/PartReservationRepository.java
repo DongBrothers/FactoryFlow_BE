@@ -24,4 +24,6 @@ public interface PartReservationRepository extends JpaRepository<PartReservation
 
     List<PartReservation> findAllByPartIdInAndStatus(
             Collection<Long> partIds, ReservationStatus status);
+
+    List<PartReservation> findAllByStatus(ReservationStatus status);
 }
