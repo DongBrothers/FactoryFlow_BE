@@ -17,6 +17,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | production.completed | production | inventory, order | orderId, productionId, productId, vin |
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
+| inventory.reservation-failed | inventory | production | productionId, reason (PART_NOT_FOUND), partIds[] |
 | inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
 | purchase.received | purchase | inventory | purchaseId, partId, qty |
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process |

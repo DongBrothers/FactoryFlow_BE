@@ -65,6 +65,13 @@ public class Production extends BaseEntity {
         return new Production(orderId, productId, seq);
     }
 
+    /** 주문 뒤 제품이나 BOM 이 사라져 만들 수 없는 차: 처음부터 CANCELLED 인 생산 건 (docs/specs/stalled-flows.md S8). */
+    public static Production reject(Long orderId, Long productId, int seq) {
+        Production production = new Production(orderId, productId, seq);
+        production.status = ProductionStatus.CANCELLED;
+        return production;
+    }
+
     /** 부품이 모두 예약되면 생산할 수 있다. PLANNED, WAITING_MATERIAL 에서만 바뀐다. 바뀌었으면 true. */
     public boolean markReady() {
         if (status != ProductionStatus.PLANNED && status != ProductionStatus.WAITING_MATERIAL) {

@@ -16,7 +16,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -223,21 +222,40 @@ class ProductionEventListenerTest {
     }
 
     @Test
-    void unknownPartIsDeadLetteredAndSavesNothing() {
-        EventEnvelope event = materialRequested(300L, List.of(line(engine, 1), line(999_999L, 1)));
+    void missingPartsFailTheReservationWithoutSavingAnything() {
+        // BOM 에 있는 부품이 없거나 삭제됐다: DLQ 로 보내지 않고 reservation-failed 로 알린다 (docs/specs/stalled-flows.md
+        // S18)
+        long seat = insertPart("SEAT-T", "테스트 시트", 5);
+        jdbc.update("UPDATE part SET is_deleted = TRUE WHERE id = ?", seat);
 
-        send(event);
+        listener.onMaterialRequested(
+                materialRequested(
+                        300L, List.of(line(engine, 1), line(999_999L, 1), line(seat, 2))));
 
-        await().atMost(Duration.ofSeconds(10))
-                .until(() -> amqpAdmin.getQueueInfo(DLQ).getMessageCount() == 1);
-        Message dead = rabbitTemplate.receive(DLQ);
-        assertThat(dead.getMessageProperties().getMessageId())
-                .isEqualTo(event.eventId().toString());
         assertThat(reservations()).isEmpty();
         assertThat(stock(engine)).containsEntry("available", 10).containsEntry("reserved", 0);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM processed_event", Integer.class))
-                .isZero();
+        assertThat(outbox("inventory.reserved")).isEmpty();
+        assertThat(outbox("inventory.reservation-pending")).isEmpty();
+        assertThat(outbox("inventory.reservation-failed"))
+                .singleElement()
+                .satisfies(
+                        e -> {
+                            assertThat(number(e, "$.payload.productionId")).isEqualTo(300L);
+                            assertThat(JsonPath.<String>read(e, "$.payload.reason"))
+                                    .isEqualTo("PART_NOT_FOUND");
+                            assertThat(JsonPath.<List<Number>>read(e, "$.payload.partIds"))
+                                    .extracting(Number::longValue)
+                                    .containsExactly(seat, 999_999L);
+                        });
+    }
+
+    @Test
+    void missingPartFromRabbitMqIsNotDeadLettered() {
+        send(materialRequested(300L, List.of(line(engine, 1), line(999_999L, 1))));
+
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertThat(outbox("inventory.reservation-failed")).hasSize(1));
+        assertThat(amqpAdmin.getQueueInfo(DLQ).getMessageCount()).isZero();
     }
 
     private EventEnvelope materialRequested(long productionId, List<Map<String, Object>> parts) {

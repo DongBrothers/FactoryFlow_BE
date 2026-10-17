@@ -24,6 +24,15 @@ public final class Vin {
         return body.substring(0, 8) + checkDigit(body) + body.substring(9);
     }
 
+    /** 제품 id 가 5자리, 작업지시 id 가 6자리 안에 들어가는가 (VIN 을 만들 수 있는가). */
+    public static boolean fits(long productId, long workOrderId) {
+        return fitsIn(productId, 5) && fitsIn(workOrderId, 6);
+    }
+
+    private static boolean fitsIn(long value, int width) {
+        return value >= 0 && Long.toString(value).length() <= width;
+    }
+
     /** 북미 VIN 체크 자리: 글자를 숫자로 바꿔 자리별 가중치를 곱한 합의 mod 11. 10 이면 X. 9번째 자리 값은 쓰지 않는다. */
     public static char checkDigit(String vin) {
         int sum = 0;
@@ -47,10 +56,10 @@ public final class Vin {
     }
 
     private static String digits(long value, int width) {
-        String text = Long.toString(value);
-        if (value < 0 || text.length() > width) {
+        if (!fitsIn(value, width)) {
             throw new IllegalArgumentException("VIN 자리에 맞지 않는 값: " + value);
         }
+        String text = Long.toString(value);
         return "0".repeat(width - text.length()) + text;
     }
 }

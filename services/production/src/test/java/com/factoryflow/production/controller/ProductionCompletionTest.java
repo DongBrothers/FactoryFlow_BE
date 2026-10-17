@@ -143,6 +143,21 @@ class ProductionCompletionTest {
         assertThat(outbox("production.completed")).isEmpty();
     }
 
+    @Test
+    void vinThatDoesNotFitIsVinRangeExceededAndChangesNothing() throws Exception {
+        // 제품 id 가 VIN 의 5자리를 넘는다 (docs/specs/stalled-flows.md "3. VIN 자리 초과")
+        long workOrder = workOrderAtInspection(42L, 100_000L);
+        start(workOrder, "INSPECTION", "INSPECTION-01");
+
+        complete(workOrder, "INSPECTION", "{\"result\":\"GOOD\"}")
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("VIN_RANGE_EXCEEDED"));
+
+        assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
+        assertThat(stepStatus(workOrder, "INSPECTION")).isEqualTo("IN_PROGRESS");
+        assertThat(outbox("production.completed")).isEmpty();
+    }
+
     /** 작업지시를 발행하고 검사 앞 공정 4개를 양품으로 끝낸다. */
     private long workOrderAtInspection(long orderId, long productId) {
         long workOrder = releasedWorkOrder(orderId, productId);

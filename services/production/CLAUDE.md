@@ -10,6 +10,6 @@
 - 제품 목록: GET /production/products 는 주문할 수 있는 제품(삭제 안 됨, BOM 있음)만 (docs/specs/list-apis.md)
 - 완료: 검사 양품 → VIN 발행 → production.completed
 - 발행: production.material-requested, production.status-changed, production.step-dispatched, production.cancelled, production.cancel-rejected, production.completed
-- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, equipment.step-started, equipment.step-completed, equipment.status-changed
-- 보상: order.cancel-requested 수신 시 프레스 배정 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
+- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, inventory.reservation-failed, equipment.step-started, equipment.step-completed, equipment.status-changed
+- 보상: order.cancel-requested 수신 시 프레스 배정 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 주문 뒤 제품·BOM 이 사라졌으면 수량만큼 CANCELLED 생산 건 + status-changed(CANCELLED), 부품이 없다는 inventory.reservation-failed 를 받으면 PLANNED 생산 건 CANCELLED + production.cancelled (docs/specs/stalled-flows.md). 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
 - 동시 변경: 생산 건은 @Version 으로 막는다 (docs/specs/saga-order-fulfillment.md)
