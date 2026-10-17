@@ -1,5 +1,7 @@
 # 구매·입고 (inventory.shortage → 자동 구매 → 발주 → 입고 → 대기 줄 재예약)
 
+> **#114 에서 바뀜:** 자동 구매(1. 부족 → 자동 구매)와 요청·발주 단계(2 의 발주 API)를 없앴다. 구매 담당이 부족 부품 조회를 보고 부품·수량·공급업체를 넣어 구매 건을 만들면 바로 발주(ORDERED)다. 아래 1·2 는 그때의 기록이고, 지금 흐름은 docs/specs/purchase-manual.md 를 본다. 3(입고 → 재예약)은 그대로다.
+
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 3(부족 → 구매)과 5(입고 → 재예약)다 (#95).
 지금은 부족(`inventory.shortage`)을 받는 쪽이 없어 부품이 모자란 차가 WAITING_MATERIAL(부품 대기)에서 멈춘다.

@@ -47,8 +47,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 3. inventory: 부품마다 예약 줄 생성
    - 같은 부품에 WAITING 줄이 없고 available 이 충분하면 RESERVED (available −, reserved +, stock_history RESERVE)
    - 그 외에는 WAITING (재고는 건드리지 않음). 앞에 기다리는 줄이 있으면 재고가 있어도 새 줄은 뒤에 선다 (먼저 온 순서 보장)
-   - 새 WAITING 때문에 부족이 늘었으면 `inventory.shortage` (shortQty 계산은 아래 "부족 수량")
-   - purchase: shortage 수신 시 같은 부품의 AUTO + REQUESTED 구매 건이 있으면 그 qty 에 더하고, 없으면 새로 만든다
+   - 부족한 부품은 구매 담당이 부족 부품 조회(`GET /inventory/parts/shortages`)로 보고 부품·수량·공급업체를 넣어 구매한다 (바로 발주, docs/specs/purchase-manual.md). 자동 구매와 `inventory.shortage` 는 #114 에서 없앴다
    - 생산 건의 모든 줄이 RESERVED → `inventory.reserved`, 하나라도 WAITING → `inventory.reservation-pending`
 4. production: reservation-pending → WAITING_MATERIAL + `production.status-changed`
 5. 입고: 구매 담당자가 발주(ORDERED) 후 입고 처리(RECEIVED) → `purchase.received` → inventory available + (stock_history RECEIVE),
@@ -98,7 +97,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
    - 이미 취소된 생산 건 → `production.cancelled` 재발행
 3. inventory: cancelled 수신 → 그 생산 건의 RESERVED 줄 RELEASED (available +, reserved −, stock_history RELEASE),
    WAITING 줄은 RELEASED (재고 변화 없음). 풀린 부품은 그 부품을 기다리던 줄에 먼저 온 순서로 넘긴다 (다 찬 생산 건은 inventory.reserved).
-   이미 들어간 AUTO 구매는 취소하지 않는다 (재고로 남음)
+   이미 발주한 구매는 취소하지 않는다 (재고로 남음)
 4. order: 차량마다 cancelled → CANCELLED, cancel-rejected → payload 의 status(거절 때 생산 건 상태)로 되돌림.
    그 주문에 CANCEL_REQUESTED 차량이 남지 않으면, 이번 요청 회차에 취소된 차량이 하나라도 있을 때 `order.cancelled` (회차당 한 번)
 
@@ -138,12 +137,10 @@ CANCELLED 는 빼고 남은 것으로 계산한다. 위에서부터 먼저 맞�
   늦은 쪽 API 는 409, 리스너는 재시도로 최신 상태를 보고 다시 판단한다
 
 ### 부족 수량 (shortQty)
-대기 중인 수량까지 포함해 "이번 요청으로 새로 늘어난 부족분"만 보낸다. 같은 부족을 두 번 구매하지 않기 위해서다.
-- 이전 부족 = max(0, 그 부품의 WAITING qty 합 − available)
-- 이후 부족 = max(0, 그 부품의 WAITING qty 합 + 이번 qty − available)
-- shortQty = 이후 − 이전. 0 이면 shortage 를 보내지 않는다
-- 예: available 3, 대기 2, 새 요청 2 → 이전 0, 이후 1 → shortQty 1
-- WAITING qty 합은 줄을 다 읽지 않고 DB 에서 합계로 구한다
+부족 부품 조회가 그때그때 계산한다 (#114, docs/specs/purchase-manual.md). 이벤트로 보내지 않는다.
+- shortQty = 그 부품의 WAITING qty 합 − available (0 보다 클 때만 부족 부품)
+- 예: available 3, 대기 2 + 2 → shortQty 1
+- 이미 발주한 수량은 빼지 않는다 (inventory 는 구매를 모른다)
 
 ### 목록 조회
 목록은 한 번에 다 읽지 않는다. id 커서(`id > lastId ORDER BY id LIMIT size`)로 나눠 준다 (작업지시 목록, 설비 이력 등).
@@ -185,7 +182,6 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
 | inventory.reservation-failed | inventory | production | productionId, reason (PART_NOT_FOUND), partIds |
-| inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
 | purchase.received | purchase | inventory | purchaseId, partId, qty |
 | production.step-dispatched | production | simulator | workOrderId, process, equipmentCode, dispatchSeq |
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process, dispatchSeq |
@@ -202,7 +198,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 - [ ] 로봇 공정은 production 이 비어 있는 설비에 배정하고 설비 보고로 진행된다. 프레스도 작업지시가 발행되자마자 배정된다
 - [ ] 공정 불량은 실적에 남고 같은 공정을 다시 한다. 이벤트는 없다
 - [ ] 검사 양품 → VIN 발행, production.completed, 부품 CONSUMED, 완성차 재고 증가, 주문 COMPLETED
-- [ ] 재고 부족: WAITING + AUTO 구매, 입고 후 먼저 대기한 순서대로 RESERVED, 작업지시 생성
+- [ ] 재고 부족: WAITING, 구매 담당이 부족 부품을 보고 발주, 입고 후 먼저 대기한 순서대로 RESERVED, 작업지시 생성
 - [ ] 설비 고장·정지: 그 설비의 공정이 PENDING 으로 돌아가 다른 설비로 재배정, 생산 건·주문 상태 그대로
 - [ ] 프레스 배정 전 취소: 예약 해제, 차량 CANCELLED, order.cancelled
 - [ ] 프레스 배정 후 취소: cancel-rejected, 차량 상태 복귀
@@ -210,4 +206,4 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 - [ ] 같은 이벤트를 두 번 받아도 재고와 상태가 한 번만 바뀐다
 - [ ] part.reserved 는 항상 그 부품의 RESERVED 예약 qty 합과 같다
 - [ ] shortQty 는 대기 수량을 포함한 증가분만 계산된다 (예: available 3, 대기 2, 새 요청 2 → 1)
-- [ ] 같은 부품 부족이 여러 번 오면 REQUESTED 상태의 AUTO 구매 1건에 수량이 합쳐진다
+- [ ] 부족 부품 조회는 기다리는 수량 − 재고로 그때그때 계산한다 (#114)

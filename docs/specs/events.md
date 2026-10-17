@@ -18,7 +18,6 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | inventory.reserved | inventory | production | productionId |
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
 | inventory.reservation-failed | inventory | production | productionId, reason (PART_NOT_FOUND), partIds[] |
-| inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
 | purchase.received | purchase | inventory | purchaseId, partId, qty |
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process, dispatchSeq |
 | equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result, defectReason, dispatchSeq |
@@ -27,7 +26,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 
 ## 흐름
 고객 주문(order) → 차량 1대마다 생산 건(production, BOM 전개) → 부품 예약(inventory)
-→ 부족하면 대기 + 자동 구매(purchase) → 입고 후 재예약 → 예약 완료(inventory.reserved)가 생산의 트리거
+→ 부족하면 대기, 구매 담당이 부족 부품을 보고 구매(purchase, docs/specs/purchase-manual.md) → 입고 후 재예약 → 예약 완료(inventory.reserved)가 생산의 트리거
 → 작업지시 5공정: 프레스·차체·도장은 production 이 설비에 배정하고 설비(simulator)가 보고, 의장·검사는 작업자가 진행 → 검사 완료 시 VIN 발행, 생산 완료 → 재고 차감·완성차 재고 → 출고
 설비 고장·정지는 그 설비의 공정을 다른 설비로 재배정(생산 실패 없음, docs/specs/equipment-status.md), 취소는 첫 공정(프레스) 배정 전까지만 (보상: 예약 해제). 상세: docs/specs/saga-order-fulfillment.md
 
