@@ -94,7 +94,7 @@
 
 - gateway 가 auth 의 **내부 API JWKS 엔드포인트(`GET /internal/jwks`)에서 공개키를 받아 캐시**하고,
   Access 토큰 서명을 공개키로 검증한다 (auth 에 매 요청 묻지 않음). 키 교체 시 JWKS 만 갱신
-- admin 전용 API 는 gateway 가 JWT 의 `role = ADMIN` 인지 확인한다. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
+- admin 전용 API 는 gateway 가 JWT 의 `role = ADMIN` 인지 확인한다. 다른 API 의 역할별 권한은 docs/specs/role-permissions.md. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
 
 ## Redis 키
 

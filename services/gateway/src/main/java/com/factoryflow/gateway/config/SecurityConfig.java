@@ -28,12 +28,17 @@ import reactor.core.publisher.Mono;
 
 /**
  * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 role 클레임으로 접근을 제어한다. 로그인·활성화·재발급·로그아웃은 공개(토큰을
- * 검증하지 않음), /api/auth/admin/** 은 ADMIN 만. 경로는 브라우저가 부르는 밖 주소 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는
- * jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다. (docs/specs/auth-account.md)
+ * 검증하지 않음), /api/auth/admin/** 은 ADMIN 만. 조회(GET)는 로그인한 직원 모두, 쓰기는 역할 표의 역할과 ADMIN 만, 표에 없는 쓰기는
+ * ADMIN 만 (docs/specs/role-permissions.md). 새 쓰기 API 를 다른 역할에 열려면 표와 여기에 더한다. 경로는 브라우저가 부르는 밖 주소
+ * 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
+ * (docs/specs/auth-account.md)
  */
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
+
+    /** 모든 요청을 할 수 있는 역할. */
+    private static final String ADMIN = "ADMIN";
 
     /** 로그인 없이 부르는 경로. 토큰이 붙어 있어도 검증하지 않는다. */
     private static final ServerWebExchangeMatcher PUBLIC_PATHS =
@@ -51,14 +56,7 @@ public class SecurityConfig {
             ServerHttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
-                .authorizeExchange(
-                        exchange ->
-                                exchange.matchers(PUBLIC_PATHS)
-                                        .permitAll()
-                                        .pathMatchers("/api/auth/admin/**")
-                                        .hasRole("ADMIN")
-                                        .anyExchange()
-                                        .authenticated())
+                .authorizeExchange(SecurityConfig::authorizeByRole)
                 .exceptionHandling(
                         handling ->
                                 handling.authenticationEntryPoint(GatewayErrors::unauthorized)
@@ -72,6 +70,31 @@ public class SecurityConfig {
                                         .authenticationEntryPoint(GatewayErrors::unauthorized)
                                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter())))
                 .build();
+    }
+
+    /**
+     * 역할 표 (docs/specs/role-permissions.md): 공개 경로, 쓰기는 표의 역할과 ADMIN, 조회는 로그인한 직원, 나머지 쓰기는 ADMIN.
+     */
+    private static void authorizeByRole(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
+        exchange.matchers(PUBLIC_PATHS)
+                .permitAll()
+                .pathMatchers("/api/auth/admin/**")
+                .hasRole(ADMIN)
+                .pathMatchers(HttpMethod.POST, "/api/orders", "/api/orders/*/cancel")
+                .hasAnyRole("SALES", ADMIN)
+                .pathMatchers(
+                        HttpMethod.POST,
+                        "/api/production/work-orders/*/steps/*/start",
+                        "/api/production/work-orders/*/steps/*/complete")
+                .hasAnyRole("WORKER", "PRODUCTION", ADMIN)
+                .pathMatchers(HttpMethod.POST, "/api/purchases/*/order", "/api/purchases/*/receive")
+                .hasAnyRole("PURCHASE", ADMIN)
+                .pathMatchers(HttpMethod.POST, "/api/inventory/finished-vehicles/*/ship")
+                .hasAnyRole("PRODUCTION", ADMIN)
+                .pathMatchers(HttpMethod.GET)
+                .authenticated()
+                .anyExchange()
+                .hasRole(ADMIN);
     }
 
     /**
