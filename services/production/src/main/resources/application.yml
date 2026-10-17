@@ -35,9 +35,11 @@ springdoc:
   paths-to-exclude: /internal/**
 
 # 로봇 공정 배정 (docs/specs/production-work-order.md "3. 로봇 공정 자동 진행", docs/specs/simulator.md)
-# 가상 설비(simulator)가 배정을 받아 보고한다. 시작 보고가 start-report-timeout 안에 없으면 그 배정을 되돌려 다시 배정한다
+# 가상 설비(simulator)가 배정을 받아 보고한다. 시작 보고가 start-report-timeout 안에 없거나, 시작 뒤 완료 보고가 completion-report-timeout 안에
+# 없으면 그 공정을 되돌려 다시 배정한다 (docs/specs/simulator-restart.md)
 factoryflow:
   line:
     dispatch-enabled: true
     dispatch-interval: 5s
     start-report-timeout: 1m
+    completion-report-timeout: 5m

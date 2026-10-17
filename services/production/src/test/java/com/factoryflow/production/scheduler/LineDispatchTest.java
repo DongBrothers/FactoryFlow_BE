@@ -327,6 +327,62 @@ class LineDispatchTest {
     }
 
     @Test
+    void equipmentStepWithoutACompletionReportIsWithdrawnAndDispatchedAgain() {
+        // 설비가 시작을 보고한 뒤 사라졌다 (docs/specs/simulator-restart.md "3. 완료 보고 시간 초과", #111)
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        listener.onStepStarted(started(workOrder, "PRESS", press, 1));
+        startedMinutesAgo(workOrder, "PRESS", 10);
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(2);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM equipment WHERE occupied_step_id IS NOT NULL",
+                                Integer.class))
+                .isEqualTo(1);
+        // 사라졌던 설비의 늦은 완료 보고는 지난 회차라 무시된다
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null, 1));
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
+                .isZero();
+    }
+
+    @Test
+    void recentEquipmentProgressIsKept() {
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        listener.onStepStarted(started(workOrder, "PRESS", press, 1));
+        startedMinutesAgo(workOrder, "PRESS", 1);
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "IN_PROGRESS");
+        assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(1);
+    }
+
+    @Test
+    void stepStartedByAWorkerIsNotWithdrawnEvenWhenItTakesLong() {
+        // 한 번 배정됐다가 되돌아간 로봇 공정을 작업자가 손으로 시작했다. 작업자 공정은 시간이 걸려도 되돌리지 않는다
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        expireDispatch(workOrder, "PRESS");
+        workOrderService.withdrawStaleDispatch(stepId(workOrder, "PRESS"), LocalDateTime.now());
+        workOrderService.startStep(workOrder, ProductionProcess.PRESS, press);
+        startedMinutesAgo(workOrder, "PRESS", 10);
+
+        dispatcher.dispatchAll();
+
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "IN_PROGRESS");
+        assertThat(outbox("production.step-dispatched")).hasSize(1);
+    }
+
+    @Test
     void recentDispatchIsKept() {
         long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
@@ -431,6 +487,15 @@ class LineDispatchTest {
         jdbc.update(
                 "UPDATE work_order_step SET dispatched_at = NOW(6) - INTERVAL 10 MINUTE"
                         + " WHERE work_order_id = ? AND process = ?",
+                workOrder,
+                process);
+    }
+
+    /** 앱이 쓰는 시각(LocalDateTime.now())으로 계산한다. DB 의 NOW() 는 시간대가 달라 "조금 전" 을 만들 수 없다. */
+    private void startedMinutesAgo(long workOrder, String process, int minutes) {
+        jdbc.update(
+                "UPDATE work_order_step SET started_at = ? WHERE work_order_id = ? AND process = ?",
+                LocalDateTime.now().minusMinutes(minutes),
                 workOrder,
                 process);
     }
