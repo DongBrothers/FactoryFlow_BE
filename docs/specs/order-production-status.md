@@ -39,6 +39,7 @@
 | 매핑 결과가 지금 차량 상태와 같음 (예: READY → IN_PROGRESS 둘 다 IN_PRODUCTION) | 바꾸지 않는다. 요약도 그대로 |
 | 처음 보는 생산 건인데 그 품목의 차량이 이미 수량만큼 있음 | 처리 중 오류 (`ORDER_VEHICLE_OVERFLOW`). 정상 흐름에서는 생기지 않는다 |
 | 없는 주문 품목 (orderId, productId), 품목의 주문이 없음, 모르는 status 값 | 처리 중 오류 (`ORDER_ITEM_NOT_FOUND`, `ORDER_NOT_FOUND`, `UNKNOWN_PRODUCTION_STATUS`). 재시도 후 DLQ. 정상 흐름에서는 생기지 않는다 |
+| 이 변경(#117) 전에 이미 WAITING_MATERIAL 인 주문·품목·차량 | V7 마이그레이션이 RECEIVED 로 바꾼다. 없는 상태 값이 남으면 조회가 깨진다 |
 | 처리 중 오류 | 트랜잭션 롤백, 1s·2s·4s 로 3번 재시도, 그래도 실패하면 `EVENT_DEAD_LETTERED` 로그 후 `order.production-status-changed.dlq` |
 
 - order 는 이 처리에서 이벤트를 발행하지 않는다
@@ -57,6 +58,8 @@
 - [ ] 품목 2개 중 하나 READY, 하나 WAITING_MATERIAL → 품목 상태가 각각 다르고 주문은 IN_PRODUCTION
 - [ ] 끝난 차량(COMPLETED, CANCELLED)에 온 status-changed 는 무시한다
 - [ ] CANCEL_REQUESTED 차량에는 CANCELLED 만 반영된다
-- [ ] 요약 규칙 8가지를 각각 확인한다 (단위 테스트)
+- [ ] 요약 규칙 6가지를 각각 확인한다 (단위 테스트)
+- [ ] 2대 품목에서 아는 한 대가 COMPLETED, 나머지는 아직 모름 → 품목 IN_PRODUCTION (모르는 차는 RECEIVED 로 셈)
+- [ ] V7: 이미 WAITING_MATERIAL 인 주문·품목·차량 → RECEIVED, 다른 상태는 그대로 (#117)
 - [ ] 같은 이벤트를 두 번 받아도 한 번만 반영된다
 - [ ] RabbitMQ 로 실제 이벤트를 보내면 처리되고, 없는 품목은 DLQ 로 간다 (Testcontainers)

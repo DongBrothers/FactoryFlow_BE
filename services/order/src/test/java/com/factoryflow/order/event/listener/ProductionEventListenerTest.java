@@ -86,8 +86,10 @@ class ProductionEventListenerTest {
     @Test
     void notYetKnownVehicleCountsAsReceived() {
         // 품목 A 는 2대인데 한 대만 알려졌다. 모르는 한 대는 RECEIVED 로 보고 요약한다
-        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+        // 아는 한 대가 COMPLETED 여도 모르는 한 대가 RECEIVED 라 품목은 COMPLETED 가 아니라 IN_PRODUCTION
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "COMPLETED"));
 
+        assertThat(vehicleStatus(101L)).isEqualTo("COMPLETED");
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
         assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
     }

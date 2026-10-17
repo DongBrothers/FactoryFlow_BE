@@ -8,7 +8,6 @@ import static com.factoryflow.order.domain.OrderStatus.RECEIVED;
 import static com.factoryflow.order.domain.OrderStatus.SHIPPED;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -47,10 +46,11 @@ class OrderStatusTest {
     }
 
     @Test
-    void waitingForMaterialIsNotAnOrderStatus() {
-        // 부품을 기다리는 차도 고객에게는 접수로 보인다 (docs/specs/order-production-status.md, #117)
-        assertThat(Arrays.stream(OrderStatus.values()).map(Enum::name))
-                .doesNotContain("WAITING_MATERIAL");
+    void notStartedVehiclesAreReceived() {
+        // 부품을 기다리는 차도 접수다. 시작 안 된 차만 남으면 부품 대기 단계 없이 접수로 요약한다 (#117)
+        assertThat(OrderStatus.summarize(List.of(RECEIVED, RECEIVED))).isEqualTo(RECEIVED);
+        assertThat(OrderStatus.summarize(List.of(RECEIVED, CANCEL_REQUESTED)))
+                .isEqualTo(CANCEL_REQUESTED);
     }
 
     @Test
