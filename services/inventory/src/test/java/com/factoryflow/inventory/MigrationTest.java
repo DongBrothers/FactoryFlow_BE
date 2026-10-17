@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.factoryflow.test.db.MigrationTestSupport;
 import java.sql.Connection;
+import java.sql.Timestamp;
+import java.util.Map;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -20,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("5");
+        jdbc = migrateTo("6");
     }
 
     @Test
@@ -42,6 +44,16 @@ class MigrationTest extends MigrationTestSupport {
                         db.queryForObject(
                                 "SELECT COUNT(*) FROM part WHERE available <= 0", Integer.class))
                 .isZero();
+        // 모든 재고에 LOT 이 있다: 시드 부품마다 초기 재고 LOT 하나, 수량은 실물 그대로 (다시 돌려도 두 번 잡히지 않음, #116)
+        assertThat(
+                        db.queryForObject(
+                                "SELECT COUNT(*) FROM part p JOIN part_lot l ON l.part_id = p.id"
+                                        + " AND l.lot_no = CONCAT('LOT-INIT-', p.id)"
+                                        + " WHERE l.purchase_id IS NULL"
+                                        + " AND l.remaining_qty = p.available + p.reserved",
+                                Integer.class))
+                .isEqualTo(18);
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM part_lot", Integer.class)).isEqualTo(18);
     }
 
     /** 빈 DB(inventory_seed) 를 하나 더 만들어 마이그레이션과 dev 시드(db/seed-dev)를 적용한다. */
@@ -197,19 +209,127 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
-    void v5PartLotUsageQtyIsPositiveAndLotIsOptional() {
+    void v5PartLotUsageQtyIsPositive() {
         jdbc.update(
                 "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
-                        + " VALUES ('KMH000017TU000521', 521, 1, NULL, 1, NOW(6))");
+                        + " VALUES ('KMH000017TU000521', 521, 1, 1, 1, NOW(6))");
 
         assertThatThrownBy(
                         () ->
                                 jdbc.update(
                                         "INSERT INTO part_lot_usage (vin, production_id, part_id,"
                                                 + " lot_id, qty, created_at) VALUES"
-                                                + " ('KMH000017TU000522', 522, 1, NULL, 0, NOW(6))"))
+                                                + " ('KMH000017TU000522', 522, 1, 1, 0, NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_part_lot_usage_qty");
+    }
+
+    @Test
+    void v6UsageNeedsALotAndInitialLotHasNoPurchase() {
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO part_lot_usage (vin, production_id, part_id,"
+                                                + " lot_id, qty, created_at) VALUES"
+                                                + " ('KMH000017TU000531', 531, 1, NULL, 1, NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("lot_id");
+        jdbc.update(
+                "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
+                        + " received_at, created_at, updated_at)"
+                        + " VALUES (1, 'LOT-INIT-1', NULL, 5, 5, NOW(6), NOW(6), NOW(6))");
+    }
+
+    @Test
+    void v6GivesStockWithoutLotAnInitialLot() {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE inventory_v6");
+        var upgrade =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/inventory_v6"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("5").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        // 타이어: 실물 10 = LOT 3 + LOT 없음 7, LOT 없이 이미 4 를 썼다. 엔진: 실물 0, 쓴 것 없음. 시트: 실물 0, LOT 없이 2 를
+        // 썼다
+        db.update(
+                "INSERT INTO part (id, code, name, unit, available, reserved, created_at,"
+                        + " updated_at) VALUES (1, 'TIRE', '타이어', 'EA', 8, 2, NOW(6), NOW(6)),"
+                        + " (2, 'ENG', '엔진', 'EA', 0, 0, NOW(6), NOW(6)),"
+                        + " (3, 'SEAT', '시트', 'EA', 0, 0, NOW(6), NOW(6))");
+        db.update(
+                "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
+                        + " received_at, created_at, updated_at)"
+                        + " VALUES (1, 'LOT-261001-000001', 1, 5, 3, NOW(6), NOW(6), NOW(6))");
+        db.update(
+                "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
+                        + " VALUES ('KMH000017TU000541', 541, 1, NULL, 4, NOW(6)),"
+                        + " ('KMH000017TU000541', 541, 1, 1, 2, NOW(6)),"
+                        + " ('KMH000017TU000542', 542, 3, NULL, 2, NOW(6))");
+
+        Timestamp before = db.queryForObject("SELECT NOW(6)", Timestamp.class);
+        Flyway.configure().dataSource(upgrade).target("6").load().migrate();
+        Timestamp after = db.queryForObject("SELECT NOW(6)", Timestamp.class);
+
+        assertThat(
+                        db.queryForList(
+                                "SELECT part_id, lot_no, received_qty, remaining_qty"
+                                        + " FROM part_lot WHERE lot_no LIKE 'LOT-INIT-%'"
+                                        + " ORDER BY part_id"))
+                .containsExactly(
+                        Map.of(
+                                "part_id",
+                                1L,
+                                "lot_no",
+                                "LOT-INIT-1",
+                                "received_qty",
+                                11,
+                                "remaining_qty",
+                                7),
+                        Map.of(
+                                "part_id",
+                                3L,
+                                "lot_no",
+                                "LOT-INIT-3",
+                                "received_qty",
+                                2,
+                                "remaining_qty",
+                                0));
+        assertThat(
+                        db.queryForList(
+                                "SELECT l.lot_no FROM part_lot_usage u JOIN part_lot l"
+                                        + " ON l.id = u.lot_id ORDER BY u.id",
+                                String.class))
+                .containsExactly("LOT-INIT-1", "LOT-261001-000001", "LOT-INIT-3");
+        // 초기 재고 LOT 은 id 가 커도 입고 시각이 그 부품의 기존 LOT 보다 앞이라 가장 먼저 쓰인다
+        assertThat(
+                        db.queryForList(
+                                "SELECT lot_no FROM part_lot WHERE part_id = 1"
+                                        + " ORDER BY received_at, id",
+                                String.class))
+                .containsExactly("LOT-INIT-1", "LOT-261001-000001");
+        // LOT 이 없던 부품의 초기 재고 LOT 은 마이그레이션 시각에 들어온 것으로 본다
+        assertThat(
+                        db.queryForObject(
+                                "SELECT received_at FROM part_lot WHERE lot_no = 'LOT-INIT-3'",
+                                Timestamp.class))
+                .isBetween(before, after);
+        // 기존 LOT 이 있던 부품의 초기 재고 LOT 은 가장 이른 LOT 보다 정확히 1초 앞이다
+        assertThat(
+                        db.queryForObject(
+                                "SELECT TIMESTAMPDIFF(MICROSECOND, i.received_at, l.received_at)"
+                                        + " FROM part_lot i JOIN part_lot l"
+                                        + " ON l.lot_no = 'LOT-261001-000001'"
+                                        + " WHERE i.lot_no = 'LOT-INIT-1'",
+                                Long.class))
+                .isEqualTo(1_000_000L);
+        assertThat(
+                        db.queryForObject(
+                                "SELECT COUNT(*) FROM part_lot WHERE lot_no LIKE 'LOT-INIT-%'"
+                                        + " AND purchase_id IS NULL",
+                                Integer.class))
+                .isEqualTo(2);
     }
 
     private void insertLot(String lotNo, long purchaseId, int receivedQty, int remainingQty) {

@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/** 완성차에 쓰인 부품 LOT. 추가만 하고 수정하지 않는다. lotId 가 null 이면 LOT 도입 전 재고에서 썼다. */
+/** 완성차에 쓰인 부품 LOT. 추가만 하고 수정하지 않는다. 모든 재고에 LOT 이 있으므로 lotId 는 항상 있다 (#116). */
 @Getter
 @Entity
 @Table(name = "part_lot_usage")
@@ -35,7 +35,7 @@ public class PartLotUsage {
     @Column(nullable = false, updatable = false)
     private Long partId;
 
-    @Column(updatable = false)
+    @Column(nullable = false, updatable = false)
     private Long lotId;
 
     @Column(nullable = false, updatable = false)
@@ -53,7 +53,7 @@ public class PartLotUsage {
         this.qty = qty;
     }
 
-    /** 그 차가 LOT 에서 qty 만큼 썼다. lotId 가 null 이면 LOT 도입 전 재고. */
+    /** 그 차가 LOT 에서 qty 만큼 썼다. */
     public static PartLotUsage use(
             String vin, Long productionId, Long partId, Long lotId, int qty) {
         return new PartLotUsage(vin, productionId, partId, lotId, qty);

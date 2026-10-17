@@ -51,6 +51,8 @@ class ProductionCompletedTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("DELETE FROM part_lot_usage");
+        jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM stock_history");
         jdbc.update("DELETE FROM part_reservation");
@@ -239,7 +241,17 @@ class ProductionCompletedTest {
                 code,
                 available,
                 reserved);
-        return jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
+        long partId = jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
+        // 모든 재고에 LOT 이 있다 (#116): 실물만큼 초기 재고 LOT
+        jdbc.update(
+                "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
+                        + " received_at, created_at, updated_at)"
+                        + " VALUES (?, ?, NULL, ?, ?, NOW(6), NOW(6), NOW(6))",
+                partId,
+                "LOT-INIT-" + partId,
+                available + reserved,
+                available + reserved);
+        return partId;
     }
 
     private void insertReservation(long productionId, long partId, int qty, String status) {

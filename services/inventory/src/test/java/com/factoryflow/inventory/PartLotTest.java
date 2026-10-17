@@ -29,6 +29,8 @@ class PartLotTest {
     @Autowired JdbcTemplate jdbc;
 
     MockMvc mockMvc;
+    String engineInitNo;
+    String tireInitNo;
 
     @BeforeEach
     void setUp() {
@@ -39,29 +41,33 @@ class PartLotTest {
         jdbc.update("DELETE FROM part");
         long engine = insertPart("ENG-T", "엔진");
         long tire = insertPart("TIRE-T", "타이어");
+        long engineInit = insertLot(engine, "LOT-INIT-" + engine, null);
+        long tireInit = insertLot(tire, "LOT-INIT-" + tire, null);
         long lot1 = insertLot(tire, LOT_1, 1L);
+        engineInitNo = "LOT-INIT-" + engine;
+        tireInitNo = "LOT-INIT-" + tire;
         insertLot(tire, LOT_2, 2L);
         insertFinishedVehicle(VIN_1, 100L, "IN_STOCK");
         insertFinishedVehicle(VIN_2, 101L, "SHIPPED");
         insertFinishedVehicle("KMH000017TU000102", 102L, "IN_STOCK");
-        // VIN_1: 타이어 LOT1 2, 타이어 LOT 없음 2, 엔진 LOT 없음 1. VIN_2: 타이어 LOT1 1
+        // VIN_1: 타이어 LOT1 2, 타이어 초기 재고 2, 엔진 초기 재고 1. VIN_2: 타이어 LOT1 1
         insertUsage(VIN_1, 100L, tire, lot1, 2);
-        insertUsage(VIN_1, 100L, tire, null, 2);
-        insertUsage(VIN_1, 100L, engine, null, 1);
+        insertUsage(VIN_1, 100L, tire, tireInit, 2);
+        insertUsage(VIN_1, 100L, engine, engineInit, 1);
         insertUsage(VIN_2, 101L, tire, lot1, 1);
     }
 
     @Test
-    void partLotsOfAVehicleAreByPartCodeThenLotWithoutLotFirst() throws Exception {
+    void partLotsOfAVehicleAreByPartCodeThenLotInReceiptOrder() throws Exception {
         mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN_1))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(3))
                 .andExpect(jsonPath("$.data[0].partCode").value("ENG-T"))
                 .andExpect(jsonPath("$.data[0].partName").value("엔진"))
-                .andExpect(jsonPath("$.data[0].lotNo").doesNotExist())
+                .andExpect(jsonPath("$.data[0].lotNo").value(engineInitNo))
                 .andExpect(jsonPath("$.data[0].qty").value(1))
                 .andExpect(jsonPath("$.data[1].partCode").value("TIRE-T"))
-                .andExpect(jsonPath("$.data[1].lotNo").doesNotExist())
+                .andExpect(jsonPath("$.data[1].lotNo").value(tireInitNo))
                 .andExpect(jsonPath("$.data[1].qty").value(2))
                 .andExpect(jsonPath("$.data[2].lotNo").value(LOT_1))
                 .andExpect(jsonPath("$.data[2].qty").value(2))
@@ -99,6 +105,30 @@ class PartLotTest {
                 .andExpect(jsonPath("$.data[1].qty").value(1))
                 .andExpect(jsonPath("$.data[0].productionId").doesNotExist())
                 .andExpect(jsonPath("$.data[0].orderId").doesNotExist());
+    }
+
+    @Test
+    void partLotsOfAVehicleFollowReceiptTimeNotId() throws Exception {
+        // 초기 재고 LOT 의 입고 시각을 LOT1 뒤로 옮기면 VIN_1 의 타이어는 LOT1 이 먼저 보인다
+        jdbc.update(
+                "UPDATE part_lot SET received_at = NOW(6) + INTERVAL 1 DAY WHERE lot_no = ?",
+                tireInitNo);
+
+        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN_1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].lotNo").value(LOT_1))
+                .andExpect(jsonPath("$.data[2].lotNo").value(tireInitNo));
+    }
+
+    @Test
+    void vehiclesOfAnInitialStockLot() throws Exception {
+        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", tireInitNo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].vin").value(VIN_1))
+                .andExpect(jsonPath("$.data[0].qty").value(2));
+        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-INIT-x"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -140,7 +170,7 @@ class PartLotTest {
         return jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
     }
 
-    private long insertLot(long partId, String lotNo, long purchaseId) {
+    private long insertLot(long partId, String lotNo, Long purchaseId) {
         jdbc.update(
                 "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
                         + " received_at, created_at, updated_at)"

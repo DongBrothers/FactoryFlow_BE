@@ -22,3 +22,11 @@ INSERT INTO part (id, code, name, unit, available, created_at, updated_at) VALUE
     (1017, 'BODY-VAN', '승합·상용 차체', 'EA', 100, NOW(6), NOW(6)),
     (1018, 'ECU', '차량 제어기', 'EA', 600, NOW(6), NOW(6))
 ON DUPLICATE KEY UPDATE name = VALUES(name), unit = VALUES(unit), is_deleted = FALSE;
+
+-- 모든 재고에 LOT 이 있다 (#116). LOT 이 하나도 없는 부품에만 지금 재고만큼 초기 재고 LOT 을 넣는다 (다시 돌려도 수량이 두 번 잡히지 않음)
+INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty, received_at, created_at, updated_at)
+SELECT p.id, CONCAT('LOT-INIT-', p.id), NULL, p.available + p.reserved, p.available + p.reserved, NOW(6), NOW(6), NOW(6)
+FROM part p
+WHERE p.id BETWEEN 1001 AND 1018
+  AND p.available + p.reserved > 0
+  AND NOT EXISTS (SELECT 1 FROM part_lot l WHERE l.part_id = p.id);
