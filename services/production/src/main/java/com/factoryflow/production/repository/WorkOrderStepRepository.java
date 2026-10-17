@@ -20,4 +20,9 @@ public interface WorkOrderStepRepository
     /** 시작 보고 없이 deadline 전에 배정된 공정, 오래된 순서로. */
     List<WorkOrderStep> findAllByStatusAndDispatchedAtBeforeOrderByDispatchedAtAsc(
             StepStatus status, LocalDateTime deadline, Limit limit);
+
+    /** 배정으로 시작해(설비 진행) deadline 전에 시작한 공정, 오래된 순서로. 작업자가 시작한 공정은 dispatchedAt 이 없어 빠진다. */
+    List<WorkOrderStep>
+            findAllByStatusAndDispatchedAtIsNotNullAndStartedAtBeforeOrderByStartedAtAsc(
+                    StepStatus status, LocalDateTime deadline, Limit limit);
 }

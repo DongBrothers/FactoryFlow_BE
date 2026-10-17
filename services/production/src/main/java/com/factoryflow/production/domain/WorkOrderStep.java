@@ -88,6 +88,7 @@ public class WorkOrderStep extends BaseEntity {
     /** 설비에서 공정을 시작한다. 시작 가능 여부는 서비스가 먼저 확인한다. */
     public void start(String equipmentCode, LocalDateTime now) {
         this.dispatchSeq++;
+        this.dispatchedAt = null;
         this.status = StepStatus.IN_PROGRESS;
         this.equipmentCode = equipmentCode;
         this.startedAt = now;
@@ -113,6 +114,16 @@ public class WorkOrderStep extends BaseEntity {
     /** 이 회차(dispatchSeq)의 설비 보고인가. 회차가 없는 보고(이 기능 전 메시지)는 회차로 거르지 않는다. */
     public boolean isCurrentDispatch(Integer reportedSeq) {
         return reportedSeq == null || reportedSeq == dispatchSeq;
+    }
+
+    /**
+     * 설비가 진행 중인데(배정으로 시작) deadline 전에 시작해 완료 보고 없이 시간이 지났는가. 작업자가 시작한 공정은 dispatchedAt 이 없어 아니다.
+     */
+    public boolean isEquipmentRunStartedBefore(LocalDateTime deadline) {
+        return isInProgress()
+                && dispatchedAt != null
+                && startedAt != null
+                && startedAt.isBefore(deadline);
     }
 
     /** 배정 뒤 시작 보고 없이 시간이 지났는가. */

@@ -11,6 +11,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,18 +52,32 @@ public class LineDispatcher {
     }
 
     /**
-     * 시작 보고 없이 시간이 지난 배정을 되돌린다 (공정마다 따로 트랜잭션). 같은 바퀴의 배정에서 바로 다시 배정된다. 그사이 보고가 와서 실패하면 다음 바퀴에 다시
-     * 본다.
+     * 시작 보고 없이 시간이 지난 배정과, 완료 보고 없이 시간이 지난 설비 공정을 되돌린다 (공정마다 따로 트랜잭션). 같은 바퀴의 배정에서 바로 다시 배정된다. 그사이
+     * 보고가 와서 실패하면 다음 바퀴에 다시 본다.
      */
     private void withdrawStaleDispatches() {
-        LocalDateTime deadline = LocalDateTime.now().minus(lineProperties.startReportTimeout());
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startDeadline = now.minus(lineProperties.startReportTimeout());
         for (Long stepId :
-                workOrderService.findStaleDispatchedStepIds(deadline, STALE_DISPATCH_BATCH)) {
-            try {
-                workOrderService.withdrawStaleDispatch(stepId, deadline);
-            } catch (CustomException | OptimisticLockingFailureException e) {
-                log.info("배정 되돌리기 건너뜀, 다음 바퀴에 다시 봄: stepId={} reason={}", stepId, e.getMessage());
-            }
+                workOrderService.findStaleDispatchedStepIds(startDeadline, STALE_DISPATCH_BATCH)) {
+            withdrawQuietly(
+                    stepId, id -> workOrderService.withdrawStaleDispatch(id, startDeadline));
+        }
+        LocalDateTime completionDeadline = now.minus(lineProperties.completionReportTimeout());
+        for (Long stepId :
+                workOrderService.findStaleProgressStepIds(
+                        completionDeadline, STALE_DISPATCH_BATCH)) {
+            withdrawQuietly(
+                    stepId, id -> workOrderService.withdrawStaleProgress(id, completionDeadline));
+        }
+    }
+
+    /** 공정마다 따로 트랜잭션으로 되돌린다. 그사이 보고가 와서 실패하면 다음 바퀴에 다시 본다. */
+    private void withdrawQuietly(Long stepId, Consumer<Long> withdraw) {
+        try {
+            withdraw.accept(stepId);
+        } catch (CustomException | OptimisticLockingFailureException e) {
+            log.info("공정 되돌리기 건너뜀, 다음 바퀴에 다시 봄: stepId={} reason={}", stepId, e.getMessage());
         }
     }
 

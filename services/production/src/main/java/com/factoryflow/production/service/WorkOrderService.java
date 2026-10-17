@@ -219,11 +219,39 @@ public class WorkOrderService {
     @Transactional
     public void withdrawStaleDispatch(Long stepId, LocalDateTime deadline) {
         WorkOrderStep step = findStep(stepId);
-        if (!step.isDispatchedBefore(deadline)) {
-            return;
+        if (step.isDispatchedBefore(deadline)) {
+            withdraw(step, "시작 보고 없이 시간이 지나 배정을 되돌림");
         }
+    }
+
+    /**
+     * 설비가 시작한 뒤 완료 보고 없이 deadline 이 지난 공정 id, 오래된 순서로 limit 개 (docs/specs/simulator-restart.md
+     * "3").
+     */
+    @Transactional(readOnly = true)
+    public List<Long> findStaleProgressStepIds(LocalDateTime deadline, int limit) {
+        return findEquipmentRunStartedBefore(deadline, limit).stream()
+                .map(WorkOrderStep::getId)
+                .toList();
+    }
+
+    /**
+     * 완료 보고가 오지 않은 설비 공정을 되돌린다 (시작 보고 시간 초과와 같은 처리). 그사이 완료됐거나 작업자 공정이면 그대로 둔다. 다시 배정하면 회차가 올라 늦은
+     * 완료 보고는 무시된다.
+     */
+    @Transactional
+    public void withdrawStaleProgress(Long stepId, LocalDateTime deadline) {
+        WorkOrderStep step = findStep(stepId);
+        if (step.isEquipmentRunStartedBefore(deadline)) {
+            withdraw(step, "완료 보고 없이 시간이 지나 설비 공정을 되돌림");
+        }
+    }
+
+    /** 공정을 시작 전으로 되돌리고 설비를 비운다 (실적 없음). 작업지시 변경을 기록해 동시 변경과 version 으로 부딪히게 한다. */
+    private void withdraw(WorkOrderStep step, String reason) {
         log.info(
-                "시작 보고 없이 시간이 지나 배정을 되돌림: workOrderId={} process={} equipment={}",
+                "{}: workOrderId={} process={} equipment={}",
+                reason,
                 step.getWorkOrderId(),
                 step.getProcess(),
                 step.getEquipmentCode());
@@ -448,6 +476,12 @@ public class WorkOrderService {
     private List<WorkOrderStep> findDispatchedBefore(LocalDateTime deadline, int limit) {
         return workOrderStepRepository.findAllByStatusAndDispatchedAtBeforeOrderByDispatchedAtAsc(
                 StepStatus.DISPATCHED, deadline, Limit.of(limit));
+    }
+
+    private List<WorkOrderStep> findEquipmentRunStartedBefore(LocalDateTime deadline, int limit) {
+        return workOrderStepRepository
+                .findAllByStatusAndDispatchedAtIsNotNullAndStartedAtBeforeOrderByStartedAtAsc(
+                        StepStatus.IN_PROGRESS, deadline, Limit.of(limit));
     }
 
     private List<WorkOrderStep> findSteps(Long workOrderId) {
