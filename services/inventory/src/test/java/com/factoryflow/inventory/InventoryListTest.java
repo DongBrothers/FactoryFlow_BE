@@ -121,8 +121,9 @@ class InventoryListTest {
     }
 
     @Test
-    void lotsOfAPartAreRemainingOnesInReceiptOrderWithStockWithoutLot() throws Exception {
-        // 타이어 실물 12 = LOT2 남은 3 + LOT3 남은 5 + LOT 없음 4. LOT1 은 다 썼다
+    void lotsOfAPartAreRemainingOnesInReceiptOrderStartingWithInitialStock() throws Exception {
+        // 타이어 실물 12 = 초기 재고 LOT 4 + LOT2 남은 3 + LOT3 남은 5. LOT1 은 다 썼다 (#116, 모든 재고에 LOT)
+        insertLot(tire, "LOT-INIT-" + tire, null, 10, 4);
         insertLot(tire, "LOT-261001-000001", 1L, 6, 0);
         insertLot(tire, "LOT-261002-000002", 2L, 6, 3);
         insertLot(tire, "LOT-261003-000003", 3L, 5, 5);
@@ -132,13 +133,15 @@ class InventoryListTest {
                 .andExpect(jsonPath("$.data.partCode").value("TIRE-T"))
                 .andExpect(jsonPath("$.data.partName").value("타이어"))
                 .andExpect(jsonPath("$.data.onHand").value(12))
-                .andExpect(jsonPath("$.data.withoutLotQty").value(4))
-                .andExpect(jsonPath("$.data.lots.length()").value(2))
-                .andExpect(jsonPath("$.data.lots[0].lotNo").value("LOT-261002-000002"))
-                .andExpect(jsonPath("$.data.lots[0].receivedQty").value(6))
-                .andExpect(jsonPath("$.data.lots[0].remainingQty").value(3))
-                .andExpect(jsonPath("$.data.lots[0].receivedAt").exists())
-                .andExpect(jsonPath("$.data.lots[1].lotNo").value("LOT-261003-000003"))
+                .andExpect(jsonPath("$.data.withoutLotQty").doesNotExist())
+                .andExpect(jsonPath("$.data.lots.length()").value(3))
+                .andExpect(jsonPath("$.data.lots[0].lotNo").value("LOT-INIT-" + tire))
+                .andExpect(jsonPath("$.data.lots[0].remainingQty").value(4))
+                .andExpect(jsonPath("$.data.lots[1].lotNo").value("LOT-261002-000002"))
+                .andExpect(jsonPath("$.data.lots[1].receivedQty").value(6))
+                .andExpect(jsonPath("$.data.lots[1].remainingQty").value(3))
+                .andExpect(jsonPath("$.data.lots[1].receivedAt").exists())
+                .andExpect(jsonPath("$.data.lots[2].lotNo").value("LOT-261003-000003"))
                 .andExpect(jsonPath("$.data.lots[0].lotId").doesNotExist());
     }
 
@@ -149,12 +152,14 @@ class InventoryListTest {
         mockMvc.perform(get("/inventory/parts/{partId}/lots", 999_999))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PART_NOT_FOUND"));
-        // LOT 이 없으면 실물이 모두 LOT 없는 재고다
+        // 처음부터 있던 재고도 초기 재고 LOT 으로 보인다
+        insertLot(engine, "LOT-INIT-" + engine, null, 5, 5);
         mockMvc.perform(get("/inventory/parts/{partId}/lots", engine))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.onHand").value(5))
-                .andExpect(jsonPath("$.data.withoutLotQty").value(5))
-                .andExpect(jsonPath("$.data.lots.length()").value(0));
+                .andExpect(jsonPath("$.data.lots.length()").value(1))
+                .andExpect(jsonPath("$.data.lots[0].lotNo").value("LOT-INIT-" + engine))
+                .andExpect(jsonPath("$.data.lots[0].remainingQty").value(5));
     }
 
     @Test
@@ -201,7 +206,7 @@ class InventoryListTest {
     }
 
     private void insertLot(
-            long partId, String lotNo, long purchaseId, int received, int remaining) {
+            long partId, String lotNo, Long purchaseId, int received, int remaining) {
         jdbc.update(
                 "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
                         + " received_at, created_at, updated_at)"

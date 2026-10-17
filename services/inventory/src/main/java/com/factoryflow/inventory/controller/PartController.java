@@ -59,7 +59,7 @@ public class PartController {
     @Operation(
             summary = "부품 LOT 별 재고",
             description =
-                    "부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로 본다. LOT 을 붙이기 전부터 있던 재고는 withoutLotQty 로 따로 보이고 생산에 먼저 쓴다.")
+                    "부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로 본다. 처음부터 있던 재고는 초기 재고 LOT(LOT-INIT-{부품 id})이고 가장 먼저 쓴다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

@@ -1,9 +1,11 @@
 package com.factoryflow.inventory.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.factoryflow.common.event.EventEnvelope;
+import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.time.Instant;
 import java.util.List;
@@ -33,6 +35,8 @@ class PartLotAllocationTest {
 
     long engine;
     long tire;
+    long engineInit;
+    long tireInit;
     long lot1;
     long lot2;
 
@@ -46,10 +50,13 @@ class PartLotAllocationTest {
         jdbc.update("DELETE FROM part");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
-        // 엔진: 실물 10, LOT 없음. 타이어: 실물 10 = LOT 없음 2 + LOT1 3 + LOT2 5
+        // 모든 재고에 LOT 이 있다 (#116). 엔진: 실물 10 = 초기 재고 LOT 10. 타이어: 실물 10 = 초기 재고 LOT 2 + LOT1 3 +
+        // LOT2 5
         // 생산 건 100 은 엔진 1, 타이어 4 를, 101 은 타이어 4 를 잡아 두었다
         engine = insertPart("ENG-T", 9, 1);
         tire = insertPart("TIRE-T", 2, 8);
+        engineInit = insertLot(engine, "LOT-INIT-" + engine, null, 10);
+        tireInit = insertLot(tire, "LOT-INIT-" + tire, null, 2);
         lot1 = insertLot(tire, "LOT-261001-000001", 1L, 3);
         lot2 = insertLot(tire, "LOT-261002-000002", 2L, 5);
         insertReservation(100L, engine, 1);
@@ -86,19 +93,23 @@ class PartLotAllocationTest {
     }
 
     @Test
-    void completedTakesStockWithoutLotFirstThenLotsInReceiptOrder() {
+    void completedTakesLotsInReceiptOrderStartingWithInitialStock() {
         productionListener.onProductionCompleted(completed(100L, VIN_1));
 
-        // 타이어 4 = LOT 없음 2 + LOT1 2, 엔진 1 = LOT 없음 1
+        // 타이어 4 = 초기 재고 LOT 2 + LOT1 2, 엔진 1 = 초기 재고 LOT 1
         assertThat(usages(VIN_1))
                 .containsExactlyInAnyOrder(
-                        tuple(engine, null, 1), tuple(tire, null, 2), tuple(tire, lot1, 2));
+                        tuple(engine, engineInit, 1),
+                        tuple(tire, tireInit, 2),
+                        tuple(tire, lot1, 2));
+        assertThat(remaining(engineInit)).isEqualTo(9);
+        assertThat(remaining(tireInit)).isZero();
         assertThat(remaining(lot1)).isEqualTo(1);
         assertThat(remaining(lot2)).isEqualTo(5);
 
         productionListener.onProductionCompleted(completed(101L, VIN_2));
 
-        // 남은 LOT 없는 재고가 없어 LOT1 의 남은 1, 그다음 LOT2 에서 3 (한 부품이 LOT 두 개에 걸친다)
+        // 초기 재고 LOT 을 다 써서 LOT1 의 남은 1, 그다음 LOT2 에서 3 (한 부품이 LOT 두 개에 걸친다)
         assertThat(usages(VIN_2)).containsExactly(tuple(tire, lot1, 1), tuple(tire, lot2, 3));
         assertThat(remaining(lot1)).isZero();
         assertThat(remaining(lot2)).isEqualTo(2);
@@ -112,6 +123,26 @@ class PartLotAllocationTest {
 
         assertThat(usages(VIN_1)).hasSize(3);
         assertThat(remaining(lot1)).isEqualTo(1);
+    }
+
+    @Test
+    void lotsShortOfReservedStockFailWithoutRecordingUsage() {
+        // 실물과 LOT 이 어긋난 데이터: 타이어 LOT 남은 수량 합이 잡아 둔 4 보다 적다
+        jdbc.update("UPDATE part_lot SET remaining_qty = 0 WHERE part_id = ?", tire);
+        jdbc.update("UPDATE part_lot SET remaining_qty = 1 WHERE id = ?", lot2);
+
+        assertThatThrownBy(() -> productionListener.onProductionCompleted(completed(100L, VIN_1)))
+                .isInstanceOf(CustomException.class)
+                .hasMessageContaining("LOT 남은 수량");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM part_lot_usage", Integer.class))
+                .isZero();
+        assertThat(remaining(lot2)).isEqualTo(1);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM finished_vehicle WHERE vin = ?",
+                                Integer.class,
+                                VIN_1))
+                .isZero();
     }
 
     @Test
@@ -182,7 +213,7 @@ class PartLotAllocationTest {
         return jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
     }
 
-    private long insertLot(long partId, String lotNo, long purchaseId, int qty) {
+    private long insertLot(long partId, String lotNo, Long purchaseId, int qty) {
         jdbc.update(
                 "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
                         + " received_at, created_at, updated_at)"

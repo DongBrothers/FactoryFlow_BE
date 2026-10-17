@@ -35,7 +35,8 @@ public class PartLot extends BaseEntity {
     @Column(nullable = false, updatable = false, length = 32)
     private String lotNo;
 
-    @Column(nullable = false, updatable = false)
+    /** 이 LOT 을 들여온 구매 건. 초기 재고 LOT(LOT-INIT-{부품 id}, V6)은 없다. */
+    @Column(updatable = false)
     private Long purchaseId;
 
     @Column(nullable = false, updatable = false)

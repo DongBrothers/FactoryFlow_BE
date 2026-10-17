@@ -7,7 +7,7 @@ VIN 으로 그 차에 쓰인 부품 LOT 을, LOT 으로 그 LOT 이 들어간 �
 
 - LOT 은 inventory 가 붙인다. 입고(`purchase.received`)를 받아 재고를 늘리는 곳이 inventory 라, 이벤트 계약을 바꾸지 않아도 된다
 - 어느 LOT 을 썼는지는 **소모할 때(생산 완료) 먼저 들어온 LOT 부터(FIFO)** 정한다. 예약할 때 LOT 을 정하면 취소·재배정 때 LOT 수량도 되돌려야 해서 복잡해진다
-- LOT 을 붙이기 전부터 있던 재고(지금 재고, dev 시드)는 "LOT 없음"으로 남는다. 가장 오래된 재고라 FIFO 에서 먼저 쓴다
+- **모든 재고에 LOT 이 있다 (#116).** LOT 을 붙이기 전부터 있던 재고(지금 재고, dev 시드)는 부품마다 초기 재고 LOT `LOT-INIT-{부품 id}` (구매 건 없음)이 된다. 가장 먼저 들어온 LOT 이라 FIFO 에서 먼저 쓴다
 - LOT 별 재고 조회, 공급업체 LOT 번호 입력은 넣지 않는다
 
 ## 흐름
@@ -20,10 +20,9 @@ VIN 으로 그 차에 쓰인 부품 LOT 을, LOT 으로 그 LOT 이 들어간 �
 
 ### 2. 생산 완료 → 소모 LOT 기록 (inventory ← production.completed, 지금 처리에 더함)
 예약 줄을 CONSUMED 로 바꾸는 지금 처리(docs/specs/production-completion.md)와 같은 트랜잭션에서, 예약 줄(부품, qty)마다
-1. 창고 실물 = available + reserved (소모 전), LOT 이 있는 수량 = 그 부품 LOT 들의 remainingQty 합, **LOT 없는 수량 = 실물 − LOT 있는 수량**
-2. LOT 없는 수량에서 먼저 뺀다 → `part_lot_usage { vin, productionId, partId, lotId = NULL, qty }`
-3. 모자라면 remainingQty > 0 인 LOT 을 입고 순서(id)로 빼 나간다. LOT 마다 remainingQty −, `part_lot_usage { …, lotId }` 한 줄 (한 부품이 LOT 두 개에 걸칠 수 있다)
-4. 끝나면 그 부품의 LOT remainingQty 합 ≤ available + reserved (소모 후) 가 유지된다
+1. remainingQty > 0 인 LOT 을 입고 순서(id)로 빼 나간다 (초기 재고 LOT 이 가장 먼저). LOT 마다 remainingQty −, `part_lot_usage { vin, productionId, partId, lotId, qty }` 한 줄 (한 부품이 LOT 두 개에 걸칠 수 있다)
+2. LOT 이 모자라면 실물과 LOT 이 어긋난 데이터다. `PART_LOT_SHORTAGE` 로 실패시켜 트랜잭션을 되돌린다 (재시도 후 DLQ, ERROR 로그)
+3. 끝나면 그 부품의 LOT remainingQty 합 = available + reserved (소모 후) 가 유지된다
 
 동시성: 입고와 소모는 둘 다 그 부품 행을 바꾸므로 지금의 부품 version 이 LOT 변경도 함께 막는다 (LOT 에 따로 version 을 두지 않는다).
 예약 해제(취소)는 실물이 그대로라 LOT 을 바꾸지 않는다.
@@ -32,9 +31,9 @@ VIN 으로 그 차에 쓰인 부품 LOT 을, LOT 으로 그 LOT 이 들어간 �
 gateway 경로 `/api/inventory/finished-vehicles/{vin}/part-lots`
 ```json
 [ { "partCode": "ENG-G16", "partName": "가솔린 엔진 1.6", "lotNo": "LOT-261017-000012", "qty": 1, "receivedAt": "2026-10-17T10:00:00" },
-  { "partCode": "TIRE-16", "partName": "타이어 16인치", "lotNo": null, "qty": 4, "receivedAt": null } ]
+  { "partCode": "TIRE-16", "partName": "타이어 16인치", "lotNo": "LOT-INIT-1012", "qty": 4, "receivedAt": "2026-10-17T09:00:00" } ]
 ```
-- 부품 코드 순, 같은 부품은 LOT 입고 순 (LOT 없음이 먼저). `lotNo = null` 은 LOT 도입 전 재고
+- 부품 코드 순, 같은 부품은 LOT 입고 순. `LOT-INIT-{부품 id}` 는 처음부터 있던 재고 (#116)
 - vin 형식 400 (출고 API 와 같은 규칙), 완성차 없음 404 `FINISHED_VEHICLE_NOT_FOUND`
 - 내부 id(부품 id, LOT id, 생산 건 id)는 내보내지 않는다
 
@@ -44,7 +43,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 [ { "vin": "KMH000017TU000012", "productId": 1, "status": "SHIPPED", "partCode": "ENG-G16", "qty": 1 } ]
 ```
 - 사용 기록 순서(먼저 완성된 차 먼저). status 는 완성차 상태 (IN_STOCK = 창고에 있음, SHIPPED = 출고됨)
-- lotNo 형식 400 (`LOT-` + 숫자 6자리 + `-` + 숫자 6자리 이상. 구매 건 id 가 999999 를 넘으면 7자리 이상), 없는 LOT 404 `PART_LOT_NOT_FOUND`, 아직 쓰인 차가 없으면 빈 목록
+- lotNo 형식 400 (`LOT-` + 숫자 6자리 + `-` + 숫자 6자리 이상. 구매 건 id 가 999999 를 넘으면 7자리 이상. 또는 초기 재고 `LOT-INIT-` + 숫자), 없는 LOT 404 `PART_LOT_NOT_FOUND`, 아직 쓰인 차가 없으면 빈 목록
 - 내부 id 는 내보내지 않는다
 
 ## 규칙 / 예외
@@ -52,7 +51,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 |---|---|
 | 같은 입고를 두 번 받음 | 입고 이력으로 건너뛰므로 LOT 도 한 번 |
 | 같은 completed 를 두 번 받음 | 지금처럼 완성차가 있으면 건너뛰므로 사용 기록도 한 번 |
-| LOT 없는 재고와 LOT 이 모두 모자람 | 생기지 않는다. 쓰는 수량은 예약된 수량이라 실물 안에 있고, LOT 없는 수량 = 실물 − LOT 남은 수량이라 둘을 합치면 실물이다 |
+| LOT 남은 수량이 예약 수량보다 모자람 | 정상 흐름에선 생기지 않는다 (입고 = LOT, 소모 = LOT 차감이라 LOT 합 = 실물). 생기면 `PART_LOT_SHORTAGE`, 아무것도 바꾸지 않고 재시도 후 DLQ |
 | 입고와 소모가 동시에 같은 부품 | 부품 version 으로 한쪽만 반영, 늦은 쪽 재시도 (지금 규칙) |
 | 완성차는 있는데 사용 기록이 없음 (이 기능 전에 완성된 차) | 빈 목록 200 |
 
@@ -60,7 +59,9 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 | 서비스 | 변경 |
 |---|---|
 | inventory (V5) | `part_lot`: id, part_id, lot_no (VARCHAR(32), UNIQUE. 구매 건 id 가 Long 최대 19자리여도 들어감), purchase_id (UNIQUE), received_qty (> 0), remaining_qty (≥ 0, ≤ received_qty), received_at, created_at, updated_at, is_deleted. 인덱스 (part_id, id) |
-| inventory (V5) | `part_lot_usage`: id, vin, production_id, part_id, lot_id (NULL = LOT 없음), qty (> 0), created_at. 인덱스 (vin) |
+| inventory (V5) | `part_lot_usage`: id, vin, production_id, part_id, lot_id, qty (> 0), created_at. 인덱스 (vin) |
+| inventory (V6, #116) | `part_lot.purchase_id` NULL 허용 (초기 재고 LOT). 부품마다 `LOT-INIT-{부품 id}` 를 만든다: 남은 수량 = 실물 − 다른 LOT 남은 수량, 받은 수량 = 남은 수량 + LOT 없이 이미 쓴 수량 (둘 다 0 이면 만들지 않음). LOT 없던 사용 기록은 그 LOT 으로 옮기고 `part_lot_usage.lot_id` NOT NULL |
+| dev 시드 | LOT 이 하나도 없는 시드 부품에 지금 재고만큼 `LOT-INIT-{부품 id}` (다시 돌려도 한 번) |
 
 ## 관련 이벤트 (events.md 참조)
 | 이벤트 | 발행 → 수신 (큐) | payload |
@@ -72,9 +73,10 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 ## 완료 조건 (테스트로 확인할 것)
 inventory
 - [ ] 입고 → LOT 한 줄 (번호 형식, receivedQty = remainingQty = qty), 같은 입고 두 번 → LOT 한 번
-- [ ] 생산 완료 → LOT 없는 수량부터, 그다음 LOT 입고 순으로 빼고 사용 기록. 한 부품이 LOT 두 개에 걸치는 경우
+- [ ] 생산 완료 → 초기 재고 LOT 부터 LOT 입고 순으로 빼고 사용 기록. 한 부품이 LOT 두 개에 걸치는 경우. LOT 이 모자라면 PART_LOT_SHORTAGE, 아무것도 바뀌지 않음
 - [ ] LOT remainingQty 합 ≤ available + reserved 유지, 같은 completed 두 번 → 사용 기록 한 번
 - [ ] 취소(예약 해제)는 LOT 을 바꾸지 않음
-- [ ] VIN 조회: 부품·LOT·수량·입고 시각, LOT 없음은 null, 내부 id 없음, 400·404, 사용 기록 없으면 빈 목록
+- [ ] VIN 조회: 부품·LOT·수량·입고 시각 (초기 재고는 LOT-INIT-{부품 id}), 내부 id 없음, 400·404, 사용 기록 없으면 빈 목록
 - [ ] LOT 조회: 그 LOT 이 들어간 차(VIN, 제품, 완성차 상태, 수량), 내부 id 없음, 400·404, 쓰인 차가 없으면 빈 목록
 - [ ] V5 마이그레이션 (UNIQUE, CHECK)
+- [ ] V6: 초기 재고 LOT 수량, LOT 없던 사용 기록 옮김, lot_id NOT NULL, dev 시드 초기 재고 LOT (#116)

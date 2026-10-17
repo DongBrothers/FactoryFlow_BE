@@ -18,7 +18,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +34,7 @@ public class PartLotService {
     private final PartLotRepository partLotRepository;
     private final PartRepository partRepository;
 
-    /** 그 차에 쓰인 부품 LOT. 부품 코드 순, 같은 부품은 LOT 없음 먼저 그다음 입고 순. 완성차가 없으면 FINISHED_VEHICLE_NOT_FOUND. */
+    /** 그 차에 쓰인 부품 LOT. 부품 코드 순, 같은 부품은 입고 순. 완성차가 없으면 FINISHED_VEHICLE_NOT_FOUND. */
     @Transactional(readOnly = true)
     public List<VehiclePartLotResponse> findPartLotsOfVehicle(String vin) {
         if (!isStocked(vin)) {
@@ -43,18 +42,11 @@ public class PartLotService {
         }
         List<PartLotUsage> usages = findUsagesOfVehicle(vin);
         Map<Long, Part> parts = findParts(usages.stream().map(PartLotUsage::getPartId).toList());
-        Map<Long, PartLot> lots =
-                findLots(
-                        usages.stream()
-                                .map(PartLotUsage::getLotId)
-                                .filter(Objects::nonNull)
-                                .toList());
+        Map<Long, PartLot> lots = findLots(usages.stream().map(PartLotUsage::getLotId).toList());
         return usages.stream()
                 .sorted(
                         Comparator.comparing((PartLotUsage u) -> parts.get(u.getPartId()).getCode())
-                                .thenComparing(
-                                        PartLotUsage::getLotId,
-                                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                                .thenComparing(PartLotUsage::getLotId))
                 .map(
                         u ->
                                 VehiclePartLotResponse.of(
@@ -76,8 +68,8 @@ public class PartLotService {
     }
 
     /**
-     * 부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로, 창고 실물과 LOT 없는 재고(실물 − LOT 남은 수량)와 함께. 부품이 없으면 PART_NOT_FOUND
-     * (docs/specs/list-apis.md "5. LOT 별 재고").
+     * 부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로, 창고 실물과 함께. 부품이 없으면 PART_NOT_FOUND (docs/specs/list-apis.md "5.
+     * LOT 별 재고").
      */
     @Transactional(readOnly = true)
     public PartLotStockResponse findLotsOfPart(Long partId) {

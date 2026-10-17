@@ -158,23 +158,25 @@ public class FinishedVehicleService {
     }
 
     /**
-     * 부품 qty 를 어느 LOT 에서 썼는지 남긴다 (docs/specs/part-lot.md "2. 생산 완료"). 가장 오래된 LOT 없는 재고(창고 실물 − LOT
-     * 남은 수량)에서 먼저 쓰고, 모자라면 LOT 을 입고 순서로 쓴다. 부품 수량을 줄이기 전에 불러야 실물이 맞다.
+     * 부품 qty 를 어느 LOT 에서 썼는지 남긴다 (docs/specs/part-lot.md "2. 생산 완료"). 모든 재고에 LOT 이 있으므로 LOT 을 입고
+     * 순서로만 쓴다 (초기 재고 LOT 이 가장 먼저다). LOT 이 모자라면 실물과 LOT 이 어긋난 데이터라 PART_LOT_SHORTAGE (재시도 후 DLQ).
      */
     private void recordLots(String vin, Long productionId, Part part, int qty, List<PartLot> lots) {
-        int lotted = lots.stream().mapToInt(PartLot::getRemainingQty).sum();
         int left = qty;
-        int withoutLot = Math.min(left, Math.max(0, part.onHand() - lotted));
-        if (withoutLot > 0) {
-            saveUsage(vin, productionId, part.getId(), null, withoutLot);
-            left -= withoutLot;
-        }
         for (PartLot lot : lots) {
             int taken = lot.take(left);
             if (taken > 0) {
                 saveUsage(vin, productionId, part.getId(), lot.getId(), taken);
                 left -= taken;
             }
+        }
+        if (left > 0) {
+            log.error(
+                    "PART_LOT_SHORTAGE productionId={} partId={} missing={}",
+                    productionId,
+                    part.getId(),
+                    left);
+            throw new CustomException(InventoryErrorCode.PART_LOT_SHORTAGE);
         }
     }
 

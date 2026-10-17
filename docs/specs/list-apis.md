@@ -61,10 +61,10 @@ gateway `/api/inventory/finished-vehicles`
 ### 5. LOT 별 재고 (inventory) `GET /inventory/parts/{partId}/lots`
 gateway `/api/inventory/parts/{partId}/lots`. 그 부품의 남은 LOT 을 다음에 쓸 순서(입고 순)로
 ```json
-{ "partCode": "ENG-G16", "partName": "가솔린 엔진 1.6", "onHand": 300, "withoutLotQty": 290,
+{ "partCode": "ENG-G16", "partName": "가솔린 엔진 1.6", "onHand": 300,
   "lots": [ { "lotNo": "LOT-261017-000012", "receivedQty": 10, "remainingQty": 10, "receivedAt": "2026-10-17T10:00:00" } ] }
 ```
-- onHand = 창고 실물(available + reserved), withoutLotQty = LOT 없는 재고(onHand − LOT 남은 수량 합, docs/specs/part-lot.md 와 같은 계산)
+- onHand = 창고 실물(available + reserved) = LOT 남은 수량 합. 처음부터 있던 재고는 초기 재고 LOT `LOT-INIT-{부품 id}` 으로 맨 앞에 보인다 (#116, withoutLotQty 없앰)
 - 다 쓴 LOT(remainingQty 0)은 뺀다
 
 | 확인 | 실패 |
@@ -95,6 +95,6 @@ order
 inventory
 - [ ] 부품 재고 목록: 삭제된 부품 빼고 코드 순, available·reserved
 - [ ] 완성차 목록: 최신 먼저, status 거르기, lastVin 으로 다음 페이지, 삭제된 것 빼기, 내부 id 없음, 400·404
-- [ ] LOT 별 재고: 남은 LOT 입고 순, onHand·withoutLotQty, 다 쓴 LOT 빼기, 400·404
+- [ ] LOT 별 재고: 남은 LOT 입고 순(초기 재고 LOT 먼저), onHand, 다 쓴 LOT 빼기, 400·404
 공통
 - [ ] api-docs 에 summary 와 응답 코드
