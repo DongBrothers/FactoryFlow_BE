@@ -21,7 +21,7 @@ simulator 는 진짜 설비(프레스기, 용접·도장 로봇, 의장·검사 
 ### 1. 설비 (simulator, 메모리)
 - 설비 10대: production 의 equipment 와 같은 코드·공정 (PRESS-01·02, BODY-01·02, PAINT-01·02, ASSEMBLY-01·02, INSPECTION-01·02). 시작할 때 모두 RUNNING
 - 설비마다 상태(RUNNING, STOPPED, FAULT)와 지금 하는 작업(없거나 하나)을 갖는다
-- 시작할 때 상태 이벤트는 보내지 않는다 (production 도 RUNNING 으로 시작)
+- 시작할 때 설비마다 지금 상태(RUNNING)를 보낸다. production 이 고장·정지로 알던 설비를 맞춘다 (docs/specs/simulator-restart.md)
 
 ### 2. 배정 수신 → 작업 → 보고
 1. 큐 `simulator.production-step-dispatched` 로 `production.step-dispatched { workOrderId, process, equipmentCode }` 를 받는다
@@ -65,7 +65,7 @@ simulator 는 진짜 설비(프레스기, 용접·도장 로봇, 의장·검사 
 | 배정받은 설비가 고장·정지·작업 중 | 무시. production 의 시작 보고 시간 초과가 되돌린다 |
 | 작업 중 고장·정지 | 작업을 버리고 상태만 보낸다 |
 | RabbitMQ 가 잠시 죽음 | 보낼 메시지를 메모리에 두고 다시 보낸다. 받는 쪽 큐는 살아나면 처리 |
-| simulator 재시작 | 설비가 모두 RUNNING, 작업 없음. DISPATCHED 로 남은 공정은 production 이 시간 초과로 되돌린다. production 이 FAULT 로 알고 있던 설비는 simulator 가 RUNNING 이므로 상태가 어긋날 수 있다 (내부 API run 으로 맞춘다, 이후 보완) |
+| simulator 재시작 | 설비가 모두 RUNNING, 작업 없음. DISPATCHED 로 남은 공정은 production 이 시간 초과로 되돌린다. simulator 가 시작할 때 설비마다 status-changed(RUNNING) 를 보내 production 의 설비 상태를 맞춘다 (docs/specs/simulator-restart.md) |
 | 깨진 배정 메시지 | 재시도 후 DLQ (`simulator.production-step-dispatched.dlq`) |
 
 ### 설정 (simulator, `factoryflow.simulator.*`)
