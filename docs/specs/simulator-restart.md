@@ -1,4 +1,4 @@
-# simulator 재시작 때 설비 상태 맞추기 + 배정 회차 구분
+# simulator 재시작 때 설비 상태 맞추기 + 배정 회차 구분 + 완료 보고 시간 초과
 
 ## 목적
 simulator 를 재시작하거나 보고가 늦게 올 때 production 과 설비가 어긋나는 두 문제를 고친다 (#104).
@@ -27,6 +27,13 @@ simulator 를 재시작하거나 보고가 늦게 올 때 production 과 설비�
 **simulator**
 - 받은 배정의 `dispatchSeq` 를 작업(Job)에 기억하고, 그 작업의 시작·완료 보고에 그대로 싣는다
 
+### 3. 완료 보고 시간 초과 (production, #111)
+설비가 시작 보고를 보낸 뒤 재시작하거나 완료 보고가 사라지면, 로봇 공정이 IN_PROGRESS 로 남고 설비도 점유된 채 멈춘다. 시작 보고 시간 초과(DISPATCHED)처럼 되돌린다.
+- 대상: **설비가 진행하는 공정**만. IN_PROGRESS 이고 배정(dispatched_at)으로 시작했으며, 시작(started_at)한 지 `completion-report-timeout`(기본 5분)이 지난 공정
+  - 작업자가 시작한 공정(사람 공정, 로봇 공정 수동 개입)은 시간이 걸려도 되돌리지 않는다. 그래서 작업자 시작은 dispatched_at 을 비운다
+- 처리: 시작 보고 시간 초과와 같다. 배정 스케줄러가 바퀴마다 정해진 개수씩 PENDING 으로 되돌리고 설비를 비운다 (실적 없음). 다음 배정에서 회차가 올라 늦게 온 지난 완료 보고는 무시된다
+- 생산 시간보다 넉넉히 둔다 (simulator 작업 시간은 수 초)
+
 ## 규칙 / 예외
 | 상황 | 처리 |
 |---|---|
@@ -36,6 +43,8 @@ simulator 를 재시작하거나 보고가 늦게 올 때 production 과 설비�
 | 불량으로 PENDING → 다시 배정 | 회차 +1, 지난 회차 보고는 무시 |
 | simulator 시작 알림을 두 번 받음 (재전송) | eventId 가 같으면 Guard, 이미 RUNNING 이면 이력 없음 |
 | production 이 FAULT 로 알던 설비 | simulator 시작 알림으로 RUNNING, 다음 바퀴부터 배정 |
+| 완료 보고 없이 시간이 지난 설비 공정 | PENDING 으로 되돌려 다시 배정, 늦은 지난 회차 완료 보고는 무시 |
+| 작업자가 진행 중인 공정 | 시간이 지나도 그대로 |
 
 ### 테이블 변경
 | 서비스 | 변경 |
@@ -52,9 +61,6 @@ simulator 를 재시작하거나 보고가 늦게 올 때 production 과 설비�
 | equipment.status-changed | simulator → production | equipmentCode, process, status (시작할 때도 보냄) |
 세 이벤트에 `dispatchSeq` 를 더한다 (필드 추가, version 1 그대로, events.md 사람 적용).
 
-## 남은 일 (이번에 넣지 않음)
-- simulator 재시작 때 IN_PROGRESS(시작 보고 뒤) 로 남은 공정은 완료 보고가 오지 않아 멈춘다. 지금 시간 초과는 DISPATCHED 만 본다. 진행 시간 초과는 따로 정한다
-
 ## 완료 조건 (테스트로 확인할 것)
 simulator
 - [ ] 시작하면 설비 10대의 status-changed(RUNNING) 가 나간다
@@ -65,3 +71,5 @@ production
 - [ ] dispatchSeq 없는 보고는 지금 규칙으로 반영
 - [ ] FAULT 설비에 RUNNING 이 오면 RUNNING + 이력 (지금 규칙 확인)
 - [ ] V8 마이그레이션 (기본값 0)
+- [ ] 완료 보고 없이 completion-report-timeout 이 지난 설비 공정은 PENDING + 설비 비움, 다음 바퀴에 다시 배정 (#111)
+- [ ] 작업자가 시작한 공정, 시간이 덜 지난 공정은 그대로, 되돌린 뒤 온 지난 회차 완료 보고는 무시
