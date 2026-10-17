@@ -23,6 +23,8 @@ class OrderStatusTest {
     void anyCancelRequestedIsCancelRequested() {
         assertThat(OrderStatus.summarize(List.of(IN_PRODUCTION, CANCEL_REQUESTED)))
                 .isEqualTo(CANCEL_REQUESTED);
+        assertThat(OrderStatus.summarize(List.of(RECEIVED, CANCEL_REQUESTED)))
+                .isEqualTo(CANCEL_REQUESTED);
     }
 
     @Test
@@ -49,8 +51,6 @@ class OrderStatusTest {
     void notStartedVehiclesAreReceived() {
         // 부품을 기다리는 차도 접수다. 시작 안 된 차만 남으면 부품 대기 단계 없이 접수로 요약한다 (#117)
         assertThat(OrderStatus.summarize(List.of(RECEIVED, RECEIVED))).isEqualTo(RECEIVED);
-        assertThat(OrderStatus.summarize(List.of(RECEIVED, CANCEL_REQUESTED)))
-                .isEqualTo(CANCEL_REQUESTED);
     }
 
     @Test
