@@ -140,6 +140,21 @@ class AuthAccountTest {
     }
 
     @Test
+    void issueRejectsTheMergedWorkerRole() throws Exception {
+        // WORKER 는 PRODUCTION 으로 합쳐 없는 역할이다 (#118)
+        mockMvc.perform(
+                        post("/auth/admin/users")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"email\":\""
+                                                + EMAIL
+                                                + "\",\"name\":\"김철수\",\"role\":\"WORKER\"}"))
+                .andExpect(status().isBadRequest());
+
+        assertThat(redis.keys("auth:*")).isEmpty();
+    }
+
+    @Test
     void issueRejectsNameLongerThanColumn() throws Exception {
         // user_account.name 은 50자. 발급 때 막지 않으면 활성화 때 저장이 실패한다
         String name = "가".repeat(51);
@@ -229,7 +244,7 @@ class AuthAccountTest {
         jdbc.update(
                 "INSERT INTO user_account (public_id, email, password, name, role, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (UUID(), ?, 'hash', '다른사람', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
+                        + " VALUES (UUID(), ?, 'hash', '다른사람', 'PRODUCTION', 'ACTIVE', NOW(6), NOW(6))",
                 EMAIL);
 
         activate(token)

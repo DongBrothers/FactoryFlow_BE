@@ -26,21 +26,12 @@ class RolePermissionTest {
     @ParameterizedTest(name = "{1} 는 {0} 을 할 수 있다")
     @CsvSource({
         "/api/orders, SALES",
-        "/api/orders, ADMIN",
         "/api/orders/" + ORDER_NO + "/cancel, SALES",
-        "/api/orders/" + ORDER_NO + "/cancel, ADMIN",
-        "/api/production/work-orders/1/steps/PRESS/start, WORKER",
         "/api/production/work-orders/1/steps/PRESS/start, PRODUCTION",
-        "/api/production/work-orders/1/steps/PRESS/start, ADMIN",
-        "/api/production/work-orders/1/steps/INSPECTION/complete, WORKER",
         "/api/production/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
-        "/api/production/work-orders/1/steps/INSPECTION/complete, ADMIN",
         "/api/purchases, PURCHASE",
-        "/api/purchases, ADMIN",
         "/api/purchases/1/receive, PURCHASE",
-        "/api/purchases/1/receive, ADMIN",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, ADMIN"
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION"
     })
     void allowedRoleCanWrite(String path, String role) {
         post(path, role).expectStatus().isNotFound();
@@ -48,50 +39,73 @@ class RolePermissionTest {
 
     @ParameterizedTest(name = "{1} 는 {0} 을 할 수 없다")
     @CsvSource({
-        "/api/orders, WORKER",
         "/api/orders, PRODUCTION",
         "/api/orders, PURCHASE",
-        "/api/orders/" + ORDER_NO + "/cancel, WORKER",
+        "/api/orders, ADMIN",
+        "/api/orders/" + ORDER_NO + "/cancel, ADMIN",
         "/api/production/work-orders/1/steps/PRESS/start, SALES",
         "/api/production/work-orders/1/steps/PRESS/start, PURCHASE",
+        "/api/production/work-orders/1/steps/PRESS/start, ADMIN",
         "/api/production/work-orders/1/steps/INSPECTION/complete, SALES",
         "/api/purchases, SALES",
         "/api/purchases, PRODUCTION",
-        "/api/purchases/1/receive, WORKER",
+        "/api/purchases, ADMIN",
+        "/api/purchases/1/receive, ADMIN",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, SALES",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, WORKER",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, PURCHASE"
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, PURCHASE",
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, ADMIN"
     })
     void otherRoleCannotWrite(String path, String role) {
         post(path, role).expectStatus().isForbidden();
     }
 
-    @ParameterizedTest(name = "표에 없는 쓰기는 {0} 이 할 수 없다")
-    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "WORKER"})
-    void writeNotInTheTableIsAdminOnly(String role) {
+    @ParameterizedTest(name = "합쳐 없어진 WORKER 토큰은 {0} 을 할 수 없다")
+    @ValueSource(
+            strings = {
+                "/api/production/work-orders/1/steps/PRESS/start",
+                "/api/production/work-orders/1/steps/INSPECTION/complete",
+                "/api/inventory/finished-vehicles/" + VIN + "/ship"
+            })
+    void mergedWorkerRoleHasNoPermission(String path) {
+        // WORKER 는 PRODUCTION 으로 합쳤다 (#118). 합치기 전에 받은 토큰은 다시 로그인해야 한다
+        post(path, "WORKER").expectStatus().isForbidden();
+        request(HttpMethod.GET, "/api/production/work-orders", "WORKER")
+                .expectStatus()
+                .isForbidden();
+    }
+
+    @ParameterizedTest(name = "표에 없는 요청은 {0} 도 할 수 없다")
+    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "ADMIN"})
+    void requestNotInTheTableIsDeniedToEveryone(String role) {
         post("/api/inventory/parts", role).expectStatus().isForbidden();
         request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, role).expectStatus().isForbidden();
         request(HttpMethod.DELETE, "/api/purchases/1", role).expectStatus().isForbidden();
     }
 
     @Test
-    void adminCanWriteWhatIsNotInTheTable() {
-        post("/api/inventory/parts", "ADMIN").expectStatus().isNotFound();
-        request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, "ADMIN").expectStatus().isNotFound();
+    void adminOnlyIssuesAccounts() {
+        // ADMIN 은 계정 발급만 한다. 업무 조회도 못 한다 (#118)
+        post("/api/auth/admin/users", "ADMIN").expectStatus().isNotFound();
+        for (String path : readPaths()) {
+            request(HttpMethod.GET, path, "ADMIN").expectStatus().isForbidden();
+        }
     }
 
     @ParameterizedTest(name = "{0} 는 조회할 수 있다")
-    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "WORKER", "ADMIN"})
-    void everyRoleCanRead(String role) {
-        for (String path :
-                new String[] {
-                    "/api/orders",
-                    "/api/purchases?status=ORDERED",
-                    "/api/production/work-orders",
-                    "/api/inventory/parts"
-                }) {
+    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION"})
+    void businessRolesCanRead(String role) {
+        for (String path : readPaths()) {
             request(HttpMethod.GET, path, role).expectStatus().isNotFound();
         }
+    }
+
+    private static String[] readPaths() {
+        return new String[] {
+            "/api/orders",
+            "/api/purchases?status=ORDERED",
+            "/api/production/work-orders",
+            "/api/inventory/parts"
+        };
     }
 
     @Test
