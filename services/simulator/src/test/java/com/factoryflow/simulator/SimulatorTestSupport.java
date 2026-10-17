@@ -40,9 +40,20 @@ public class SimulatorTestSupport {
         amqpAdmin.purgeQueue(captureQueue, false);
     }
 
-    /** production 이 보내는 것과 같은 모양의 배정 메시지. */
+    /** production 이 보내는 것과 같은 모양의 배정 메시지 (배정 회차 1). */
     public Map<String, Object> dispatch(
             UUID eventId, String traceId, long workOrderId, String process, String equipmentCode) {
+        return dispatch(eventId, traceId, workOrderId, process, equipmentCode, 1);
+    }
+
+    /** production 이 보내는 것과 같은 모양의 배정 메시지. */
+    public Map<String, Object> dispatch(
+            UUID eventId,
+            String traceId,
+            long workOrderId,
+            String process,
+            String equipmentCode,
+            int dispatchSeq) {
         return Map.of(
                 "eventId",
                 eventId.toString(),
@@ -58,7 +69,8 @@ public class SimulatorTestSupport {
                 Map.of(
                         "workOrderId", workOrderId,
                         "process", process,
-                        "equipmentCode", equipmentCode));
+                        "equipmentCode", equipmentCode,
+                        "dispatchSeq", dispatchSeq));
     }
 
     public void send(Map<String, Object> envelope) {

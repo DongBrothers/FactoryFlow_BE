@@ -13,6 +13,8 @@ import com.factoryflow.simulator.domain.EquipmentStatus;
 import com.factoryflow.simulator.event.publisher.EquipmentEventPublisher;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,6 +88,37 @@ class EquipmentServiceTest {
                 .singleElement()
                 .satisfies(e -> assertThat(e.workOrderId()).isNull());
         await().atMost(Duration.ofSeconds(5)).until(() -> publisher.pendingCount() == 0);
+    }
+
+    @Test
+    void reportsCarryTheDispatchSeqOfTheDispatch() {
+        // 배정 회차 번호를 보고에 그대로 돌려준다 (docs/specs/simulator-restart.md)
+        support.send(
+                support.dispatch(UUID.randomUUID(), "trace-sim-seq", 14L, "PRESS", "PRESS-01", 3));
+
+        assertThat(field(support.next(5000), "$.payload.dispatchSeq")).isEqualTo("3");
+        assertThat(field(support.next(5000), "$.payload.dispatchSeq")).isEqualTo("3");
+    }
+
+    @Test
+    void announceSendsTheStatusOfEveryEquipment() {
+        // 시작할 때 보내는 알림: 설비가 기준이라 production 이 고장으로 알던 설비도 지금 상태로 맞춘다
+        equipmentService.changeStatus("PRESS-02", EquipmentStatus.FAULT);
+        assertThat(field(support.next(5000), "$.payload.status")).isEqualTo("FAULT");
+
+        equipmentService.announceStatuses();
+
+        List<String> statuses = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            String message = support.next(5000);
+            assertThat(field(message, "$.eventName")).isEqualTo("equipment.status-changed");
+            statuses.add(
+                    field(message, "$.payload.equipmentCode")
+                            + "="
+                            + field(message, "$.payload.status"));
+        }
+        assertThat(statuses).hasSize(10).contains("PRESS-01=RUNNING", "PRESS-02=FAULT");
+        assertThat(support.next(500)).isNull();
     }
 
     @Test

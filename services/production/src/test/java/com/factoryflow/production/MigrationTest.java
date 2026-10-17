@@ -21,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("7");
+        jdbc = migrateTo("8");
     }
 
     @Test
@@ -151,6 +151,17 @@ class MigrationTest extends MigrationTestSupport {
                                         + " AND COLUMN_NAME = 'dispatched_at' AND IS_NULLABLE = 'YES'",
                                 Integer.class))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void v8AddsStepDispatchSeqStartingAtZero() {
+        assertThat(
+                        jdbc.queryForMap(
+                                "SELECT IS_NULLABLE, COLUMN_DEFAULT FROM information_schema.COLUMNS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'work_order_step'"
+                                        + " AND COLUMN_NAME = 'dispatch_seq'"))
+                .containsEntry("IS_NULLABLE", "NO")
+                .containsEntry("COLUMN_DEFAULT", "0");
     }
 
     @Test

@@ -31,7 +31,10 @@ public class SimulatorEventListener {
                 envelope,
                 () ->
                         workOrderService.reportStepStarted(
-                                event.workOrderId(), event.process(), event.equipmentCode()));
+                                event.workOrderId(),
+                                event.process(),
+                                event.equipmentCode(),
+                                event.dispatchSeq()));
     }
 
     @RabbitListener(queues = EventQueueConfig.EQUIPMENT_STEP_COMPLETED_QUEUE)
@@ -46,7 +49,8 @@ public class SimulatorEventListener {
                                 event.process(),
                                 event.equipmentCode(),
                                 event.result(),
-                                event.defectReason()));
+                                event.defectReason(),
+                                event.dispatchSeq()));
     }
 
     /** 설비 상태 변경: 상태·이력 저장, 고장·정지면 그 설비의 공정을 되돌려 다른 설비로 재배정하게 한다. */

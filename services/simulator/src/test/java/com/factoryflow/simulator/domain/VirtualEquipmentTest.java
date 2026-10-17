@@ -10,7 +10,7 @@ class VirtualEquipmentTest {
     @Test
     void stoppingDropsTheJobAndEveryChangeIsANewStatusRound() {
         VirtualEquipment equipment = new VirtualEquipment("PRESS-01", LineProcess.PRESS);
-        equipment.take(new Job(1L, LineProcess.PRESS, "t"));
+        equipment.take(new Job(1L, LineProcess.PRESS, "t", 1));
         long start = equipment.getStatusRound();
 
         assertThat(equipment.changeStatus(EquipmentStatus.FAULT)).isTrue();

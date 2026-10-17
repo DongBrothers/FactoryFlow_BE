@@ -11,7 +11,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | order.cancelled | order | (없음, 이후 알림·출고) | orderId |
 | production.material-requested | production | inventory | productionId, parts[{partId, qty}] |
 | production.status-changed | production | order | orderId, productionId, productId, status |
-| production.step-dispatched | production | simulator | workOrderId, process, equipmentCode |
+| production.step-dispatched | production | simulator | workOrderId, process, equipmentCode, dispatchSeq |
 | production.cancelled | production | inventory, order | orderId, productionId |
 | production.cancel-rejected | production | order | orderId, productionId, reason, status |
 | production.completed | production | inventory, order | orderId, productionId, productId, vin |
@@ -20,8 +20,8 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | inventory.reservation-failed | inventory | production | productionId, reason (PART_NOT_FOUND), partIds[] |
 | inventory.shortage | inventory | purchase | partId, partCode, partName, shortQty |
 | purchase.received | purchase | inventory | purchaseId, partId, qty |
-| equipment.step-started | simulator | production | equipmentCode, workOrderId, process |
-| equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result, defectReason |
+| equipment.step-started | simulator | production | equipmentCode, workOrderId, process, dispatchSeq |
+| equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result, defectReason, dispatchSeq |
 | equipment.status-changed | simulator | production | equipmentCode, process, status |
 | shipment.completed | inventory | order | orderId, productionId, productId, vin |
 
