@@ -12,10 +12,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,7 +81,7 @@ public class PurchaseController {
                 description = "발주함. 구매 건을 돌려준다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "X-User-Id 없음, partId·qty·supplierId 없음 또는 1 미만"),
+                description = "X-User-Id 없음·빈 값·36자 초과, partId·qty·supplierId 없음 또는 1 미만"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "부품 없음 (PART_NOT_FOUND), 공급업체 없음 (SUPPLIER_NOT_FOUND)"),
@@ -92,6 +94,8 @@ public class PurchaseController {
     public ApiResponse<PurchaseResponse> create(
             @Parameter(description = "발주한 직원 (gateway 가 넣는 로그인 직원 번호)", example = "6c1e2f3a-…")
                     @RequestHeader("X-User-Id")
+                    @NotBlank
+                    @Size(max = 36)
                     String orderedBy,
             @Valid @RequestBody CreatePurchaseRequest request) {
         PurchaseResponse purchase = purchaseService.create(request, orderedBy);

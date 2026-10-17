@@ -1,9 +1,11 @@
 package com.factoryflow.purchase.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.test.container.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -35,7 +37,7 @@ class ShortageIsNotConsumedTest {
     }
 
     @Test
-    void shortageMessageMakesNoPurchaseAndHasNoQueue() throws Exception {
+    void shortageMessageMakesNoPurchaseAndHasNoQueue() {
         String eventId = UUID.randomUUID().toString();
         Map<String, Object> envelope =
                 Map.of(
@@ -70,10 +72,14 @@ class ShortageIsNotConsumedTest {
                         .setContentType(MessageProperties.CONTENT_TYPE_JSON)
                         .setMessageId(eventId)
                         .build());
-        // 받는 큐가 있다면 처리될 만한 시간을 둔다
-        Thread.sleep(1000);
 
         assertThat(amqpAdmin.getQueueProperties("purchase.inventory-shortage")).isNull();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM purchase", Integer.class)).isZero();
+        // 받는 쪽이 있다면 처리됐을 동안 구매 건이 계속 없어야 한다
+        await().during(Duration.ofMillis(500))
+                .atMost(Duration.ofSeconds(2))
+                .until(
+                        () ->
+                                jdbc.queryForObject("SELECT COUNT(*) FROM purchase", Integer.class)
+                                        == 0);
     }
 }

@@ -147,6 +147,14 @@ class PurchaseControllerTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isBadRequest());
+        for (String worker : new String[] {"", "   ", "x".repeat(37)}) {
+            mockMvc.perform(
+                            post("/purchases")
+                                    .header("X-User-Id", worker)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(body(TIRE, 1, mobis)))
+                    .andExpect(status().isBadRequest());
+        }
         create(TIRE, 0, mobis).andExpect(status().isBadRequest());
         create(0L, 1, mobis).andExpect(status().isBadRequest());
         create(TIRE, 1, 0L).andExpect(status().isBadRequest());

@@ -1,17 +1,17 @@
 package com.factoryflow.inventory.service;
 
 import com.factoryflow.inventory.domain.Part;
-import com.factoryflow.inventory.domain.PartReservation;
-import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.dto.response.InternalPartResponse;
 import com.factoryflow.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.inventory.dto.response.PartStockResponse;
 import com.factoryflow.inventory.repository.PartRepository;
 import com.factoryflow.inventory.repository.PartReservationRepository;
+import com.factoryflow.inventory.repository.WaitingTotal;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,9 +37,9 @@ public class PartService {
      */
     @Transactional(readOnly = true)
     public List<PartShortageResponse> findShortages() {
-        Map<Long, List<PartReservation>> waitingByPartId =
-                findWaitingLines().stream()
-                        .collect(Collectors.groupingBy(PartReservation::getPartId));
+        Map<Long, WaitingTotal> waitingByPartId =
+                sumWaitingByPart().stream()
+                        .collect(Collectors.toMap(WaitingTotal::partId, Function.identity()));
         return findActiveParts(waitingByPartId.keySet()).stream()
                 .map(part -> shortageOf(part, waitingByPartId.get(part.getId())))
                 .filter(shortage -> shortage.shortQty() > 0)
@@ -56,11 +56,9 @@ public class PartService {
         return findActiveParts(ids).stream().map(InternalPartResponse::from).toList();
     }
 
-    private static PartShortageResponse shortageOf(Part part, List<PartReservation> waiting) {
-        int waitingQty = waiting.stream().mapToInt(PartReservation::getQty).sum();
-        int productions =
-                (int) waiting.stream().map(PartReservation::getProductionId).distinct().count();
-        return PartShortageResponse.of(part, waitingQty, productions);
+    private static PartShortageResponse shortageOf(Part part, WaitingTotal waiting) {
+        return PartShortageResponse.of(
+                part, waiting.waitingQty().intValue(), waiting.waitingProductions().intValue());
     }
 
     private List<Part> activeParts() {
@@ -71,7 +69,7 @@ public class PartService {
         return partRepository.findAllByIdInAndIsDeletedFalseOrderByCodeAsc(ids);
     }
 
-    private List<PartReservation> findWaitingLines() {
-        return reservationRepository.findAllByStatus(ReservationStatus.WAITING);
+    private List<WaitingTotal> sumWaitingByPart() {
+        return reservationRepository.sumWaitingByPart();
     }
 }
