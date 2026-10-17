@@ -99,7 +99,12 @@ class ProductionCompletionTest {
         workOrderService.startStep(workOrder, ProductionProcess.INSPECTION, "INSPECTION-02");
 
         workOrderService.reportStepCompleted(
-                workOrder, ProductionProcess.INSPECTION, "INSPECTION-02", StepResult.GOOD, null);
+                workOrder,
+                ProductionProcess.INSPECTION,
+                "INSPECTION-02",
+                StepResult.GOOD,
+                null,
+                null);
 
         assertThat(workOrderStatus(workOrder)).isEqualTo("COMPLETED");
         assertThat(productionStatusOf(workOrder)).isEqualTo("COMPLETED");

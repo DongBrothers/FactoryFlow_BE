@@ -118,7 +118,9 @@ public class WorkOrderService {
                 process,
                 equipmentCode,
                 (step, now) -> step.dispatch(equipmentCode, now));
-        eventPublisher.publish(new StepDispatched(workOrderId, process, equipmentCode));
+        int dispatchSeq = stepOf(findSteps(workOrderId), process).getDispatchSeq();
+        eventPublisher.publish(
+                new StepDispatched(workOrderId, process, equipmentCode, dispatchSeq));
     }
 
     /**
@@ -147,11 +149,19 @@ public class WorkOrderService {
         return workOrder;
     }
 
-    /** 설비의 시작 보고: 그 설비에 배정된(DISPATCHED) 공정이면 IN_PROGRESS. 아니면 무시한다. */
+    /** 설비의 시작 보고: 그 설비에 이번 회차로 배정된(DISPATCHED) 공정이면 IN_PROGRESS. 아니면 무시한다. */
     @Transactional
     public void reportStepStarted(
-            Long workOrderId, ProductionProcess process, String equipmentCode) {
-        reportableStep(workOrderId, process, equipmentCode, WorkOrderStep::isDispatched)
+            Long workOrderId,
+            ProductionProcess process,
+            String equipmentCode,
+            Integer dispatchSeq) {
+        reportableStep(
+                        workOrderId,
+                        process,
+                        equipmentCode,
+                        dispatchSeq,
+                        WorkOrderStep::isDispatched)
                 .ifPresent(
                         step -> {
                             LocalDateTime now = LocalDateTime.now();
@@ -160,18 +170,20 @@ public class WorkOrderService {
                         });
     }
 
-    /** 설비의 완료 보고: 그 설비에서 진행 중인 공정이면 실적(작업자 없음)을 남기고 양품 DONE, 불량 PENDING(다시 배정). 아니면 무시한다. */
+    /** 설비의 완료 보고: 그 설비에서 이번 회차로 진행 중인 공정이면 실적(작업자 없음)을 남기고 양품 DONE, 불량 PENDING(다시 배정). 아니면 무시한다. */
     @Transactional
     public void reportStepCompleted(
             Long workOrderId,
             ProductionProcess process,
             String equipmentCode,
             StepResult result,
-            String defectReason) {
+            String defectReason,
+            Integer dispatchSeq) {
         reportableStep(
                         workOrderId,
                         process,
                         equipmentCode,
+                        dispatchSeq,
                         s -> s.isInProgress() || s.isDispatched())
                 .ifPresent(
                         step ->
@@ -225,6 +237,7 @@ public class WorkOrderService {
             Long workOrderId,
             ProductionProcess process,
             String equipmentCode,
+            Integer dispatchSeq,
             Predicate<WorkOrderStep> expected) {
         Optional<WorkOrder> workOrder = findWorkOrderIfExists(workOrderId);
         if (workOrder.isEmpty() || workOrder.get().isClosed()) {
@@ -232,14 +245,18 @@ public class WorkOrderService {
             return Optional.empty();
         }
         WorkOrderStep step = stepOf(findSteps(workOrderId), process);
-        if (!expected.test(step) || !equipmentCode.equals(step.getEquipmentCode())) {
+        if (!expected.test(step)
+                || !equipmentCode.equals(step.getEquipmentCode())
+                || !step.isCurrentDispatch(dispatchSeq)) {
             log.info(
-                    "공정 상태·설비가 맞지 않아 설비 보고 무시: workOrderId={} process={} status={} equipment={} reported={}",
+                    "공정 상태·설비·회차가 맞지 않아 설비 보고 무시: workOrderId={} process={} status={} equipment={} reported={} seq={} reportedSeq={}",
                     workOrderId,
                     process,
                     step.getStatus(),
                     step.getEquipmentCode(),
-                    equipmentCode);
+                    equipmentCode,
+                    step.getDispatchSeq(),
+                    dispatchSeq);
             return Optional.empty();
         }
         return Optional.of(step);

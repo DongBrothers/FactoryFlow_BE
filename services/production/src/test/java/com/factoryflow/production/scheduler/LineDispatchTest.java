@@ -13,6 +13,7 @@ import com.factoryflow.production.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -270,6 +271,62 @@ class LineDispatchTest {
     }
 
     @Test
+    void everyDispatchCarriesAGrowingDispatchSeq() {
+        // 배정 회차 번호 (docs/specs/simulator-restart.md "2. 배정 회차 번호")
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(1);
+        expireDispatch(workOrder, "PRESS");
+
+        dispatcher.dispatchAll();
+
+        assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(2);
+        assertThat(outbox("production.step-dispatched"))
+                .extracting(d -> JsonPath.<Integer>read(d, "$.payload.dispatchSeq"))
+                .containsExactly(1, 2);
+    }
+
+    @Test
+    void reportsOfAnEarlierDispatchToTheSameEquipmentAreIgnored() {
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        // 다른 프레스를 멈춰 시간 초과 뒤 같은 설비에 다시 배정되게 한다
+        jdbc.update(
+                "UPDATE equipment SET status = 'STOPPED' WHERE process = 'PRESS' AND code <> ?",
+                press);
+        expireDispatch(workOrder, "PRESS");
+        dispatcher.dispatchAll();
+        assertThat(step(workOrder, "PRESS")).containsEntry("equipment_code", press);
+
+        listener.onStepStarted(started(workOrder, "PRESS", press, 1));
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null, 1));
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
+                .isZero();
+
+        listener.onStepStarted(started(workOrder, "PRESS", press, 2));
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "IN_PROGRESS");
+    }
+
+    @Test
+    void workerStartRaisesTheSeqSoAnEarlierDispatchReportIsIgnored() {
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        expireDispatch(workOrder, "PRESS");
+        workOrderService.withdrawStaleDispatch(stepId(workOrder, "PRESS"), LocalDateTime.now());
+
+        workOrderService.startStep(workOrder, ProductionProcess.PRESS, press);
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null, 1));
+
+        assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(2);
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "IN_PROGRESS");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
+                .isZero();
+    }
+
+    @Test
     void recentDispatchIsKept() {
         long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
@@ -336,6 +393,62 @@ class LineDispatchTest {
                         Long.class,
                         production);
         return workOrder;
+    }
+
+    private EventEnvelope started(
+            long workOrder, String process, String equipmentCode, int dispatchSeq) {
+        return envelope(
+                "equipment.step-started",
+                Map.of(
+                        "equipmentCode",
+                        equipmentCode,
+                        "workOrderId",
+                        workOrder,
+                        "process",
+                        process,
+                        "dispatchSeq",
+                        dispatchSeq));
+    }
+
+    private EventEnvelope completed(
+            long workOrder,
+            String process,
+            String equipmentCode,
+            String result,
+            String reason,
+            int dispatchSeq) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("equipmentCode", equipmentCode);
+        payload.put("workOrderId", workOrder);
+        payload.put("process", process);
+        payload.put("result", result);
+        payload.put("defectReason", reason);
+        payload.put("dispatchSeq", dispatchSeq);
+        return envelope("equipment.step-completed", payload);
+    }
+
+    private void expireDispatch(long workOrder, String process) {
+        jdbc.update(
+                "UPDATE work_order_step SET dispatched_at = NOW(6) - INTERVAL 10 MINUTE"
+                        + " WHERE work_order_id = ? AND process = ?",
+                workOrder,
+                process);
+    }
+
+    private int dispatchSeq(long workOrder, String process) {
+        return jdbc.queryForObject(
+                "SELECT dispatch_seq FROM work_order_step WHERE work_order_id = ? AND process = ?",
+                Integer.class,
+                workOrder,
+                process);
+    }
+
+    private long stepId(long workOrder, String process) {
+        return jdbc.queryForObject(
+                "SELECT id FROM work_order_step WHERE work_order_id = ? AND process = ?",
+                Long.class,
+                workOrder,
+                process);
     }
 
     private EventEnvelope started(long workOrder, String process, String equipmentCode) {

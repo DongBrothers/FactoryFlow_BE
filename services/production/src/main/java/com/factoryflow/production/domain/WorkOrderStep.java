@@ -50,6 +50,10 @@ public class WorkOrderStep extends BaseEntity {
     /** 설비에 배정한 시각. 시작 보고 없이 오래 지나면 되돌린다. */
     private LocalDateTime dispatchedAt;
 
+    /** 배정 회차 번호. 공정을 맡길 때마다(로봇 배정, 작업자 시작) +1. 설비 보고의 회차가 다르면 지난 배정의 보고다. */
+    @Column(nullable = false)
+    private int dispatchSeq;
+
     private LocalDateTime startedAt;
 
     private LocalDateTime endedAt;
@@ -83,6 +87,7 @@ public class WorkOrderStep extends BaseEntity {
 
     /** 설비에서 공정을 시작한다. 시작 가능 여부는 서비스가 먼저 확인한다. */
     public void start(String equipmentCode, LocalDateTime now) {
+        this.dispatchSeq++;
         this.status = StepStatus.IN_PROGRESS;
         this.equipmentCode = equipmentCode;
         this.startedAt = now;
@@ -91,6 +96,7 @@ public class WorkOrderStep extends BaseEntity {
 
     /** 로봇 공정을 설비에 배정한다. 설비의 시작 보고를 기다린다. */
     public void dispatch(String equipmentCode, LocalDateTime now) {
+        this.dispatchSeq++;
         this.status = StepStatus.DISPATCHED;
         this.equipmentCode = equipmentCode;
         this.dispatchedAt = now;
@@ -102,6 +108,11 @@ public class WorkOrderStep extends BaseEntity {
     public void startByEquipment(LocalDateTime now) {
         this.status = StepStatus.IN_PROGRESS;
         this.startedAt = now;
+    }
+
+    /** 이 회차(dispatchSeq)의 설비 보고인가. 회차가 없는 보고(이 기능 전 메시지)는 회차로 거르지 않는다. */
+    public boolean isCurrentDispatch(Integer reportedSeq) {
+        return reportedSeq == null || reportedSeq == dispatchSeq;
     }
 
     /** 배정 뒤 시작 보고 없이 시간이 지났는가. */

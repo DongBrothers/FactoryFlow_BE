@@ -4,7 +4,8 @@
   - 설비 상태(가동 RUNNING · 정지 STOPPED · 고장 FAULT)를 보낸다
 - DB: 없음 (JPA, Flyway 의존성 없음). 설비 10대와 진행 중인 작업은 메모리에 둔다. common-event 도 쓰지 않고(JPA 필요) 메시지 모양(EventEnvelope JSON)만 맞춘다
 - 발행: equipment.step-started, equipment.step-completed, equipment.status-changed. Outbox 없이 RabbitMQ 로 바로 발행한다 ("발행은 Outbox 로만" 규칙의 유일한 예외). 작업 보고는 브로커가 받았다고 확인할 때까지 메모리에서 다시 보낸다
-- 수신: production.step-dispatched (받은 배정은 메모리에서 중복을 거른다. ProcessedEventGuard 없음)
+- 수신: production.step-dispatched (받은 배정은 메모리에서 중복을 거른다. ProcessedEventGuard 없음). 배정 회차(dispatchSeq)를 시작·완료 보고에 그대로 돌려준다
+- 시작할 때 설비마다 지금 상태(equipment.status-changed)를 보내 production 의 설비 상태를 맞춘다 (설비가 기준, docs/specs/simulator-restart.md)
 - 내부 API: /internal/simulator/equipments (상태 보기, fault·stop·run). 시연·테스트용, gateway 에 노출하지 않음
 - 설정: factoryflow.simulator.* (작업 시간, 불량 확률, 자동 고장 확률(기본 0), 재전송 주기) (docs/specs/simulator.md)
 - 설비 코드와 공정은 production 의 equipment 와 같은 값을 쓴다 (예: PRESS-01, BODY-02)

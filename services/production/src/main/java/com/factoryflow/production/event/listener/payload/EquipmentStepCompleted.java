@@ -9,4 +9,5 @@ public record EquipmentStepCompleted(
         Long workOrderId,
         ProductionProcess process,
         StepResult result,
-        String defectReason) {}
+        String defectReason,
+        Integer dispatchSeq) {}

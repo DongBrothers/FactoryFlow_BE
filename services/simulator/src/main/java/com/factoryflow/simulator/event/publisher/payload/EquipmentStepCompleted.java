@@ -9,7 +9,8 @@ public record EquipmentStepCompleted(
         Long workOrderId,
         LineProcess process,
         StepResult result,
-        String defectReason)
+        String defectReason,
+        Integer dispatchSeq)
         implements EquipmentEvent {
 
     @Override

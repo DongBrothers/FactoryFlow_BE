@@ -77,7 +77,12 @@ public class EquipmentService {
                     equipment == null ? null : equipment.getStatus());
             return;
         }
-        Job job = new Job(dispatch.workOrderId(), dispatch.process(), traceId);
+        Job job =
+                new Job(
+                        dispatch.workOrderId(),
+                        dispatch.process(),
+                        traceId,
+                        dispatch.dispatchSeq());
         equipment.take(job);
         later(properties.startDelay(), () -> reportStarted(equipment, job));
     }
@@ -88,7 +93,8 @@ public class EquipmentService {
         }
         publisher.publish(
                 job.traceId(),
-                new EquipmentStepStarted(equipment.getCode(), job.workOrderId(), job.process()));
+                new EquipmentStepStarted(
+                        equipment.getCode(), job.workOrderId(), job.process(), job.dispatchSeq()));
         later(properties.workTimeOf(job.process()), () -> reportCompleted(equipment, job));
     }
 
@@ -106,7 +112,8 @@ public class EquipmentService {
                         job.workOrderId(),
                         job.process(),
                         defect ? StepResult.DEFECT : StepResult.GOOD,
-                        defect ? job.process().defectReason() : null));
+                        defect ? job.process().defectReason() : null,
+                        job.dispatchSeq()));
     }
 
     /** 설비 상태를 바꾼다 (내부 API, 자동 고장). 같은 상태면 그대로. 멈추면 하던 작업을 버린다 (보고 안 함). */
@@ -119,6 +126,19 @@ public class EquipmentService {
                     new EquipmentStatusChanged(code, equipment.getProcess(), status));
         }
         return InternalEquipmentResponse.from(equipment);
+    }
+
+    /**
+     * 설비마다 지금 상태를 알린다. simulator 가 시작할 때 production 이 고장·정지로 알던 설비를 맞추려고 보낸다 (설비가 기준,
+     * docs/specs/simulator-restart.md).
+     */
+    public synchronized void announceStatuses() {
+        for (VirtualEquipment equipment : fleet.values()) {
+            publisher.publish(
+                    UUID.randomUUID().toString(),
+                    new EquipmentStatusChanged(
+                            equipment.getCode(), equipment.getProcess(), equipment.getStatus()));
+        }
     }
 
     /**
