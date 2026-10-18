@@ -106,6 +106,7 @@ class RolePermissionTest {
     private static String[] readPaths() {
         return new String[] {
             "/api/orders",
+            "/api/orders/customers",
             "/api/purchases?status=ORDERED",
             "/api/production/work-orders",
             "/api/inventory/parts"
