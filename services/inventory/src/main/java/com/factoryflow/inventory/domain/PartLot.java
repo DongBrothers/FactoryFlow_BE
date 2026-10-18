@@ -49,8 +49,12 @@ public class PartLot extends BaseTimeEntity {
     private LocalDateTime receivedAt;
 
     private PartLot(Long partId, Long purchaseId, int qty, LocalDateTime receivedAt) {
+        this(partId, lotNo(purchaseId, receivedAt), purchaseId, qty, receivedAt);
+    }
+
+    private PartLot(Long partId, String lotNo, Long purchaseId, int qty, LocalDateTime receivedAt) {
         this.partId = partId;
-        this.lotNo = lotNo(purchaseId, receivedAt);
+        this.lotNo = lotNo;
         this.purchaseId = purchaseId;
         this.receivedQty = qty;
         this.remainingQty = qty;
@@ -60,6 +64,14 @@ public class PartLot extends BaseTimeEntity {
     /** 구매 건 하나의 입고로 LOT 을 만든다. 번호는 LOT-{입고일 yyMMdd}-{purchaseId, 6자리가 안 되면 앞을 0 으로 채움}. */
     public static PartLot receive(Long partId, Long purchaseId, int qty, LocalDateTime now) {
         return new PartLot(partId, purchaseId, qty, now);
+    }
+
+    /**
+     * 재고 조정으로 늘린 수량의 LOT. 구매 건이 없고 번호는 LOT-ADJ-{조정 id, 6자리가 안 되면 앞을 0 으로 채움}
+     * (docs/specs/stock-adjustment.md).
+     */
+    public static PartLot adjustIn(Long partId, Long adjustmentId, int qty, LocalDateTime now) {
+        return new PartLot(partId, String.format("LOT-ADJ-%06d", adjustmentId), null, qty, now);
     }
 
     /** 이 LOT 에서 최대 wanted 만큼 쓴다. 실제로 쓴 수량을 돌려준다. */

@@ -22,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("7");
+        jdbc = migrateTo("8");
     }
 
     @Test
@@ -367,6 +367,27 @@ class MigrationTest extends MigrationTestSupport {
                         "part_lot_usage.lot_id",
                         "part_lot_usage.qty",
                         "part_lot_usage.created_at");
+    }
+
+    @Test
+    void v8StockAdjustmentKeepsSignedQtyButNotZero() {
+        // 재고 조정은 늘리면 양수, 줄이면 음수 (docs/specs/stock-adjustment.md)
+        jdbc.update(
+                "INSERT INTO stock_adjustment (part_id, qty, reason, adjusted_by, created_at)"
+                        + " VALUES (1, -2, '운반 중 파손', '6c1e2f3a-0000-0000-0000-000000000001', NOW(6))");
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT qty FROM stock_adjustment WHERE reason = '운반 중 파손'",
+                                Integer.class))
+                .isEqualTo(-2);
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO stock_adjustment (part_id, qty, reason, adjusted_by,"
+                                                + " created_at) VALUES (1, 0, '실사', 'x', NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_stock_adjustment_qty");
     }
 
     private void insertLot(String lotNo, long purchaseId, int receivedQty, int remainingQty) {

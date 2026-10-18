@@ -116,7 +116,8 @@ public class SecurityConfig {
                         "/api/purchases",
                         "/api/purchases/*/receive",
                         "/api/purchases/suppliers",
-                        "/api/inventory/parts")
+                        "/api/inventory/parts",
+                        "/api/inventory/parts/*/adjustments")
                 .hasRole(PURCHASE)
                 .pathMatchers(
                         HttpMethod.PUT, "/api/purchases/suppliers/*", "/api/inventory/parts/*")

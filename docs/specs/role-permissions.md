@@ -27,6 +27,7 @@
 | `POST /api/inventory/finished-vehicles/{vin}/ship` | 완성차 출고 | PRODUCTION |
 | `POST /api/production/products`, `PUT /api/production/products/{id}` | 제품 + BOM 등록·수정 (#127) | PRODUCTION |
 | `POST /api/inventory/parts`, `PUT /api/inventory/parts/{id}` | 부품 등록·수정 (#127) | PURCHASE |
+| `POST /api/inventory/parts/{id}/adjustments` | 재고 조정 (#129) | PURCHASE |
 | `POST /api/purchases/suppliers`, `PUT /api/purchases/suppliers/{id}` | 공급업체 등록·수정 (#127) | PURCHASE |
 | `/api/auth/admin/**` | 계정 발급 (지금 규칙) | ADMIN |
 | 그 밖의 GET | 조회 | SALES, PURCHASE, PRODUCTION |

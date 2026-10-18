@@ -75,6 +75,11 @@ public class Part extends BaseEntity {
         this.available += qty;
     }
 
+    /** 재고 조정으로 바로 쓸 수 있는 수량에서 qty 만큼 뺀다. 충분한지는 서비스가 먼저 확인한다 (예약분은 줄이지 않음). */
+    public void takeOut(int qty) {
+        this.available -= qty;
+    }
+
     /** 생산 취소로 잡아 둔 qty 를 풀었다. 바로 쓸 수 있는 수량으로 돌아간다. */
     public void release(int qty) {
         this.reserved -= qty;

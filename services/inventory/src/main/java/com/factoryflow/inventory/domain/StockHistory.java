@@ -71,6 +71,16 @@ public class StockHistory {
                 productionId);
     }
 
+    /** 재고 조정. 늘렸으면 ADJUST_IN, 줄였으면 ADJUST_OUT 이고 qty 는 그 크기 (항상 양수). */
+    public static StockHistory adjust(StockAdjustment adjustment) {
+        return new StockHistory(
+                adjustment.getPartId(),
+                Math.abs(adjustment.getQty()),
+                adjustment.isIncrease() ? StockHistoryType.ADJUST_IN : StockHistoryType.ADJUST_OUT,
+                StockHistoryRefType.ADJUSTMENT,
+                adjustment.getId());
+    }
+
     public static StockHistory receiveFromPurchase(Long partId, int qty, Long purchaseId) {
         return new StockHistory(
                 partId, qty, StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);

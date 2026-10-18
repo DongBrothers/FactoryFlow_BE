@@ -9,5 +9,9 @@ public enum StockHistoryType {
     /** 입고: available + */
     RECEIVE,
     /** 생산에 사용: reserved − */
-    CONSUME
+    CONSUME,
+    /** 재고 조정으로 늘림: available + (docs/specs/stock-adjustment.md) */
+    ADJUST_IN,
+    /** 재고 조정으로 줄임: available − */
+    ADJUST_OUT
 }
