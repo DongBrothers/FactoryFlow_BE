@@ -125,6 +125,15 @@ public class PartReservationService {
         announceReserved(filled);
     }
 
+    /**
+     * 재고 조정으로 바로 쓸 수 있는 수량이 늘었을 때: 입고와 같은 규칙으로 그 부품을 기다리는 줄을 채우고, 다 찬 생산 건은 inventory.reserved
+     * (docs/specs/stock-adjustment.md). part 는 부르는 쪽 트랜잭션에서 예약과 같은 잠금으로 읽은 것이다.
+     */
+    @Transactional
+    public void fillWaitingLinesAfterRestock(Part part) {
+        announceReserved(fillWaitingLines(part));
+    }
+
     /** 줄을 채운 생산 건 중 기다리는 줄이 더 없는 것만 inventory.reserved. */
     private void announceReserved(List<Long> filled) {
         Set<Long> stillWaiting = findStillWaiting(filled);

@@ -61,6 +61,7 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 | inventory (V5) | `part_lot`: id, part_id, lot_no (VARCHAR(32), UNIQUE. 구매 건 id 가 Long 최대 19자리여도 들어감), purchase_id (UNIQUE), received_qty (> 0), remaining_qty (≥ 0, ≤ received_qty), received_at, created_at, updated_at, is_deleted. 인덱스 (part_id, id) |
 | inventory (V5) | `part_lot_usage`: id, vin, production_id, part_id, lot_id, qty (> 0), created_at. 인덱스 (vin) |
 | inventory (V6, #116) | `part_lot.purchase_id` NULL 허용 (초기 재고 LOT). 인덱스 (part_id, received_at, id). 초기 재고 LOT 의 입고 시각은 그 부품의 가장 이른 LOT 보다 1초 앞(LOT 이 없으면 지금)이라 id 가 커도 가장 먼저 쓴다. 부품마다 `LOT-INIT-{부품 id}` 를 만든다: 남은 수량 = 실물 − 다른 LOT 남은 수량, 받은 수량 = 남은 수량 + LOT 없이 이미 쓴 수량 (둘 다 0 이면 만들지 않음). LOT 없던 사용 기록은 그 LOT 으로 옮기고 `part_lot_usage.lot_id` NOT NULL |
+| inventory (V8, #129) | 재고 조정으로 늘린 수량은 조정 LOT `LOT-ADJ-{조정 id 6자리}` (구매 건 없음), 줄인 수량은 LOT 을 입고 순으로 뺀다 (docs/specs/stock-adjustment.md) |
 | inventory (V7, #123) | `part_lot_usage` 의 production_id, part_id 를 지운다 (lot_id, vin 으로 알 수 있음). `part_lot.is_deleted` 를 지운다 (docs/specs/unused-columns.md) |
 | dev 시드 | LOT 이 하나도 없는 시드 부품에 지금 재고만큼 `LOT-INIT-{부품 id}` (다시 돌려도 한 번) |
 
