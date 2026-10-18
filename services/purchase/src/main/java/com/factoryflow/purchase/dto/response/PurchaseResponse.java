@@ -1,7 +1,6 @@
 package com.factoryflow.purchase.dto.response;
 
 import com.factoryflow.purchase.domain.Purchase;
-import com.factoryflow.purchase.domain.PurchaseSource;
 import com.factoryflow.purchase.domain.PurchaseStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
@@ -15,8 +14,6 @@ public record PurchaseResponse(
         @Schema(description = "수량", example = "6") int qty,
         @Schema(description = "상태 (ORDERED, RECEIVED, CANCELLED)", example = "ORDERED")
                 PurchaseStatus status,
-        @Schema(description = "생긴 곳 (MANUAL: 구매 담당 발주, AUTO: 없앤 자동 요청)", example = "MANUAL")
-                PurchaseSource source,
         @Schema(description = "발주한 공급업체 번호", example = "2") Long supplierId,
         @Schema(description = "발주한 직원 번호 (public_id). 자동 요청 시절 건은 없음", example = "6c1e2f3a-…")
                 String orderedBy,
@@ -31,7 +28,6 @@ public record PurchaseResponse(
                 purchase.getPartName(),
                 purchase.getQty(),
                 purchase.getStatus(),
-                purchase.getSource(),
                 purchase.getSupplierId(),
                 purchase.getOrderedBy(),
                 purchase.getOrderedAt(),

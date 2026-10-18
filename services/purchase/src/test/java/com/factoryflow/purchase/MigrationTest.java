@@ -27,7 +27,7 @@ class MigrationTest extends MigrationTestSupport {
                         "INSERT INTO purchase (part_id, part_code, part_name, qty, status, source,"
                                 + " created_at, updated_at) VALUES (77, 'OLD-77', '옛 자동 요청', 3,"
                                 + " 'REQUESTED', 'AUTO', NOW(6), NOW(6))");
-        jdbc = migrateTo("4");
+        jdbc = migrateTo("5");
     }
 
     @Test
@@ -38,13 +38,11 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
-    void autoPurchaseNeedsNoSupplierOrAdmin() {
-        insertAutoPurchase(4);
-
+    void oldAutoRequestStaysWithoutSupplier() {
+        // 자동 구매 시절의 요청(V3 전에 넣은 part 77)은 공급업체 없이 남는다. 그래서 supplier_id 는 NULL 을 허용한다
         var count =
                 jdbc.queryForObject(
-                        "SELECT COUNT(*) FROM purchase WHERE source = 'AUTO' AND part_id = 1"
-                                + " AND supplier_id IS NULL AND requested_by IS NULL",
+                        "SELECT COUNT(*) FROM purchase WHERE part_id = 77 AND supplier_id IS NULL",
                         Integer.class);
 
         assertThat(count).isEqualTo(1);
@@ -57,7 +55,7 @@ class MigrationTest extends MigrationTestSupport {
                                 "SELECT name FROM supplier WHERE is_deleted = FALSE ORDER BY id",
                                 String.class))
                 .contains("현대모비스", "한국타이어", "현대트랜시스");
-        insertAutoPurchase(2);
+        insertPurchase(2);
         assertThat(jdbc.queryForObject("SELECT MIN(version) FROM purchase", Long.class)).isZero();
     }
 
@@ -69,8 +67,8 @@ class MigrationTest extends MigrationTestSupport {
                 .isEqualTo("CANCELLED");
         jdbc.update(
                 "INSERT INTO purchase (part_id, part_code, part_name, qty, supplier_id, ordered_by,"
-                        + " status, source, ordered_at, created_at, updated_at) VALUES (1012, 'TIRE-18',"
-                        + " '타이어', 10, 2, '6c1e2f3a-0000-0000-0000-000000000001', 'ORDERED', 'MANUAL',"
+                        + " status, ordered_at, created_at, updated_at) VALUES (1012, 'TIRE-18',"
+                        + " '타이어', 10, 2, '6c1e2f3a-0000-0000-0000-000000000001', 'ORDERED',"
                         + " NOW(6), NOW(6), NOW(6))");
         assertThat(
                         jdbc.queryForObject(
@@ -80,8 +78,26 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v5DropsUnusedPurchaseColumnsAndKeepsRows() {
+        // requested_by 는 지운 admin 을, source 는 없어진 자동 구매를 가리켰다. 구매 건은 지우지 않으므로 is_deleted 도 뺀다
+        // (#123)
+        var columns =
+                jdbc.queryForList(
+                        "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN"
+                                + " ('requested_by', 'source', 'is_deleted', 'ordered_by')",
+                        String.class);
+
+        assertThat(columns).containsExactlyInAnyOrder("supplier.is_deleted", "purchase.ordered_by");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT status FROM purchase WHERE part_id = 77", String.class))
+                .isEqualTo("CANCELLED");
+    }
+
+    @Test
     void rejectsNonPositivePurchaseQty() {
-        assertThatThrownBy(() -> insertAutoPurchase(0))
+        assertThatThrownBy(() -> insertPurchase(0))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_purchase_qty");
     }
@@ -104,11 +120,11 @@ class MigrationTest extends MigrationTestSupport {
                 .hasMessageContaining("uk_processed_event_event_id");
     }
 
-    private void insertAutoPurchase(int qty) {
+    private void insertPurchase(int qty) {
         jdbc.update(
-                "INSERT INTO purchase (part_id, part_code, part_name, qty, status, source,"
+                "INSERT INTO purchase (part_id, part_code, part_name, qty, supplier_id, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (1, 'SEAT-001', '시트', ?, 'REQUESTED', 'AUTO', NOW(6), NOW(6))",
+                        + " VALUES (1, 'SEAT-001', '시트', ?, 1, 'ORDERED', NOW(6), NOW(6))",
                 qty);
     }
 

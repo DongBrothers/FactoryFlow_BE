@@ -77,7 +77,7 @@ class PurchaseControllerTest {
         create(TIRE, 10, mobis)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.status").value("ORDERED"))
-                .andExpect(jsonPath("$.data.source").value("MANUAL"))
+                .andExpect(jsonPath("$.data.source").doesNotExist())
                 .andExpect(jsonPath("$.data.partId").value(TIRE))
                 .andExpect(jsonPath("$.data.partCode").value("TIRE-18"))
                 .andExpect(jsonPath("$.data.partName").value("타이어 18인치"))
@@ -265,8 +265,8 @@ class PurchaseControllerTest {
     private long insertPurchase(String status) {
         jdbc.update(
                 "INSERT INTO purchase (part_id, part_code, part_name, qty, supplier_id, ordered_by,"
-                        + " status, source, ordered_at, created_at, updated_at)"
-                        + " VALUES (?, 'TIRE-18', '타이어 18인치', 6, ?, ?, ?, 'MANUAL', NOW(6), NOW(6), NOW(6))",
+                        + " status, ordered_at, created_at, updated_at)"
+                        + " VALUES (?, 'TIRE-18', '타이어 18인치', 6, ?, ?, ?, NOW(6), NOW(6), NOW(6))",
                 TIRE,
                 mobis,
                 WORKER,

@@ -1,6 +1,6 @@
 package com.factoryflow.inventory.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "part_lot")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class PartLot extends BaseEntity {
+public class PartLot extends BaseTimeEntity {
 
     private static final DateTimeFormatter LOT_DATE = DateTimeFormatter.ofPattern("yyMMdd");
 

@@ -1,6 +1,6 @@
 package com.factoryflow.production.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -21,7 +21,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "work_order_step")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class WorkOrderStep extends BaseEntity {
+public class WorkOrderStep extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

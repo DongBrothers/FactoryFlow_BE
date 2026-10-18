@@ -12,17 +12,16 @@ public interface FinishedVehicleRepository extends JpaRepository<FinishedVehicle
 
     boolean existsByProductionId(Long productionId);
 
-    Optional<FinishedVehicle> findByVinAndIsDeletedFalse(String vin);
+    Optional<FinishedVehicle> findByVin(String vin);
 
-    boolean existsByVinAndIsDeletedFalse(String vin);
+    boolean existsByVin(String vin);
 
     List<FinishedVehicle> findAllByVinIn(Collection<String> vins);
 
     /** beforeId 보다 오래된 완성차, 최신 먼저. */
-    List<FinishedVehicle> findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
-            Long beforeId, Limit limit);
+    List<FinishedVehicle> findAllByIdLessThanOrderByIdDesc(Long beforeId, Limit limit);
 
     /** beforeId 보다 오래된 그 상태의 완성차, 최신 먼저. */
-    List<FinishedVehicle> findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+    List<FinishedVehicle> findAllByStatusAndIdLessThanOrderByIdDesc(
             FinishedVehicleStatus status, Long beforeId, Limit limit);
 }

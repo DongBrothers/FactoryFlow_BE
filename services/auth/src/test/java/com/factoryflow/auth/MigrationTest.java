@@ -29,7 +29,7 @@ class MigrationTest extends MigrationTestSupport {
                                 + " created_at, updated_at) VALUES (?, 'worker@gmail.com', 'hash',"
                                 + " '작업자', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
                         UUID.randomUUID().toString());
-        jdbc = migrateTo("3");
+        jdbc = migrateTo("4");
     }
 
     @Test
@@ -42,25 +42,39 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
-    void createsUserAccountAndDropsAdminButKeepsCustomer() {
+    void createsUserAccountAndDropsAdminAndCustomer() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
-        // admin 은 user_account 로 대체되어 사라지고, customer 는 데이터 테이블로 남는다.
-        assertThat(tables).contains("user_account", "customer");
-        assertThat(tables).doesNotContain("admin");
+        // admin 은 user_account 로 대체되어 사라지고, 쓰는 곳이 없던 customer 는 V4 에서 지운다 (#123).
+        assertThat(tables).contains("user_account");
+        assertThat(tables).doesNotContain("admin", "customer");
     }
 
     @Test
-    void customerHasNoPasswordColumn() {
-        // 고객은 로그인하지 않으므로 비밀번호 컬럼이 제거되어 있다.
-        Integer count =
-                jdbc.queryForObject(
-                        "SELECT COUNT(*) FROM information_schema.columns"
-                                + " WHERE table_schema = DATABASE()"
-                                + " AND table_name = 'customer' AND column_name = 'password'",
-                        Integer.class);
+    void customerHadNoPasswordColumnUntilV4DropsIt() {
+        // 고객은 로그인하지 않으므로 V2 가 비밀번호 컬럼을 지웠다. 테이블 자체는 V4 가 지운다.
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE auth_v3");
+        var upgrade =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/auth_v3"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("3").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        assertThat(columnCount(db, "customer", "password")).isZero();
+        assertThat(columnCount(db, "customer", "email")).isEqualTo(1);
 
-        assertThat(count).isZero();
+        Flyway.configure().dataSource(upgrade).target("4").load().migrate();
+
+        assertThat(db.queryForList("SHOW TABLES", String.class)).doesNotContain("customer");
+    }
+
+    @Test
+    void v4DropsUserAccountSoftDelete() {
+        // 계정을 막는 것은 status DISABLED 다. 지우지 않으므로 is_deleted 를 두지 않는다 (#123).
+        assertThat(columnCount(jdbc, "user_account", "is_deleted")).isZero();
+        assertThat(columnCount(jdbc, "user_account", "status")).isEqualTo(1);
     }
 
     @Test
@@ -91,6 +105,15 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertUser("nopw@factoryflow.test", null))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("password");
+    }
+
+    private static int columnCount(JdbcTemplate db, String table, String column) {
+        return db.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()"
+                        + " AND table_name = ? AND column_name = ?",
+                Integer.class,
+                table,
+                column);
     }
 
     private void insertUser(String email, String password) {

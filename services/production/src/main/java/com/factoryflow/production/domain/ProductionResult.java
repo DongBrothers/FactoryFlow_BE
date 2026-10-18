@@ -1,8 +1,8 @@
 package com.factoryflow.production.domain;
 
-import com.factoryflow.common.web.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -15,13 +15,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/** 공정 실적: 공정을 끝낼 때마다 한 줄. workerId 는 작업자 public_id (gateway 의 X-User-Id), 설비 보고(로봇 공정)면 null. */
+/**
+ * 공정 실적: 공정을 끝낼 때마다 한 줄. 추가만 하고 수정하지 않는다. workerId 는 작업자 public_id (gateway 의 X-User-Id), 설비 보고(로봇
+ * 공정)면 null.
+ */
 @Getter
 @Entity
 @Table(name = "production_result")
+@EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProductionResult extends BaseEntity {
+public class ProductionResult {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,6 +55,10 @@ public class ProductionResult extends BaseEntity {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime endedAt;
+
+    @CreatedDate
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     private ProductionResult(
             WorkOrderStep step,

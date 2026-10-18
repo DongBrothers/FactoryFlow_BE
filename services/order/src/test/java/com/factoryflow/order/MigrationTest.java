@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("7");
+        jdbc = migrateTo("8");
     }
 
     @Test
@@ -83,6 +83,24 @@ class MigrationTest extends MigrationTestSupport {
                                 "SELECT status FROM order_vehicle ORDER BY production_id",
                                 String.class))
                 .containsExactly("RECEIVED", "IN_PRODUCTION");
+    }
+
+    @Test
+    void v8DropsFailReasonAndSoftDelete() {
+        // 쓰지 않던 실패 사유와, 지우지 않는 주문 데이터의 소프트 삭제를 뺀다 (#123)
+        var columns =
+                jdbc.queryForList(
+                        "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN"
+                                + " ('customer_order', 'order_item', 'order_vehicle')"
+                                + " AND COLUMN_NAME IN ('fail_reason', 'is_deleted', 'updated_at')",
+                        String.class);
+
+        assertThat(columns)
+                .containsExactlyInAnyOrder(
+                        "customer_order.updated_at",
+                        "order_item.updated_at",
+                        "order_vehicle.updated_at");
     }
 
     @Test

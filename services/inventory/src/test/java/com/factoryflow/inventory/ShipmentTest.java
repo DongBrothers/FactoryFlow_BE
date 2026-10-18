@@ -50,7 +50,7 @@ class ShipmentTest {
                 MockMvcBuilders.webAppContextSetup(context).addFilters(new TraceIdFilter()).build();
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM outbox");
-        insertFinishedVehicle(VIN, 12L, false);
+        insertFinishedVehicle(VIN, 12L);
     }
 
     @Test
@@ -85,10 +85,6 @@ class ShipmentTest {
         ship("KMH000017TU000099")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("FINISHED_VEHICLE_NOT_FOUND"));
-        insertFinishedVehicle("KMH000017TU000013", 13L, true);
-        ship("KMH000017TU000013")
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("FINISHED_VEHICLE_NOT_FOUND"));
         assertThat(outbox()).isEmpty();
 
         ship(VIN).andExpect(status().isOk());
@@ -102,7 +98,7 @@ class ShipmentTest {
     @Transactional
     void concurrentShipIsFinishedVehicleConflict() {
         // 이 요청이 완성차를 읽은 뒤 다른 출고 요청이 먼저 바꿨다
-        finishedVehicleRepository.findByVinAndIsDeletedFalse(VIN);
+        finishedVehicleRepository.findByVin(VIN);
         jdbc.update("UPDATE finished_vehicle SET version = version + 1 WHERE vin = ?", VIN);
 
         assertThatThrownBy(() -> finishedVehicleService.ship(VIN))
@@ -144,13 +140,11 @@ class ShipmentTest {
         return JsonPath.<Number>read(json, path).longValue();
     }
 
-    private void insertFinishedVehicle(String vin, long productionId, boolean deleted) {
+    private void insertFinishedVehicle(String vin, long productionId) {
         jdbc.update(
                 "INSERT INTO finished_vehicle (vin, production_id, order_id, product_id, status,"
-                        + " created_at, updated_at, is_deleted)"
-                        + " VALUES (?, ?, 42, 1, 'IN_STOCK', NOW(6), NOW(6), ?)",
+                        + " created_at, updated_at) VALUES (?, ?, 42, 1, 'IN_STOCK', NOW(6), NOW(6))",
                 vin,
-                productionId,
-                deleted);
+                productionId);
     }
 }

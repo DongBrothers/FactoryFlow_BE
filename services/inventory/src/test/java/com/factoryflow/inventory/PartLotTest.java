@@ -51,10 +51,10 @@ class PartLotTest {
         insertFinishedVehicle(VIN_2, 101L, "SHIPPED");
         insertFinishedVehicle("KMH000017TU000102", 102L, "IN_STOCK");
         // VIN_1: 타이어 LOT1 2, 타이어 초기 재고 2, 엔진 초기 재고 1. VIN_2: 타이어 LOT1 1
-        insertUsage(VIN_1, 100L, tire, lot1, 2);
-        insertUsage(VIN_1, 100L, tire, tireInit, 2);
-        insertUsage(VIN_1, 100L, engine, engineInit, 1);
-        insertUsage(VIN_2, 101L, tire, lot1, 1);
+        insertUsage(VIN_1, lot1, 2);
+        insertUsage(VIN_1, tireInit, 2);
+        insertUsage(VIN_1, engineInit, 1);
+        insertUsage(VIN_2, lot1, 1);
     }
 
     @Test
@@ -190,13 +190,10 @@ class PartLotTest {
                 status);
     }
 
-    private void insertUsage(String vin, long productionId, long partId, Long lotId, int qty) {
+    private void insertUsage(String vin, Long lotId, int qty) {
         jdbc.update(
-                "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
-                        + " VALUES (?, ?, ?, ?, ?, NOW(6))",
+                "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at) VALUES (?, ?, ?, NOW(6))",
                 vin,
-                productionId,
-                partId,
                 lotId,
                 qty);
     }

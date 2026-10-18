@@ -72,8 +72,8 @@ class WorkOrderControllerTest {
         assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
         assertThat(
                         jdbc.queryForObject(
-                                "SELECT p.started_at IS NOT NULL FROM production p"
-                                        + " JOIN work_order w ON w.production_id = p.id WHERE w.id = ?",
+                                // 생산 시작 시각은 작업지시가 갖는다 (#123)
+                                "SELECT started_at IS NOT NULL FROM work_order WHERE id = ?",
                                 Boolean.class,
                                 workOrder))
                 .isTrue();

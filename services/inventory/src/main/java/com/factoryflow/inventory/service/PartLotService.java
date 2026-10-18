@@ -41,17 +41,17 @@ public class PartLotService {
             throw new CustomException(InventoryErrorCode.FINISHED_VEHICLE_NOT_FOUND);
         }
         List<PartLotUsage> usages = findUsagesOfVehicle(vin);
-        Map<Long, Part> parts = findParts(usages.stream().map(PartLotUsage::getPartId).toList());
         Map<Long, PartLot> lots = findLots(usages.stream().map(PartLotUsage::getLotId).toList());
+        // 사용 기록의 부품은 그 LOT 의 부품이다
+        Map<Long, Part> parts = findParts(lots.values().stream().map(PartLot::getPartId).toList());
+        Function<PartLotUsage, PartLot> lotOf = u -> lots.get(u.getLotId());
+        Function<PartLotUsage, Part> partOf = u -> parts.get(lotOf.apply(u).getPartId());
         return usages.stream()
                 .sorted(
-                        Comparator.comparing((PartLotUsage u) -> parts.get(u.getPartId()).getCode())
-                                .thenComparing(u -> lots.get(u.getLotId()).getReceivedAt())
+                        Comparator.comparing((PartLotUsage u) -> partOf.apply(u).getCode())
+                                .thenComparing(u -> lotOf.apply(u).getReceivedAt())
                                 .thenComparing(PartLotUsage::getLotId))
-                .map(
-                        u ->
-                                VehiclePartLotResponse.of(
-                                        u, parts.get(u.getPartId()), lots.get(u.getLotId())))
+                .map(u -> VehiclePartLotResponse.of(u, partOf.apply(u), lotOf.apply(u)))
                 .toList();
     }
 
@@ -93,7 +93,7 @@ public class PartLotService {
     }
 
     private boolean isStocked(String vin) {
-        return finishedVehicleRepository.existsByVinAndIsDeletedFalse(vin);
+        return finishedVehicleRepository.existsByVin(vin);
     }
 
     private List<PartLotUsage> findUsagesOfVehicle(String vin) {
@@ -122,7 +122,7 @@ public class PartLotService {
 
     private PartLot findLotOrThrow(String lotNo) {
         return partLotRepository
-                .findByLotNoAndIsDeletedFalse(lotNo)
+                .findByLotNo(lotNo)
                 .orElseThrow(() -> new CustomException(InventoryErrorCode.PART_LOT_NOT_FOUND));
     }
 

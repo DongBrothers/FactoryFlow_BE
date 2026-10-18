@@ -1,6 +1,6 @@
 package com.factoryflow.inventory.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -25,7 +25,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "finished_vehicle")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class FinishedVehicle extends BaseEntity {
+public class FinishedVehicle extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

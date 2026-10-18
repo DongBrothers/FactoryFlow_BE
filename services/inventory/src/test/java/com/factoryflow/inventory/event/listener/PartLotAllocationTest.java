@@ -206,7 +206,8 @@ class PartLotAllocationTest {
     private List<Tuple> usages(String vin) {
         return jdbc
                 .queryForList(
-                        "SELECT part_id, lot_id, qty FROM part_lot_usage WHERE vin = ? ORDER BY id",
+                        "SELECT l.part_id, u.lot_id, u.qty FROM part_lot_usage u"
+                                + " JOIN part_lot l ON l.id = u.lot_id WHERE u.vin = ? ORDER BY u.id",
                         vin)
                 .stream()
                 .map(u -> tuple(u.get("part_id"), u.get("lot_id"), u.get("qty")))

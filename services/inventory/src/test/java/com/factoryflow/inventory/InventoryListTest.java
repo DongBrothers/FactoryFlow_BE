@@ -44,11 +44,10 @@ class InventoryListTest {
         engine = insertPart("ENG-T", "엔진", 4, 1);
         long seat = insertPart("SEAT-T", "시트", 3, 0);
         jdbc.update("UPDATE part SET is_deleted = TRUE WHERE id = ?", seat);
-        // 오래된 것부터: 1 출고됨, 2 창고, 3 창고(삭제됨), 4 창고
-        insertFinishedVehicle(VIN_1, 1L, "SHIPPED", false);
-        insertFinishedVehicle(VIN_2, 2L, "IN_STOCK", false);
-        insertFinishedVehicle(VIN_3, 3L, "IN_STOCK", true);
-        insertFinishedVehicle(VIN_4, 4L, "IN_STOCK", false);
+        // 오래된 것부터: 1 출고됨, 2 창고, 4 창고. 3 은 없는 VIN (커서로 주면 404)
+        insertFinishedVehicle(VIN_1, 1L, "SHIPPED");
+        insertFinishedVehicle(VIN_2, 2L, "IN_STOCK");
+        insertFinishedVehicle(VIN_4, 4L, "IN_STOCK");
     }
 
     @Test
@@ -192,17 +191,15 @@ class InventoryListTest {
         return jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
     }
 
-    private void insertFinishedVehicle(
-            String vin, long productionId, String status, boolean deleted) {
+    private void insertFinishedVehicle(String vin, long productionId, String status) {
         jdbc.update(
                 "INSERT INTO finished_vehicle (vin, production_id, order_id, product_id, status,"
-                        + " shipped_at, created_at, updated_at, is_deleted)"
-                        + " VALUES (?, ?, 42, 1, ?, ?, NOW(6), NOW(6), ?)",
+                        + " shipped_at, created_at, updated_at)"
+                        + " VALUES (?, ?, 42, 1, ?, ?, NOW(6), NOW(6))",
                 vin,
                 productionId,
                 status,
-                "SHIPPED".equals(status) ? Timestamp.valueOf("2026-10-17 10:00:00") : null,
-                deleted);
+                "SHIPPED".equals(status) ? Timestamp.valueOf("2026-10-17 10:00:00") : null);
     }
 
     private void insertLot(

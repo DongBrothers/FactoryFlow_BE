@@ -17,7 +17,7 @@ gateway 경로는 `/api/inventory/finished-vehicles/{vin}/ship`. 요청 본문 �
 | 확인 (이 순서로) | 실패 |
 |---|---|
 | vin 이 VIN 형식 (17자, 영문 대문자·숫자, I·O·Q 없음. `@Pattern`) | 400 |
-| 완성차 있음 (is_deleted = false) | 404 `FINISHED_VEHICLE_NOT_FOUND` |
+| 완성차 있음 | 404 `FINISHED_VEHICLE_NOT_FOUND` |
 | 아직 출고 안 됨 (IN_STOCK) | 409 `FINISHED_VEHICLE_ALREADY_SHIPPED` |
 | 저장 때 다른 요청이 먼저 바꾸지 않음 (완성차 version) | 409 `FINISHED_VEHICLE_CONFLICT` |
 

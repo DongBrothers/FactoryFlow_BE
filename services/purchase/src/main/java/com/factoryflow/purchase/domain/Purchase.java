@@ -1,6 +1,6 @@
 package com.factoryflow.purchase.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -25,7 +25,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "purchase")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Purchase extends BaseEntity {
+public class Purchase extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,8 +45,6 @@ public class Purchase extends BaseEntity {
 
     private Long supplierId;
 
-    private Long requestedBy;
-
     /** 발주한 직원 public_id (gateway 의 X-User-Id). 자동 요청 시절의 구매 건은 비어 있다. */
     @Column(length = 36, updatable = false)
     private String orderedBy;
@@ -55,11 +53,6 @@ public class Purchase extends BaseEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private PurchaseStatus status;
-
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
-    @Column(nullable = false, updatable = false, length = 20)
-    private PurchaseSource source;
 
     private LocalDateTime orderedAt;
 
@@ -83,7 +76,6 @@ public class Purchase extends BaseEntity {
         this.supplierId = supplierId;
         this.orderedBy = orderedBy;
         this.status = PurchaseStatus.ORDERED;
-        this.source = PurchaseSource.MANUAL;
         this.orderedAt = now;
     }
 

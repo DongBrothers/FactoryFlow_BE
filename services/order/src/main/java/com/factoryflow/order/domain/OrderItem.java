@@ -1,6 +1,6 @@
 package com.factoryflow.order.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,7 +24,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "order_item")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class OrderItem extends BaseEntity {
+public class OrderItem extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,9 +49,6 @@ public class OrderItem extends BaseEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private OrderStatus status;
-
-    @Column(length = 255)
-    private String failReason;
 
     /** 품목·주문 요약을 동시에 바꾸면(다른 큐의 차량 상태 변경) 늦은 쪽이 실패하고 재시도로 다시 요약한다. */
     @Version private Long version;
