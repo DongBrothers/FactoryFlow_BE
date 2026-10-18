@@ -9,7 +9,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -156,6 +163,67 @@ class StockAdjustmentTest {
                 .containsAllEntriesOf(Map.of("available", 2, "reserved", 6));
         assertThat(remaining(lot)).isEqualTo(8);
         assertNothingRecorded();
+    }
+
+    @Test
+    void lotsShorterThanStockArePartLotShortageAndNothingChanges() throws Exception {
+        // 실물(available 5)보다 LOT 남은 수량(3)이 적은 어긋난 데이터: 줄이다 LOT 이 모자라면 롤백한다
+        long tire = insertPart("TIRE-18", 5, 0);
+        long lot = insertLot(tire, "LOT-261001-000001", 3, "2026-10-01 09:00:00");
+
+        adjust(tire, "{\"qty\":-4,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("PART_LOT_SHORTAGE"));
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT available FROM part WHERE id = ?", Integer.class, tire))
+                .isEqualTo(5);
+        assertThat(remaining(lot)).isEqualTo(3);
+        assertNothingRecorded();
+    }
+
+    @Test
+    void concurrentAdjustmentsOfOnePartAreEachAppliedOrRejected() throws Exception {
+        // 같은 부품을 동시에 조정하면 늦게 저장한 쪽은 409 PART_CONFLICT 이고, 수량에는 성공한 조정만 들어간다
+        long tire = insertPart("TIRE-18", 10, 0);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        int succeeded = 0;
+        try {
+            for (int round = 0; round < 5; round++) {
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Integer>> statuses = new ArrayList<>();
+                for (int i = 0; i < 2; i++) {
+                    statuses.add(
+                            pool.submit(
+                                    () -> {
+                                        start.await();
+                                        return adjust(tire, "{\"qty\":1,\"reason\":\"실사\"}")
+                                                .andReturn()
+                                                .getResponse()
+                                                .getStatus();
+                                    }));
+                }
+                start.countDown();
+                for (Future<Integer> status : statuses) {
+                    int code = status.get(10, TimeUnit.SECONDS);
+                    assertThat(code).isIn(201, 409);
+                    if (code == 201) {
+                        succeeded++;
+                    }
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(succeeded).isPositive();
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT available FROM part WHERE id = ?", Integer.class, tire))
+                .isEqualTo(10 + succeeded);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stock_adjustment", Integer.class))
+                .isEqualTo(succeeded);
     }
 
     @Test
