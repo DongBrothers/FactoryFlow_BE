@@ -18,6 +18,7 @@ import com.factoryflow.order.dto.response.OrderSummaryResponse;
 import com.factoryflow.order.event.publisher.payload.OrderCancelRequested;
 import com.factoryflow.order.exception.OrderErrorCode;
 import com.factoryflow.order.repository.CustomerOrderRepository;
+import com.factoryflow.order.repository.CustomerRepository;
 import com.factoryflow.order.repository.OrderItemRepository;
 import com.factoryflow.order.repository.OrderVehicleRepository;
 import java.time.LocalDateTime;
@@ -39,16 +40,21 @@ public class OrderService {
 
     private final ProductClient productClient;
     private final OrderWriter orderWriter;
+    private final CustomerRepository customerRepository;
     private final CustomerOrderRepository customerOrderRepository;
     private final OrderItemRepository orderItemRepository;
     private final OrderVehicleRepository orderVehicleRepository;
     private final EventPublisher eventPublisher;
 
     /**
-     * 제품을 확인한 뒤 주문을 저장하고 주문 번호를 담은 응답을 돌려준다. production 조회는 트랜잭션 밖에서 해서 외부 호출 동안 DB 커넥션을 잡지 않고, 저장은
-     * OrderWriter 가 한 트랜잭션으로 한다.
+     * 고객과 제품을 확인한 뒤 주문을 저장하고 주문 번호를 담은 응답을 돌려준다. 등록되지 않은 고객이면 production 을 부르지 않고
+     * CUSTOMER_NOT_FOUND (docs/specs/customer.md). production 조회는 트랜잭션 밖에서 해서 외부 호출 동안 DB 커넥션을 잡지
+     * 않고, 저장은 OrderWriter 가 한 트랜잭션으로 한다.
      */
     public CreateOrderResponse create(CreateOrderRequest request) {
+        if (!isRegisteredCustomer(request.customerId())) {
+            throw new CustomException(OrderErrorCode.CUSTOMER_NOT_FOUND);
+        }
         List<Long> productIds =
                 request.items().stream().map(CreateOrderItemRequest::productId).toList();
         Map<Long, ProductResponse> products =
@@ -191,5 +197,9 @@ public class OrderService {
 
     private List<OrderVehicle> findVehiclesOf(Long orderId) {
         return orderVehicleRepository.findAllByOrderIdOrderByProductionIdAsc(orderId);
+    }
+
+    private boolean isRegisteredCustomer(Long customerId) {
+        return customerRepository.existsById(customerId);
     }
 }

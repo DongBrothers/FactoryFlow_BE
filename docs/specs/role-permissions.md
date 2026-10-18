@@ -19,6 +19,7 @@
 |---|---|---|
 | `POST /api/orders` | 주문 생성 | SALES |
 | `POST /api/orders/{orderNo}/cancel` | 주문 취소 요청 | SALES |
+| `POST /api/orders/customers` | 고객 등록 (#125) | SALES |
 | `POST /api/production/work-orders/{id}/steps/{process}/start` | 공정 시작 | PRODUCTION |
 | `POST /api/production/work-orders/{id}/steps/{process}/complete` | 공정 종료·실적 | PRODUCTION |
 | `POST /api/purchases` | 구매 건 만들기 = 발주 (#114) | PURCHASE |

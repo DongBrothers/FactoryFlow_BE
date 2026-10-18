@@ -52,6 +52,11 @@ class OrderCreateTest {
         jdbc.update("DELETE FROM order_item");
         jdbc.update("DELETE FROM customer_order");
         jdbc.update("DELETE FROM outbox");
+        jdbc.update("DELETE FROM customer");
+        // 주문은 등록된 고객만 받는다 (docs/specs/customer.md)
+        jdbc.update(
+                "INSERT INTO customer (id, name, created_at, updated_at)"
+                        + " VALUES (7, '현대캐피탈', NOW(6), NOW(6))");
     }
 
     @Test
@@ -135,6 +140,14 @@ class OrderCreateTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("PRODUCTION_UNAVAILABLE"));
         assertNothingSaved();
+    }
+
+    @Test
+    void unregisteredCustomerIs404BeforeProductionIsCalled() throws Exception {
+        postOrder("8", TWO_PRODUCTS)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CUSTOMER_NOT_FOUND"));
+        assertRejectedBeforeLookup();
     }
 
     @Test

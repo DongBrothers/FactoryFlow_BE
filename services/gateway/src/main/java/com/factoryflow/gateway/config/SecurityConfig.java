@@ -87,7 +87,11 @@ public class SecurityConfig {
                 .permitAll()
                 .pathMatchers("/api/auth/admin/**")
                 .hasRole(ADMIN)
-                .pathMatchers(HttpMethod.POST, "/api/orders", "/api/orders/*/cancel")
+                .pathMatchers(
+                        HttpMethod.POST,
+                        "/api/orders",
+                        "/api/orders/*/cancel",
+                        "/api/orders/customers")
                 .hasRole(SALES)
                 .pathMatchers(
                         HttpMethod.POST,

@@ -27,6 +27,7 @@ class RolePermissionTest {
     @CsvSource({
         "/api/orders, SALES",
         "/api/orders/" + ORDER_NO + "/cancel, SALES",
+        "/api/orders/customers, SALES",
         "/api/production/work-orders/1/steps/PRESS/start, PRODUCTION",
         "/api/production/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
         "/api/purchases, PURCHASE",
@@ -43,6 +44,9 @@ class RolePermissionTest {
         "/api/orders, PURCHASE",
         "/api/orders, ADMIN",
         "/api/orders/" + ORDER_NO + "/cancel, ADMIN",
+        "/api/orders/customers, PURCHASE",
+        "/api/orders/customers, PRODUCTION",
+        "/api/orders/customers, ADMIN",
         "/api/production/work-orders/1/steps/PRESS/start, SALES",
         "/api/production/work-orders/1/steps/PRESS/start, PURCHASE",
         "/api/production/work-orders/1/steps/PRESS/start, ADMIN",
@@ -102,6 +106,7 @@ class RolePermissionTest {
     private static String[] readPaths() {
         return new String[] {
             "/api/orders",
+            "/api/orders/customers",
             "/api/purchases?status=ORDERED",
             "/api/production/work-orders",
             "/api/inventory/parts"
