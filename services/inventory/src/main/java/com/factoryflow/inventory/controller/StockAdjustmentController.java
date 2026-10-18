@@ -41,7 +41,9 @@ public class StockAdjustmentController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description =
-                        "qty 없음·0·±1,000,000 밖, 사유 없음·255자 초과, X-User-Id 없음·빈 값·36자 초과, partId 가 양수가 아님"),
+                        "qty 없음·0·±"
+                                + AdjustStockRequest.MAX_QTY
+                                + " 밖, 사유 없음·255자 초과, X-User-Id 없음·빈 값·36자 초과, partId 가 양수가 아님"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "부품 없음 (PART_NOT_FOUND)"),
