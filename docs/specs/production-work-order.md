@@ -11,9 +11,11 @@
 
 ## 흐름
 
-### 1. 작업지시 생성 (inventory.reserved 수신)
+### 1. 작업지시 생성 (생산 담당의 발행, #131 부터. 그 전에는 inventory.reserved 수신 때 자동)
+> #131 부터 inventory.reserved 는 생산 건을 READY(발행 대기)로만 바꾸고, 아래 작업지시·공정은 생산 담당이 `POST /production/productions/{id}/work-order` 로 발행할 때 만든다 (docs/specs/work-order-release.md). 만드는 내용은 같다.
+
 1. production 이 `inventory.reserved { productionId }` 를 받는다 (기존 리스너 `InventoryEventListener.onReserved`)
-2. 생산 건이 PLANNED, WAITING_MATERIAL 이면 READY 로 바꾸고, 같은 트랜잭션에서
+2. 생산 건이 PLANNED, WAITING_MATERIAL 이면 READY 로 바꾼다. 발행할 때
    - `work_order` 1건 (status = RELEASED)
    - `work_order_step` 5건, 라우팅 순서: PRESS(1) → BODY(2) → PAINT(3) → ASSEMBLY(4) → INSPECTION(5), 모두 PENDING
    - `production.status-changed`(READY) (기존과 같음)

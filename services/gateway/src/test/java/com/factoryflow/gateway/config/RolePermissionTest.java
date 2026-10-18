@@ -36,7 +36,8 @@ class RolePermissionTest {
         "/api/inventory/parts, PURCHASE",
         "/api/purchases/suppliers, PURCHASE",
         "/api/production/products, PRODUCTION",
-        "/api/inventory/parts/1001/adjustments, PURCHASE"
+        "/api/inventory/parts/1001/adjustments, PURCHASE",
+        "/api/production/productions/101/work-order, PRODUCTION"
     })
     void allowedRoleCanWrite(String path, String role) {
         post(path, role).expectStatus().isNotFound();
@@ -73,7 +74,10 @@ class RolePermissionTest {
         "/api/production/products, ADMIN",
         "/api/inventory/parts/1001/adjustments, SALES",
         "/api/inventory/parts/1001/adjustments, PRODUCTION",
-        "/api/inventory/parts/1001/adjustments, ADMIN"
+        "/api/inventory/parts/1001/adjustments, ADMIN",
+        "/api/production/productions/101/work-order, SALES",
+        "/api/production/productions/101/work-order, PURCHASE",
+        "/api/production/productions/101/work-order, ADMIN"
     })
     void otherRoleCannotWrite(String path, String role) {
         post(path, role).expectStatus().isForbidden();
@@ -150,6 +154,7 @@ class RolePermissionTest {
         return new String[] {
             "/api/orders",
             "/api/orders/customers",
+            "/api/production/productions/awaiting-release",
             "/api/purchases?status=ORDERED",
             "/api/production/work-orders",
             "/api/inventory/parts"

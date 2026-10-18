@@ -204,8 +204,10 @@ public class OrderVehicleService {
     /** 생산 건 상태를 차량 상태로 바꾼다 (docs/specs/saga-order-fulfillment.md "상태 매핑"). */
     private static OrderStatus vehicleStatusOf(String productionStatus) {
         return switch (productionStatus) {
-            case "PLANNED", "WAITING_MATERIAL" -> OrderStatus.RECEIVED;
-            case "READY", "IN_PROGRESS" -> OrderStatus.IN_PRODUCTION;
+            // READY 는 부품이 다 잡혀 작업지시 발행을 기다리는 상태라 고객에게는 접수다. 생산 중은 프레스 시작(IN_PROGRESS)부터
+            // (docs/specs/work-order-release.md)
+            case "PLANNED", "WAITING_MATERIAL", "READY" -> OrderStatus.RECEIVED;
+            case "IN_PROGRESS" -> OrderStatus.IN_PRODUCTION;
             case "COMPLETED" -> OrderStatus.COMPLETED;
             case "CANCELLED" -> OrderStatus.CANCELLED;
             default -> throw new CustomException(OrderErrorCode.UNKNOWN_PRODUCTION_STATUS);

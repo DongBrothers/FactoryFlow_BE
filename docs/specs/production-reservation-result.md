@@ -21,7 +21,7 @@ production 이 inventory 의 부품 예약 결과를 받아 생산 건 상태를
 | inventory.reservation-pending | 그 외 | 무시 (INFO 로그) |
 
 5. `production.status-changed { orderId, productionId, productId, status }` 를 발행한다
-   - READY 는 생산의 트리거다. 작업지시와 공정 5개 생성은 MES 작업(#72)에서 이 전이에 붙인다 (SAGA 성공 흐름 6번)
+   - READY 는 작업지시 발행 대기다. 작업지시와 공정 5개는 생산 담당이 발행할 때 만든다 (docs/specs/work-order-release.md, #131. 그 전에는 이 전이에서 자동으로 만들었다)
 
 ## 규칙 / 예외
 | 상황 | 처리 |

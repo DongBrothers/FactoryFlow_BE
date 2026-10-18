@@ -68,48 +68,26 @@ class InventoryEventListenerTest {
     }
 
     @Test
-    void reservedReleasesOneWorkOrderWithFiveStepsInRoutingOrder() {
-        // 예약 완료가 생산의 트리거다: 작업지시 1건과 공정 5개 (docs/specs/production-work-order.md)
+    void reservedWaitsForTheWorkOrderToBeReleased() {
+        // 예약 완료로 READY 가 되지만 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md). 공정 5개는
+        // WorkOrderReleaseTest 가 확인한다
         long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
 
-        Map<String, Object> workOrder =
-                jdbc.queryForMap(
-                        "SELECT id, order_id, product_id, status FROM work_order WHERE production_id = ?",
-                        production);
-        assertThat(workOrder)
-                .containsEntry("order_id", 42L)
-                .containsEntry("product_id", 1L)
-                .containsEntry("status", "RELEASED");
-        assertThat(
-                        jdbc.queryForList(
-                                "SELECT process FROM work_order_step WHERE work_order_id = ?"
-                                        + " ORDER BY seq",
-                                String.class,
-                                workOrder.get("id")))
-                .containsExactly("PRESS", "BODY", "PAINT", "ASSEMBLY", "INSPECTION");
-        assertThat(
-                        jdbc.queryForList(
-                                "SELECT DISTINCT status FROM work_order_step WHERE work_order_id = ?",
-                                String.class,
-                                workOrder.get("id")))
-                .containsExactly("PENDING");
+        assertThat(statusOf(production)).isEqualTo("READY");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM work_order", Integer.class)).isZero();
     }
 
     @Test
-    void reservedTwiceKeepsOneWorkOrder() {
+    void reservedTwiceChangesTheStatusOnce() {
         long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
         listener.onReserved(reserved(production));
 
-        assertThat(
-                        jdbc.queryForObject(
-                                "SELECT COUNT(*) FROM work_order WHERE production_id = ?",
-                                Integer.class,
-                                production))
-                .isEqualTo(1);
+        assertThat(statusOf(production)).isEqualTo("READY");
+        assertThat(outbox("production.status-changed")).hasSize(1);
     }
 
     @Test

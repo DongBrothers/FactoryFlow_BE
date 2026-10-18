@@ -2,13 +2,13 @@ package com.factoryflow.production.service;
 
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.production.domain.Bom;
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.domain.Production;
-import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionStatus;
 import com.factoryflow.production.domain.WorkOrder;
-import com.factoryflow.production.domain.WorkOrderStep;
+import com.factoryflow.production.dto.response.AwaitingReleaseResponse;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
@@ -21,9 +21,6 @@ import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
 import com.factoryflow.production.repository.WorkOrderRepository;
-import com.factoryflow.production.repository.WorkOrderStepRepository;
-import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +42,6 @@ public class ProductionService {
     private final ProductRepository productRepository;
     private final BomRepository bomRepository;
     private final WorkOrderRepository workOrderRepository;
-    private final WorkOrderStepRepository workOrderStepRepository;
     private final EventPublisher eventPublisher;
 
     /**
@@ -146,9 +142,9 @@ public class ProductionService {
     }
 
     /**
-     * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY 로 바꾸고 작업지시 1건과 공정 5개를 발행한다 (생산의
-     * 트리거, docs/specs/production-work-order.md). 취소된 생산 건이면 예약을 풀도록 production.cancelled 를 다시 보낸다.
-     * 그 밖의 상태에서 온 결과는 무시한다 (docs/specs/production-reservation-result.md).
+     * inventory.reserved: PLANNED, WAITING_MATERIAL 생산 건을 READY(작업지시 발행 대기)로 바꾼다. 작업지시는 생산 담당이 발행한다
+     * (docs/specs/work-order-release.md). 취소된 생산 건이면 예약을 풀도록 production.cancelled 를 다시 보낸다. 그 밖의
+     * 상태에서 온 결과는 무시한다 (docs/specs/production-reservation-result.md).
      */
     @Transactional
     public void markReserved(Long productionId) {
@@ -168,22 +164,53 @@ public class ProductionService {
                     production.getStatus());
             return;
         }
-        releaseWorkOrder(production);
         publishStatusChanged(production);
     }
 
-    /** 작업지시 1건과 라우팅 순서대로 공정 5개(PENDING)를 만든다. 생산 건당 하나뿐이다. */
-    private void releaseWorkOrder(Production production) {
-        if (workOrderRepository.existsByProductionId(production.getId())) {
-            log.info("작업지시가 이미 있어 건너뜀: productionId={}", production.getId());
-            return;
+    /**
+     * 작업지시를 발행할 생산 건: 잠그고 version 을 올려 읽는다 (같은 차의 취소 수신과 겹치면 취소 쪽이 재시도). READY 가 아니면
+     * PRODUCTION_NOT_READY. 작업지시 발행(WorkOrderService.release)과 같은 트랜잭션에서 부른다.
+     */
+    @Transactional
+    public Production lockForRelease(Long productionId) {
+        Production production = findProductionForRelease(productionId);
+        if (production.getStatus() != ProductionStatus.READY) {
+            log.info(
+                    "READY 가 아니라 작업지시를 발행할 수 없음: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_READY);
         }
-        WorkOrder workOrder =
-                workOrderRepository.save(WorkOrder.release(production, LocalDateTime.now()));
-        workOrderStepRepository.saveAll(
-                Arrays.stream(ProductionProcess.values())
-                        .map(process -> WorkOrderStep.plan(workOrder.getId(), process))
-                        .toList());
+        return production;
+    }
+
+    /** 작업지시 발행 대기 목록: READY 이고 작업지시가 없는 생산 건, 먼저 생긴 순 (docs/specs/work-order-release.md). */
+    @Transactional(readOnly = true)
+    public CursorPage<AwaitingReleaseResponse> findAwaitingRelease(Long lastId, int size) {
+        List<Production> rows = findAwaitingReleaseAfter(lastId, size + 1);
+        Map<Long, Product> products =
+                findProductsByIds(rows.stream().map(Production::getProductId).distinct().toList());
+        List<AwaitingReleaseResponse> items =
+                rows.stream()
+                        .map(p -> AwaitingReleaseResponse.of(p, products.get(p.getProductId())))
+                        .toList();
+        return CursorPage.of(items, size, AwaitingReleaseResponse::productionId);
+    }
+
+    /** 잠그고 version 을 올려 읽는다 (PESSIMISTIC_FORCE_INCREMENT). 없으면 PRODUCTION_NOT_FOUND. */
+    private Production findProductionForRelease(Long productionId) {
+        return productionRepository
+                .findForReleaseById(productionId)
+                .orElseThrow(() -> new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND));
+    }
+
+    private List<Production> findAwaitingReleaseAfter(Long lastId, int limit) {
+        return productionRepository.findAwaitingRelease(lastId, limit);
+    }
+
+    private Map<Long, Product> findProductsByIds(List<Long> productIds) {
+        return productRepository.findAllById(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
     }
 
     /**

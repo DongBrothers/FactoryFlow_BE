@@ -4,6 +4,7 @@ import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.production.domain.Equipment;
+import com.factoryflow.production.domain.Production;
 import com.factoryflow.production.domain.ProductionProcess;
 import com.factoryflow.production.domain.ProductionResult;
 import com.factoryflow.production.domain.StepResult;
@@ -23,6 +24,7 @@ import com.factoryflow.production.repository.ProductionResultRepository;
 import com.factoryflow.production.repository.WorkOrderRepository;
 import com.factoryflow.production.repository.WorkOrderStepRepository;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +69,27 @@ public class WorkOrderService {
                                                                 w.getId(), List.of()))))
                         .toList();
         return CursorPage.of(items, size, WorkOrderResponse::workOrderId);
+    }
+
+    /**
+     * 생산 담당이 작업지시를 발행한다: READY 생산 건에 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING). 생산 건은 잠그고 version
+     * 을 올려 읽어, 같은 차의 취소와 겹치면 취소 쪽이 재시도해 작업지시도 함께 취소한다. 이벤트는 보내지 않는다
+     * (docs/specs/work-order-release.md).
+     */
+    @Transactional
+    public WorkOrderDetailResponse release(Long productionId) {
+        Production production = productionService.lockForRelease(productionId);
+        if (hasWorkOrder(productionId)) {
+            throw new CustomException(ProductionErrorCode.WORK_ORDER_ALREADY_RELEASED);
+        }
+        WorkOrder workOrder =
+                workOrderRepository.save(WorkOrder.release(production, LocalDateTime.now()));
+        List<WorkOrderStep> steps =
+                workOrderStepRepository.saveAll(
+                        Arrays.stream(ProductionProcess.values())
+                                .map(process -> WorkOrderStep.plan(workOrder.getId(), process))
+                                .toList());
+        return detail(workOrder, steps);
     }
 
     @Transactional(readOnly = true)
@@ -494,6 +517,10 @@ public class WorkOrderService {
 
     private List<ProductionResult> findResults(List<Long> stepIds) {
         return productionResultRepository.findAllByWorkOrderStepIdInOrderByIdAsc(stepIds);
+    }
+
+    private boolean hasWorkOrder(Long productionId) {
+        return workOrderRepository.existsByProductionId(productionId);
     }
 
     private Optional<WorkOrder> findWorkOrderIfExists(Long workOrderId) {

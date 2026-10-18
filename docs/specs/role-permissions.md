@@ -26,6 +26,7 @@
 | `POST /api/purchases/{id}/receive` | 입고 | PURCHASE |
 | `POST /api/inventory/finished-vehicles/{vin}/ship` | 완성차 출고 | PRODUCTION |
 | `POST /api/production/products`, `PUT /api/production/products/{id}` | 제품 + BOM 등록·수정 (#127) | PRODUCTION |
+| `POST /api/production/productions/{id}/work-order` | 작업지시 발행 (#131) | PRODUCTION |
 | `POST /api/inventory/parts`, `PUT /api/inventory/parts/{id}` | 부품 등록·수정 (#127) | PURCHASE |
 | `POST /api/inventory/parts/{id}/adjustments` | 재고 조정 (#129) | PURCHASE |
 | `POST /api/purchases/suppliers`, `PUT /api/purchases/suppliers/{id}` | 공급업체 등록·수정 (#127) | PURCHASE |
