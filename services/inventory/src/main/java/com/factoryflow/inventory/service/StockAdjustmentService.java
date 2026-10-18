@@ -40,7 +40,8 @@ public class StockAdjustmentService {
     @Transactional
     public AdjustStockResponse adjust(Long partId, AdjustStockRequest request, String adjustedBy) {
         Part part = findPartForUpdate(partId);
-        if (request.qty() < 0 && part.getAvailable() < -request.qty()) {
+        // qty 는 ±1,000,000 안이라 더해도 넘치지 않는다 (부호를 뒤집지 않고 비교)
+        if (part.getAvailable() + request.qty() < 0) {
             throw new CustomException(InventoryErrorCode.INSUFFICIENT_AVAILABLE);
         }
         StockAdjustment adjustment =

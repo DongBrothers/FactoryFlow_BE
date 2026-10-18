@@ -39,7 +39,7 @@ gateway `/api/inventory/parts/{partId}/adjustments`, 헤더 `X-User-Id`(gateway 
 ## 규칙 / 예외
 | 상황 | 응답 | 저장 / 이벤트 |
 |---|---|---|
-| qty 없음, 0 (커스텀 제약 `@NotZero`) | 400 | 없음 |
+| qty 없음, 0 (커스텀 제약 `@NotZero`), ±1,000,000 밖 (계산이 넘치지 않게, PR #130 리뷰) | 400 | 없음 |
 | reason 없음·공백·255자 초과 | 400 | 없음 |
 | X-User-Id 없음·공백·36자 초과 | 400 | 없음 |
 | partId 가 양수가 아님 | 400 | 없음 |

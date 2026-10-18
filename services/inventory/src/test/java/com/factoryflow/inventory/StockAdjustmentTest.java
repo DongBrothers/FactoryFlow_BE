@@ -163,6 +163,10 @@ class StockAdjustmentTest {
         long tire = insertPart("TIRE-18", 5, 0);
 
         adjust(tire, "{\"qty\":0,\"reason\":\"실사\"}").andExpect(status().isBadRequest());
+        // 한 번에 ±1,000,000 까지. 넘으면 수량 계산이 넘칠 수 있다 (Integer.MIN_VALUE 의 부호를 바꾸면 그대로 음수)
+        adjust(tire, "{\"qty\":-2147483648,\"reason\":\"실사\"}").andExpect(status().isBadRequest());
+        adjust(tire, "{\"qty\":-1000001,\"reason\":\"실사\"}").andExpect(status().isBadRequest());
+        adjust(tire, "{\"qty\":1000001,\"reason\":\"실사\"}").andExpect(status().isBadRequest());
         adjust(tire, "{\"reason\":\"실사\"}").andExpect(status().isBadRequest());
         adjust(tire, "{\"qty\":1}").andExpect(status().isBadRequest());
         adjust(tire, "{\"qty\":1,\"reason\":\" \"}").andExpect(status().isBadRequest());
