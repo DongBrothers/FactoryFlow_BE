@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("8");
+        jdbc = migrateTo("9");
     }
 
     @Test
@@ -101,6 +101,30 @@ class MigrationTest extends MigrationTestSupport {
                         "customer_order.updated_at",
                         "order_item.updated_at",
                         "order_vehicle.updated_at");
+    }
+
+    @Test
+    void v9CreatesCustomerWithOptionalContact() {
+        // 고객은 주문하는 쪽에 둔다 (docs/specs/customer.md). 업무 데이터라 소프트 삭제가 없다
+        jdbc.update(
+                "INSERT INTO customer (name, created_at, updated_at) VALUES ('현대캐피탈', NOW(6), NOW(6))");
+
+        assertThat(jdbc.queryForMap("SELECT name, contact FROM customer WHERE name = '현대캐피탈'"))
+                .containsEntry("name", "현대캐피탈")
+                .containsEntry("contact", null);
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT COLUMN_NAME FROM information_schema.COLUMNS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customer'",
+                                String.class))
+                .containsExactlyInAnyOrder("id", "name", "contact", "created_at", "updated_at");
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO customer (contact, created_at, updated_at)"
+                                                + " VALUES ('02-0000-0000', NOW(6), NOW(6))"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("name");
     }
 
     @Test

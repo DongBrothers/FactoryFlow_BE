@@ -40,7 +40,7 @@ public class OrderController {
     @Operation(
             summary = "주문 생성",
             description =
-                    "제품 여러 종을 한 번에 주문한다. 제품과 BOM 이 있는지 production 에 확인한 뒤 주문과 품목을 저장하고"
+                    "제품 여러 종을 한 번에 주문한다. 등록된 고객인지 확인하고, 제품과 BOM 이 있는지 production 에 확인한 뒤 주문과 품목을 저장하고"
                             + " order.created 를 발행한다. 하나라도 문제가 있으면 주문 전체를 거절한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -51,7 +51,8 @@ public class OrderController {
                 description = "요청 형식 오류 (고객 번호 없음·1 미만, 품목 없음, 수량 1 미만, 같은 제품 중복)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
-                description = "없는 제품 (PRODUCT_NOT_FOUND) 또는 BOM 없는 제품 (BOM_NOT_FOUND)"),
+                description =
+                        "등록되지 않은 고객 (CUSTOMER_NOT_FOUND), 없는 제품 (PRODUCT_NOT_FOUND) 또는 BOM 없는 제품 (BOM_NOT_FOUND)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "503",
                 description = "production 응답 없음, 3초 초과, 본문이나 data 없는 응답 (PRODUCTION_UNAVAILABLE)")
