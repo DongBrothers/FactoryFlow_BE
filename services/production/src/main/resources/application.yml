@@ -19,6 +19,13 @@ spring:
     hibernate:
       ddl-auto: validate
 
+# 서비스 간 호출 주소. 환경별 파일이나 환경 변수로 바꾼다. 기본값은 local 프로필의 inventory 포트(8082)
+# 제품 등록·수정 때 BOM 부품이 있는지 확인한다 (docs/specs/master-data.md)
+clients:
+  inventory:
+    url: ${INVENTORY_URL:http://localhost:8082}
+    timeout: 3s
+
 server:
   port: 8080
 

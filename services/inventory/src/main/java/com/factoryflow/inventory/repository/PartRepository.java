@@ -23,4 +23,7 @@ public interface PartRepository extends JpaRepository<Part, Long> {
     List<Part> findAllByIdInAndIsDeletedFalseOrderByCodeAsc(Collection<Long> ids);
 
     Optional<Part> findByIdAndIsDeletedFalse(Long id);
+
+    /** 지운 부품도 본다 (code 는 지운 부품과도 겹칠 수 없다, UNIQUE 제약). */
+    boolean existsByCode(String code);
 }
