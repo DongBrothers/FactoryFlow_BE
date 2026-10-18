@@ -34,7 +34,7 @@
 - 앞 공정이 모두 DONE 이고, 이 공정이 PENDING 일 때만 시작한다. 한 작업지시에서 IN_PROGRESS 공정은 하나뿐이다
 - 지정한 설비는 이 공정의 설비여야 하고 RUNNING 이어야 한다. 공정에 설비를 기록한다 (고장·정지 나면 이 설비의 공정만 PENDING 으로 되돌려 다른 설비로 재배정, docs/specs/equipment-status.md)
 - 공정 → IN_PROGRESS (started_at, equipment_code)
-- 작업지시의 첫 시작이면 (보통은 프레스 배정 때, 수동 개입이면 작업자의 프레스 시작 때) 작업지시 IN_PROGRESS, 생산 건 IN_PROGRESS(started_at) + `production.status-changed`(IN_PROGRESS). 이 순간부터 취소할 수 없다 (기획서 "취소 기준"). 불량 재작업으로 다시 시작할 때는 다시 일어나지 않는다
+- 작업지시의 첫 시작이면 (보통은 프레스 배정 때, 수동 개입이면 작업자의 프레스 시작 때) 작업지시 IN_PROGRESS(started_at), 생산 건 IN_PROGRESS + `production.status-changed`(IN_PROGRESS). 시작 시각은 작업지시만 갖는다 (#123). 이 순간부터 취소할 수 없다 (기획서 "취소 기준"). 불량 재작업으로 다시 시작할 때는 다시 일어나지 않는다
 
 **종료**
 - IN_PROGRESS 공정만 종료한다. `production_result` 1줄 (result, defectReason, 작업자, 공정 시작·종료 시각)

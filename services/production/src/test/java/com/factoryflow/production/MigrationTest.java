@@ -21,7 +21,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("8");
+        jdbc = migrateTo("9");
     }
 
     @Test
@@ -162,6 +162,28 @@ class MigrationTest extends MigrationTestSupport {
                                         + " AND COLUMN_NAME = 'dispatch_seq'"))
                 .containsEntry("IS_NULLABLE", "NO")
                 .containsEntry("COLUMN_DEFAULT", "0");
+    }
+
+    @Test
+    void v9KeepsSoftDeleteOnlyOnMasterDataAndDropsUnreadColumns() {
+        // 지울 수 있는 기준 데이터(제품, BOM, 설비)만 is_deleted 를 둔다. 생산 건의 시작·완료 시각은 작업지시에만,
+        // 고치지 않는 실적은 updated_at 없이 둔다 (#123)
+        var columns =
+                jdbc.queryForList(
+                        "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
+                                + " WHERE TABLE_SCHEMA = DATABASE() AND (COLUMN_NAME = 'is_deleted'"
+                                + " OR (TABLE_NAME IN ('production', 'work_order')"
+                                + " AND COLUMN_NAME IN ('started_at', 'completed_at'))"
+                                + " OR (TABLE_NAME = 'production_result' AND COLUMN_NAME = 'updated_at'))",
+                        String.class);
+
+        assertThat(columns)
+                .containsExactlyInAnyOrder(
+                        "product.is_deleted",
+                        "bom.is_deleted",
+                        "equipment.is_deleted",
+                        "work_order.started_at",
+                        "work_order.completed_at");
     }
 
     @Test

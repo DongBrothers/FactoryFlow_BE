@@ -193,7 +193,7 @@ public class ProductionService {
     @Transactional
     public void startProduction(Long productionId) {
         Production production = findProduction(productionId);
-        if (!production.start(LocalDateTime.now())) {
+        if (!production.start()) {
             log.info(
                     "READY 가 아니라 생산을 시작할 수 없음: productionId={} status={}",
                     productionId,
@@ -212,7 +212,7 @@ public class ProductionService {
     @Transactional
     public void completeProduction(Long productionId, String vin) {
         Production production = findProduction(productionId);
-        if (!production.complete(LocalDateTime.now())) {
+        if (!production.complete()) {
             log.info(
                     "IN_PROGRESS 가 아니라 생산을 완료할 수 없음: productionId={} status={}",
                     productionId,

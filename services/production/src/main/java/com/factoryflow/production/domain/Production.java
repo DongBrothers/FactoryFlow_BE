@@ -1,6 +1,6 @@
 package com.factoryflow.production.domain;
 
-import com.factoryflow.common.web.BaseEntity;
+import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,7 +10,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,7 +24,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "production")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Production extends BaseEntity {
+public class Production extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,12 +43,6 @@ public class Production extends BaseEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private ProductionStatus status;
-
-    /** 첫 공정(프레스)을 시작한 시각. 이후에는 취소할 수 없다. */
-    private LocalDateTime startedAt;
-
-    /** 검사 양품으로 완성된 시각 (VIN 발행). */
-    private LocalDateTime completedAt;
 
     /** 같은 생산 건을 동시에 바꾸면(프레스 시작 vs 취소 수신 등) 늦은 쪽이 실패한다. */
     @Version private Long version;
@@ -90,13 +83,15 @@ public class Production extends BaseEntity {
         return true;
     }
 
-    /** 첫 공정(프레스)을 시작했다. READY 에서만 바뀐다. 이후에는 취소할 수 없다. 바뀌었으면 true. */
-    public boolean start(LocalDateTime now) {
+    /**
+     * 첫 공정(프레스)을 시작했다. READY 에서만 바뀐다. 이후에는 취소할 수 없다. 바뀌었으면 true. 시작 시각은 작업지시가 갖는다 ({@link
+     * WorkOrder#start}).
+     */
+    public boolean start() {
         if (status != ProductionStatus.READY) {
             return false;
         }
         this.status = ProductionStatus.IN_PROGRESS;
-        this.startedAt = now;
         return true;
     }
 
@@ -111,13 +106,12 @@ public class Production extends BaseEntity {
         return true;
     }
 
-    /** 검사 양품으로 차가 완성됐다. IN_PROGRESS 에서만 바뀐다. 바뀌었으면 true. */
-    public boolean complete(LocalDateTime now) {
+    /** 검사 양품으로 차가 완성됐다. IN_PROGRESS 에서만 바뀐다. 바뀌었으면 true. 완료 시각은 작업지시가 갖는다. */
+    public boolean complete() {
         if (status != ProductionStatus.IN_PROGRESS) {
             return false;
         }
         this.status = ProductionStatus.COMPLETED;
-        this.completedAt = now;
         return true;
     }
 

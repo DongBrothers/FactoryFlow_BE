@@ -67,15 +67,15 @@ class ProductionCompletionTest {
         Map<String, Object> row =
                 jdbc.queryForMap(
                         "SELECT w.status w_status, w.vin, w.completed_at w_done,"
-                                + " p.status p_status, p.completed_at p_done, p.id production_id"
+                                + " p.status p_status, p.id production_id"
                                 + " FROM work_order w JOIN production p ON p.id = w.production_id"
                                 + " WHERE w.id = ?",
                         workOrder);
         assertThat(row)
                 .containsEntry("w_status", "COMPLETED")
                 .containsEntry("p_status", "COMPLETED");
+        // 완료 시각은 작업지시가 갖는다 (#123)
         assertThat(row.get("w_done")).isNotNull();
-        assertThat(row.get("p_done")).isNotNull();
         String vin = (String) row.get("vin");
         assertThat(vin)
                 .hasSize(17)

@@ -36,7 +36,7 @@ purchase 가 부족을 자동 구매 건으로 받고, 구매 담당자가 발�
 | 형식 오류 (supplierId 없음·1 미만, status 값, lastId·size 범위) | 400 |
 
 - 수량은 구매 건 전체를 한 번에 입고한다 (부분 입고 없음)
-- 응답: 구매 건 `{ purchaseId, partId, partCode, partName, qty, status, source, supplierId, orderedAt, receivedAt }`
+- 응답: 구매 건 `{ purchaseId, partId, partCode, partName, qty, status, supplierId, orderedAt, receivedAt }` (source 는 #123 에서 뺐다, docs/specs/unused-columns.md)
 
 ### 3. 입고 → 재고 증가와 대기 줄 재예약 (inventory ← purchase.received)
 1. inventory 가 큐 `inventory.purchase-received` 로 받는다 (ProcessedEventGuard, 처리 기록과 같은 트랜잭션)

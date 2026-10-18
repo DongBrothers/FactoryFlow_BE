@@ -13,7 +13,7 @@ inventory 는 그 차에 잡아 둔 부품을 사용 처리(CONSUMED)하고 완�
    - 그 공정이 마지막 공정(INSPECTION)이면 완료 처리:
      - VIN 발행 (아래 "VIN 형식")
      - 작업지시 IN_PROGRESS → COMPLETED (vin, completed_at)
-     - 생산 건 IN_PROGRESS → COMPLETED (completed_at)
+     - 생산 건 IN_PROGRESS → COMPLETED (완료 시각은 작업지시만 갖는다, #123)
      - `production.completed { orderId, productionId, productId, vin }` 발행
    - 동시 변경은 지금처럼 version 으로 막는다 (작업자 API 는 409 `PRODUCTION_CONFLICT`)
 3. inventory 가 큐 `inventory.production-completed` 로 받는다 (ProcessedEventGuard, 아래는 같은 트랜잭션)
@@ -72,7 +72,7 @@ events.md 에 이미 있다 (변경 없음).
 
 ## 완료 조건 (테스트로 확인할 것)
 production
-- [ ] 검사 GOOD (작업자) → VIN 17자 발행, 작업지시·생산 건 COMPLETED(completed_at), production.completed outbox
+- [ ] 검사 GOOD (작업자) → VIN 17자 발행, 작업지시 COMPLETED(completed_at)·생산 건 COMPLETED, production.completed outbox
 - [ ] 검사 GOOD (설비 보고) 도 같은 완료 처리
 - [ ] 검사 DEFECT, 검사가 아닌 공정 GOOD 은 완료 처리 없음
 - [ ] VIN: 형식(17자, I·O·Q 없음), 체크 자리, 연식 코드, 제품 id·작업지시 id 반영, 자리를 넘는 값 거절 (단위 테스트)

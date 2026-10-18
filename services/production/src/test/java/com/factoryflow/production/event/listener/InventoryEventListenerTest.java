@@ -55,7 +55,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservedMakesPlannedProductionReady() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
 
@@ -70,7 +70,7 @@ class InventoryEventListenerTest {
     @Test
     void reservedReleasesOneWorkOrderWithFiveStepsInRoutingOrder() {
         // 예약 완료가 생산의 트리거다: 작업지시 1건과 공정 5개 (docs/specs/production-work-order.md)
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
 
@@ -99,7 +99,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservedTwiceKeepsOneWorkOrder() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
         listener.onReserved(reserved(production));
@@ -114,7 +114,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservationPendingDoesNotReleaseWorkOrder() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReservationPending(reservationPending(production));
 
@@ -123,7 +123,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservedMakesWaitingProductionReadyAfterReceipt() {
-        long production = insertProduction(42L, 1L, "WAITING_MATERIAL", false);
+        long production = insertProduction(42L, 1L, "WAITING_MATERIAL");
 
         listener.onReserved(reserved(production));
 
@@ -136,7 +136,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservationPendingMakesPlannedProductionWaitForMaterial() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReservationPending(reservationPending(production));
 
@@ -149,7 +149,7 @@ class InventoryEventListenerTest {
 
     @Test
     void reservedForCancelledProductionSendsCancelledAgain() {
-        long production = insertProduction(42L, 1L, "CANCELLED", false);
+        long production = insertProduction(42L, 1L, "CANCELLED");
 
         listener.onReserved(reserved(production));
 
@@ -162,8 +162,8 @@ class InventoryEventListenerTest {
 
     @Test
     void eventFromNotAllowedStateChangesNothing() {
-        long ready = insertProduction(42L, 1L, "READY", false);
-        long waiting = insertProduction(42L, 2L, "WAITING_MATERIAL", false);
+        long ready = insertProduction(42L, 1L, "READY");
+        long waiting = insertProduction(42L, 2L, "WAITING_MATERIAL");
 
         listener.onReservationPending(reservationPending(ready));
         listener.onReservationPending(reservationPending(waiting));
@@ -176,7 +176,7 @@ class InventoryEventListenerTest {
 
     @Test
     void sameEventTwiceSendsStatusChangedOnce() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
         EventEnvelope event = reserved(production);
 
         listener.onReserved(event);
@@ -187,7 +187,7 @@ class InventoryEventListenerTest {
 
     @Test
     void publishedEventKeepsTheReceivedTraceId() {
-        long production = insertProduction(42L, 1L, "PLANNED", false);
+        long production = insertProduction(42L, 1L, "PLANNED");
         EventEnvelope event = reserved(production);
 
         listener.onReserved(event);
@@ -198,8 +198,8 @@ class InventoryEventListenerTest {
 
     @Test
     void receivesBothResultsFromRabbitMq() {
-        long ready = insertProduction(42L, 1L, "PLANNED", false);
-        long waiting = insertProduction(42L, 2L, "PLANNED", false);
+        long ready = insertProduction(42L, 1L, "PLANNED");
+        long waiting = insertProduction(42L, 2L, "PLANNED");
 
         send("inventory.reserved", reserved(ready));
         send("inventory.reservation-pending", reservationPending(waiting));
@@ -264,12 +264,10 @@ class InventoryEventListenerTest {
                         .build());
     }
 
-    private long insertProduction(long orderId, long productId, String status, boolean started) {
+    private long insertProduction(long orderId, long productId, String status) {
         jdbc.update(
-                "INSERT INTO production (order_id, product_id, seq, status, started_at, created_at,"
-                        + " updated_at) VALUES (?, ?, 1, ?, "
-                        + (started ? "NOW(6)" : "NULL")
-                        + ", NOW(6), NOW(6))",
+                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
+                        + " VALUES (?, ?, 1, ?, NOW(6), NOW(6))",
                 orderId,
                 productId,
                 status);

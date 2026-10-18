@@ -109,10 +109,10 @@ public class FinishedVehicleService {
 
     private List<FinishedVehicle> findVehiclesBefore(String status, Long beforeId, int limit) {
         if (status == null) {
-            return finishedVehicleRepository.findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
+            return finishedVehicleRepository.findAllByIdLessThanOrderByIdDesc(
                     beforeId, Limit.of(limit));
         }
-        return finishedVehicleRepository.findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+        return finishedVehicleRepository.findAllByStatusAndIdLessThanOrderByIdDesc(
                 FinishedVehicleStatus.valueOf(status), beforeId, Limit.of(limit));
     }
 
@@ -128,7 +128,7 @@ public class FinishedVehicleService {
 
     private FinishedVehicle findVehicleOrThrow(String vin) {
         return finishedVehicleRepository
-                .findByVinAndIsDeletedFalse(vin)
+                .findByVin(vin)
                 .orElseThrow(
                         () -> new CustomException(InventoryErrorCode.FINISHED_VEHICLE_NOT_FOUND));
     }
@@ -166,7 +166,7 @@ public class FinishedVehicleService {
         for (PartLot lot : lots) {
             int taken = lot.take(left);
             if (taken > 0) {
-                saveUsage(vin, productionId, part.getId(), lot.getId(), taken);
+                saveUsage(vin, lot.getId(), taken);
                 left -= taken;
             }
         }
@@ -180,8 +180,8 @@ public class FinishedVehicleService {
         }
     }
 
-    private void saveUsage(String vin, Long productionId, Long partId, Long lotId, int qty) {
-        partLotUsageRepository.save(PartLotUsage.use(vin, productionId, partId, lotId, qty));
+    private void saveUsage(String vin, Long lotId, int qty) {
+        partLotUsageRepository.save(PartLotUsage.use(vin, lotId, qty));
     }
 
     /** 그 부품들의 아직 쓰지 않은 LOT 을 부품별로, 입고 순서대로. */

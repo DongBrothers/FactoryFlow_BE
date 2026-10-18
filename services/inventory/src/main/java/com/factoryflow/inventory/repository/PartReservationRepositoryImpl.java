@@ -23,9 +23,7 @@ public class PartReservationRepositoryImpl implements PartReservationRepositoryC
                                 partReservation.qty.sumLong(),
                                 partReservation.productionId.countDistinct()))
                 .from(partReservation)
-                .where(
-                        partReservation.status.eq(ReservationStatus.WAITING),
-                        partReservation.isDeleted.isFalse())
+                .where(partReservation.status.eq(ReservationStatus.WAITING))
                 .groupBy(partReservation.partId)
                 .fetch();
     }

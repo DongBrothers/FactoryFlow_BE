@@ -22,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("6");
+        jdbc = migrateTo("7");
     }
 
     @Test
@@ -211,15 +211,15 @@ class MigrationTest extends MigrationTestSupport {
     @Test
     void v5PartLotUsageQtyIsPositive() {
         jdbc.update(
-                "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
-                        + " VALUES ('KMH000017TU000521', 521, 1, 1, 1, NOW(6))");
+                "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at)"
+                        + " VALUES ('KMH000017TU000521', 1, 1, NOW(6))");
 
         assertThatThrownBy(
                         () ->
                                 jdbc.update(
-                                        "INSERT INTO part_lot_usage (vin, production_id, part_id,"
-                                                + " lot_id, qty, created_at) VALUES"
-                                                + " ('KMH000017TU000522', 522, 1, 1, 0, NOW(6))"))
+                                        "INSERT INTO part_lot_usage (vin, lot_id, qty,"
+                                                + " created_at) VALUES"
+                                                + " ('KMH000017TU000522', 1, 0, NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_part_lot_usage_qty");
     }
@@ -229,9 +229,9 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(
                         () ->
                                 jdbc.update(
-                                        "INSERT INTO part_lot_usage (vin, production_id, part_id,"
-                                                + " lot_id, qty, created_at) VALUES"
-                                                + " ('KMH000017TU000531', 531, 1, NULL, 1, NOW(6))"))
+                                        "INSERT INTO part_lot_usage (vin, lot_id, qty,"
+                                                + " created_at) VALUES"
+                                                + " ('KMH000017TU000531', NULL, 1, NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("lot_id");
         jdbc.update(
@@ -330,6 +330,43 @@ class MigrationTest extends MigrationTestSupport {
                                         + " AND purchase_id IS NULL",
                                 Integer.class))
                 .isEqualTo(2);
+    }
+
+    @Test
+    void v7KeepsLotUsageByVinAndLotAndSoftDeleteOnlyOnParts() {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE inventory_v7");
+        var upgrade =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/inventory_v7"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("6").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        db.update(
+                "INSERT INTO part_lot_usage (vin, production_id, part_id, lot_id, qty, created_at)"
+                        + " VALUES ('KMH000017TU000551', 551, 1, 7, 4, NOW(6))");
+
+        Flyway.configure().dataSource(upgrade).target("7").load().migrate();
+
+        // 부품은 LOT 이, 생산 건은 VIN 의 완성차가 갖고 있어 사용 기록에는 vin, lot_id, qty 만 남긴다 (#123)
+        assertThat(db.queryForMap("SELECT vin, lot_id, qty FROM part_lot_usage"))
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of("vin", "KMH000017TU000551", "lot_id", 7L, "qty", 4));
+        assertThat(
+                        db.queryForList(
+                                "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME)"
+                                        + " FROM information_schema.COLUMNS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE() AND (COLUMN_NAME = 'is_deleted'"
+                                        + " OR TABLE_NAME = 'part_lot_usage')",
+                                String.class))
+                .containsExactlyInAnyOrder(
+                        "part.is_deleted",
+                        "part_lot_usage.id",
+                        "part_lot_usage.vin",
+                        "part_lot_usage.lot_id",
+                        "part_lot_usage.qty",
+                        "part_lot_usage.created_at");
     }
 
     private void insertLot(String lotNo, long purchaseId, int receivedQty, int remainingQty) {

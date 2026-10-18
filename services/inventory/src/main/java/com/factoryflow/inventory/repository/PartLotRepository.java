@@ -14,5 +14,5 @@ public interface PartLotRepository extends JpaRepository<PartLot, Long> {
 
     List<PartLot> findAllByIdIn(Collection<Long> ids);
 
-    Optional<PartLot> findByLotNoAndIsDeletedFalse(String lotNo);
+    Optional<PartLot> findByLotNo(String lotNo);
 }

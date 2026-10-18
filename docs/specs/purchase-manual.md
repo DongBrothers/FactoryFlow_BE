@@ -37,7 +37,7 @@ gateway `/api/purchases`. **PURCHASE, ADMIN** 만 (역할 표에 추가)
 | 공급업체 있음 | 404 `SUPPLIER_NOT_FOUND` |
 
 통과하면 (주문 생성과 같은 구조: `PurchaseService` 가 트랜잭션 밖에서 inventory 를 부르고, `PurchaseWriter` 가 저장)
-- 구매 건 `{ partId, partCode·partName(inventory 에서 받은 스냅샷), qty, supplierId, source MANUAL, status ORDERED, ordered_at = 지금, ordered_by = X-User-Id(직원 public_id) }`
+- 구매 건 `{ partId, partCode·partName(inventory 에서 받은 스냅샷), qty, supplierId, status ORDERED, ordered_at = 지금, ordered_by = X-User-Id(직원 public_id) }`
 - 이벤트는 보내지 않는다
 - 응답 201 구매 건 (`PurchaseResponse` 에 orderedBy 추가)
 

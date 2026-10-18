@@ -9,13 +9,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Long> {
 
-    Optional<CustomerOrder> findByOrderNoAndIsDeletedFalse(String orderNo);
+    Optional<CustomerOrder> findByOrderNo(String orderNo);
 
     /** beforeId 보다 오래된 주문, 최신 먼저. */
-    List<CustomerOrder> findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
-            Long beforeId, Limit limit);
+    List<CustomerOrder> findAllByIdLessThanOrderByIdDesc(Long beforeId, Limit limit);
 
     /** beforeId 보다 오래된 그 상태의 주문, 최신 먼저. */
-    List<CustomerOrder> findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+    List<CustomerOrder> findAllByStatusAndIdLessThanOrderByIdDesc(
             OrderStatus status, Long beforeId, Limit limit);
 }

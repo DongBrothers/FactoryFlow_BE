@@ -172,16 +172,16 @@ public class OrderService {
 
     private CustomerOrder findOrderByNo(String orderNo) {
         return customerOrderRepository
-                .findByOrderNoAndIsDeletedFalse(orderNo)
+                .findByOrderNo(orderNo)
                 .orElseThrow(() -> new CustomException(OrderErrorCode.ORDER_NOT_FOUND));
     }
 
     private List<CustomerOrder> findOrdersBefore(String status, Long beforeId, int limit) {
         if (status == null) {
-            return customerOrderRepository.findAllByIdLessThanAndIsDeletedFalseOrderByIdDesc(
+            return customerOrderRepository.findAllByIdLessThanOrderByIdDesc(
                     beforeId, Limit.of(limit));
         }
-        return customerOrderRepository.findAllByStatusAndIdLessThanAndIsDeletedFalseOrderByIdDesc(
+        return customerOrderRepository.findAllByStatusAndIdLessThanOrderByIdDesc(
                 OrderStatus.valueOf(status), beforeId, Limit.of(limit));
     }
 

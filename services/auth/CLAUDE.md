@@ -1,5 +1,5 @@
 # auth 서비스
-- DB: auth_db (Flyway: src/main/resources/db/migration). 테이블: user_account (직원 계정), customer (로그인하지 않는 고객 데이터, 제자리는 order)
+- DB: auth_db (Flyway: src/main/resources/db/migration). 테이블: user_account (직원 계정). 고객 데이터(customer)는 쓰는 곳이 없어 V4 에서 지웠다 (#123). 필요해지면 order 에 둔다
 - 계정: 로그인하는 사람은 직원뿐이다. 관리자가 발급하면 Redis 에만 대기하고, 직원이 활성화(비번 설정)할 때 user_account 에 처음 저장한다 (docs/specs/auth-account.md)
 - 경로: 밖에서는 /api/auth/**, gateway 가 /api 를 떼고 넘기므로 컨트롤러는 /auth/** (다른 서비스와 같은 규칙). 내부 API 는 /internal/**
 - 로그인 ID 는 이메일 (trim + 소문자로 저장·비교). 밖으로 나가는 식별자(JWT sub)는 public_id(UUID), 내부 참조는 id
