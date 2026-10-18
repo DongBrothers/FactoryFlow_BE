@@ -27,4 +27,18 @@ public class Product extends BaseEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
+
+    private Product(String code, String name) {
+        this.code = code;
+        this.name = name;
+    }
+
+    public static Product register(String code, String name) {
+        return new Product(code, name);
+    }
+
+    /** 이름만 바꾼다. 코드는 바꾸지 않는다 (docs/specs/master-data.md). */
+    public void rename(String name) {
+        this.name = name;
+    }
 }

@@ -9,6 +9,7 @@
 - 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
 - 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
 - 제품 목록: GET /production/products 는 주문할 수 있는 제품(삭제 안 됨, BOM 있음)만 (docs/specs/list-apis.md)
+- 제품 등록·수정·상세: POST /production/products, PUT·GET /production/products/{id} (docs/specs/master-data.md). BOM 부품은 client/inventory PartClient 로 inventory GET /internal/parts 에 확인 (ProductService 가 트랜잭션 밖에서, 저장은 ProductWriter). 실패·시간 초과는 INVENTORY_UNAVAILABLE(503), 주소는 clients.inventory.url. BOM 수정은 이미 요청한 차에 영향 없음
 - 완료: 검사 양품 → VIN 발행 → production.completed
 - 발행: production.material-requested, production.status-changed, production.step-dispatched, production.cancelled, production.cancel-rejected, production.completed
 - 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, inventory.reservation-failed, equipment.step-started, equipment.step-completed, equipment.status-changed

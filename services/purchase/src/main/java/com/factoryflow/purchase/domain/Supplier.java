@@ -27,4 +27,19 @@ public class Supplier extends BaseEntity {
 
     @Column(length = 100)
     private String contact;
+
+    private Supplier(String name, String contact) {
+        this.name = name;
+        this.contact = contact;
+    }
+
+    public static Supplier register(String name, String contact) {
+        return new Supplier(name, contact);
+    }
+
+    /** 이름과 연락처를 바꾼다. 이미 발주한 구매 건은 같은 업체(supplier_id)를 그대로 가리킨다. */
+    public void change(String name, String contact) {
+        this.name = name;
+        this.contact = contact;
+    }
 }

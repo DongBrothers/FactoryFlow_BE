@@ -86,8 +86,17 @@ public class SecurityConfig {
         exchange.matchers(PUBLIC_PATHS)
                 .permitAll()
                 .pathMatchers("/api/auth/admin/**")
-                .hasRole(ADMIN)
-                .pathMatchers(
+                .hasRole(ADMIN);
+        authorizeWrites(exchange);
+        exchange.pathMatchers(HttpMethod.GET)
+                .hasAnyRole(SALES, PURCHASE, PRODUCTION)
+                .anyExchange()
+                .denyAll();
+    }
+
+    /** 역할 표의 쓰기 요청. 규칙은 등록 순서대로 맞춰 보므로 읽기·거부 규칙보다 먼저 둔다. */
+    private static void authorizeWrites(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
+        exchange.pathMatchers(
                         HttpMethod.POST,
                         "/api/orders",
                         "/api/orders/*/cancel",
@@ -97,14 +106,21 @@ public class SecurityConfig {
                         HttpMethod.POST,
                         "/api/production/work-orders/*/steps/*/start",
                         "/api/production/work-orders/*/steps/*/complete",
-                        "/api/inventory/finished-vehicles/*/ship")
+                        "/api/inventory/finished-vehicles/*/ship",
+                        "/api/production/products")
                 .hasRole(PRODUCTION)
-                .pathMatchers(HttpMethod.POST, "/api/purchases", "/api/purchases/*/receive")
+                .pathMatchers(HttpMethod.PUT, "/api/production/products/*")
+                .hasRole(PRODUCTION)
+                .pathMatchers(
+                        HttpMethod.POST,
+                        "/api/purchases",
+                        "/api/purchases/*/receive",
+                        "/api/purchases/suppliers",
+                        "/api/inventory/parts")
                 .hasRole(PURCHASE)
-                .pathMatchers(HttpMethod.GET)
-                .hasAnyRole(SALES, PURCHASE, PRODUCTION)
-                .anyExchange()
-                .denyAll();
+                .pathMatchers(
+                        HttpMethod.PUT, "/api/purchases/suppliers/*", "/api/inventory/parts/*")
+                .hasRole(PURCHASE);
     }
 
     /**

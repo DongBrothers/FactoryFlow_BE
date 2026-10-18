@@ -30,4 +30,20 @@ public class Bom extends BaseEntity {
 
     @Column(nullable = false)
     private int qtyPerUnit;
+
+    private Bom(Long productId, Long partId, int qtyPerUnit) {
+        this.productId = productId;
+        this.partId = partId;
+        this.qtyPerUnit = qtyPerUnit;
+    }
+
+    public static Bom of(Long productId, Long partId, int qtyPerUnit) {
+        return new Bom(productId, partId, qtyPerUnit);
+    }
+
+    /** BOM 수정 때 남거나 다시 넣은 부품: 수량을 바꾸고, 지웠던 줄이면 되살린다. */
+    public void keep(int qtyPerUnit) {
+        this.qtyPerUnit = qtyPerUnit;
+        restore();
+    }
 }

@@ -18,4 +18,9 @@ public abstract class BaseEntity extends BaseTimeEntity {
     public void delete() {
         this.isDeleted = true;
     }
+
+    /** 지운 행을 되살린다 (UNIQUE 제약 때문에 같은 행을 다시 쓸 때, 예: BOM 에 지웠던 부품을 다시 넣음). */
+    public void restore() {
+        this.isDeleted = false;
+    }
 }

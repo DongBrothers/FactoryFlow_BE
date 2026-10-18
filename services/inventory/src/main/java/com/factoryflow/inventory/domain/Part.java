@@ -42,6 +42,23 @@ public class Part extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    private Part(String code, String name, String unit) {
+        this.code = code;
+        this.name = name;
+        this.unit = unit;
+    }
+
+    /** 새 부품. 재고 0 으로 시작하고 LOT 도 없다 (첫 입고 때 생긴다, docs/specs/master-data.md). */
+    public static Part register(String code, String name, String unit) {
+        return new Part(code, name, unit);
+    }
+
+    /** 이름과 단위만 바꾼다. 코드와 수량은 바꾸지 않는다. */
+    public void changeDetails(String name, String unit) {
+        this.name = name;
+        this.unit = unit;
+    }
+
     /** 창고 실물 수량 (바로 쓸 수 있는 수량 + 생산에 잡혀 있는 수량). */
     public int onHand() {
         return available + reserved;

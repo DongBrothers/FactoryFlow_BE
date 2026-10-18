@@ -32,7 +32,10 @@ class RolePermissionTest {
         "/api/production/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
         "/api/purchases, PURCHASE",
         "/api/purchases/1/receive, PURCHASE",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION"
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION",
+        "/api/inventory/parts, PURCHASE",
+        "/api/purchases/suppliers, PURCHASE",
+        "/api/production/products, PRODUCTION"
     })
     void allowedRoleCanWrite(String path, String role) {
         post(path, role).expectStatus().isNotFound();
@@ -57,10 +60,45 @@ class RolePermissionTest {
         "/api/purchases/1/receive, ADMIN",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, SALES",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, PURCHASE",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, ADMIN"
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, ADMIN",
+        "/api/inventory/parts, SALES",
+        "/api/inventory/parts, PRODUCTION",
+        "/api/inventory/parts, ADMIN",
+        "/api/purchases/suppliers, SALES",
+        "/api/purchases/suppliers, PRODUCTION",
+        "/api/purchases/suppliers, ADMIN",
+        "/api/production/products, SALES",
+        "/api/production/products, PURCHASE",
+        "/api/production/products, ADMIN"
     })
     void otherRoleCannotWrite(String path, String role) {
         post(path, role).expectStatus().isForbidden();
+    }
+
+    @ParameterizedTest(name = "{1} 는 {0} 을 고칠 수 있다")
+    @CsvSource({
+        "/api/inventory/parts/1001, PURCHASE",
+        "/api/purchases/suppliers/1, PURCHASE",
+        "/api/production/products/1, PRODUCTION"
+    })
+    void allowedRoleCanUpdateMasterData(String path, String role) {
+        request(HttpMethod.PUT, path, role).expectStatus().isNotFound();
+    }
+
+    @ParameterizedTest(name = "{1} 는 {0} 을 고칠 수 없다")
+    @CsvSource({
+        "/api/inventory/parts/1001, SALES",
+        "/api/inventory/parts/1001, PRODUCTION",
+        "/api/inventory/parts/1001, ADMIN",
+        "/api/purchases/suppliers/1, SALES",
+        "/api/purchases/suppliers/1, PRODUCTION",
+        "/api/purchases/suppliers/1, ADMIN",
+        "/api/production/products/1, SALES",
+        "/api/production/products/1, PURCHASE",
+        "/api/production/products/1, ADMIN"
+    })
+    void otherRoleCannotUpdateMasterData(String path, String role) {
+        request(HttpMethod.PUT, path, role).expectStatus().isForbidden();
     }
 
     @ParameterizedTest(name = "합쳐 없어진 WORKER 토큰은 {0} 을 할 수 없다")
@@ -81,7 +119,8 @@ class RolePermissionTest {
     @ParameterizedTest(name = "표에 없는 요청은 {0} 도 할 수 없다")
     @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "ADMIN"})
     void requestNotInTheTableIsDeniedToEveryone(String role) {
-        post("/api/inventory/parts", role).expectStatus().isForbidden();
+        // 설비 등록은 만들지 않았다 (docs/specs/master-data.md)
+        post("/api/production/equipments", role).expectStatus().isForbidden();
         request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, role).expectStatus().isForbidden();
         request(HttpMethod.DELETE, "/api/purchases/1", role).expectStatus().isForbidden();
     }
