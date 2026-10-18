@@ -51,12 +51,13 @@ public class ProductWriter {
     }
 
     /**
-     * 이름을 바꾸고 BOM 을 요청 목록으로 통째로 바꾼다: 남거나 다시 넣은 부품은 수량을 바꾸고(지웠던 줄은 되살림, UNIQUE(product_id, part_id)
-     * 라 새 줄을 만들 수 없다), 처음 보는 부품은 새 줄, 빠진 부품은 소프트 삭제.
+     * 이름을 바꾸고 BOM 을 요청 목록으로 통째로 바꾼다. 제품을 잠그고 읽어 같은 제품의 수정은 한 번에 하나씩 처리한다 (나중에 저장한 쪽이 남음): 남거나 다시 넣은
+     * 부품은 수량을 바꾸고(지웠던 줄은 되살림, UNIQUE(product_id, part_id) 라 새 줄을 만들 수 없다), 처음 보는 부품은 새 줄, 빠진 부품은
+     * 소프트 삭제.
      */
     @Transactional
     public ProductDetailResponse update(Long productId, UpdateProductRequest request) {
-        Product product = findActiveProduct(productId);
+        Product product = findProductForUpdate(productId);
         product.rename(request.name());
         return ProductDetailResponse.of(product, replaceBom(productId, request.bom()));
     }
@@ -87,9 +88,9 @@ public class ProductWriter {
         return bom;
     }
 
-    private Product findActiveProduct(Long productId) {
+    private Product findProductForUpdate(Long productId) {
         return productRepository
-                .findByIdAndIsDeletedFalse(productId)
+                .findForUpdateByIdAndIsDeletedFalse(productId)
                 .orElseThrow(() -> new CustomException(ProductionErrorCode.PRODUCT_NOT_FOUND));
     }
 

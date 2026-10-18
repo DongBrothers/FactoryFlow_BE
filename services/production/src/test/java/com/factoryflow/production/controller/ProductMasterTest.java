@@ -20,10 +20,16 @@ import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -180,6 +186,49 @@ class ProductMasterTest {
                                 Integer.class,
                                 product))
                 .isEqualTo(4);
+    }
+
+    @Test
+    void concurrentUpdatesAddingTheSameNewPartBothSucceed() throws Exception {
+        // 같은 제품을 동시에 고치면 한 번에 하나씩 처리해, 둘 다 같은 새 부품을 넣어도 BOM 줄은 하나다 (나중에 저장한 쪽이 남음)
+        partsExist(1001L, 1013L);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < 5; round++) {
+                long product = insertProduct("IONIQ5-" + round, "아이오닉 5");
+                insertBom(product, 1001, 1, false);
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Integer>> statuses = new ArrayList<>();
+                for (int qty : new int[] {2, 3}) {
+                    statuses.add(
+                            pool.submit(
+                                    () -> {
+                                        start.await();
+                                        return update(
+                                                        product,
+                                                        "{\"name\":\"아이오닉 5\",\"bom\":[{\"partId\":1001,\"qty\":1},"
+                                                                + "{\"partId\":1013,\"qty\":"
+                                                                + qty
+                                                                + "}]}")
+                                                .andReturn()
+                                                .getResponse()
+                                                .getStatus();
+                                    }));
+                }
+                start.countDown();
+                for (Future<Integer> status : statuses) {
+                    assertThat(status.get(10, TimeUnit.SECONDS)).isEqualTo(200);
+                }
+                assertThat(
+                                jdbc.queryForObject(
+                                        "SELECT COUNT(*) FROM bom WHERE product_id = ? AND part_id = 1013",
+                                        Integer.class,
+                                        product))
+                        .isOne();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
