@@ -17,16 +17,24 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        // V4 가 이미 있던 자동 요청(REQUESTED)을 취소로 바꾸는지 보려고, V3 까지 올려 한 줄 넣은 뒤 끝까지 적용한다
-        var v3 =
+        // V4 가 이미 있던 자동 요청(REQUESTED)을 취소로 바꾸는지 보려고 V3 까지 올려 한 줄 넣고,
+        // V5 가 컬럼만 지우고 행은 남기는지 보려고 V4 까지 올려 직접 구매 한 줄을 넣은 뒤 끝까지 적용한다
+        var dataSource =
                 new DriverManagerDataSource(
                         mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
-        Flyway.configure().dataSource(v3).target("3").load().migrate();
-        new JdbcTemplate(v3)
-                .update(
-                        "INSERT INTO purchase (part_id, part_code, part_name, qty, status, source,"
-                                + " created_at, updated_at) VALUES (77, 'OLD-77', '옛 자동 요청', 3,"
-                                + " 'REQUESTED', 'AUTO', NOW(6), NOW(6))");
+        var db = new JdbcTemplate(dataSource);
+        Flyway.configure().dataSource(dataSource).target("3").load().migrate();
+        db.update(
+                "INSERT INTO purchase (part_id, part_code, part_name, qty, status, source,"
+                        + " created_at, updated_at) VALUES (77, 'OLD-77', '옛 자동 요청', 3,"
+                        + " 'REQUESTED', 'AUTO', NOW(6), NOW(6))");
+        Flyway.configure().dataSource(dataSource).target("4").load().migrate();
+        db.update(
+                "INSERT INTO purchase (part_id, part_code, part_name, qty, supplier_id, ordered_by,"
+                        + " status, source, ordered_at, received_at, created_at, updated_at)"
+                        + " VALUES (88, 'OLD-88', '옛 직접 구매', 5, 2,"
+                        + " '6c1e2f3a-0000-0000-0000-000000000088', 'RECEIVED', 'MANUAL', NOW(6),"
+                        + " NOW(6), NOW(6), NOW(6))");
         jdbc = migrateTo("5");
     }
 
@@ -93,6 +101,14 @@ class MigrationTest extends MigrationTestSupport {
                         jdbc.queryForObject(
                                 "SELECT status FROM purchase WHERE part_id = 77", String.class))
                 .isEqualTo("CANCELLED");
+        assertThat(
+                        jdbc.queryForMap(
+                                "SELECT qty, supplier_id, ordered_by, status FROM purchase"
+                                        + " WHERE part_id = 88"))
+                .containsEntry("qty", 5)
+                .containsEntry("supplier_id", 2L)
+                .containsEntry("ordered_by", "6c1e2f3a-0000-0000-0000-000000000088")
+                .containsEntry("status", "RECEIVED");
     }
 
     @Test
