@@ -48,12 +48,13 @@ public class FinishedVehicleService {
     private final StockHistoryRepository stockHistoryRepository;
     private final PartLotRepository partLotRepository;
     private final PartLotUsageRepository partLotUsageRepository;
+    private final StorageSlotService storageSlotService;
     private final EventPublisher eventPublisher;
 
     /**
      * production.completed: 그 생산 건의 RESERVED 예약 줄을 모두 CONSUMED 로 바꾸고(reserved −qty, available 그대로,
-     * stock_history CONSUME, 쓴 부품 LOT 기록) 완성차 재고를 한 대 넣는다. 이미 완성차가 있으면 건너뛰고, RESERVED 줄이 없으면
-     * RESERVATION_NOT_FOUND (완성된 차는 부품이 모두 잡혀 있었다).
+     * stock_history CONSUME, 쓴 부품 LOT 기록) 완성차 재고를 한 대 넣고 출고장 빈 자리에 세운다. 이미 완성차가 있으면 건너뛰고, RESERVED
+     * 줄이 없으면 RESERVATION_NOT_FOUND (완성된 차는 부품이 모두 잡혀 있었다).
      */
     @Transactional
     public void stock(ProductionCompleted event) {
@@ -66,13 +67,18 @@ public class FinishedVehicleService {
             throw new CustomException(InventoryErrorCode.RESERVATION_NOT_FOUND);
         }
         consume(event.productionId(), event.vin(), reservations);
-        finishedVehicleRepository.save(
-                FinishedVehicle.stock(
-                        event.vin(), event.productionId(), event.orderId(), event.productId()));
+        FinishedVehicle vehicle =
+                finishedVehicleRepository.save(
+                        FinishedVehicle.stock(
+                                event.vin(),
+                                event.productionId(),
+                                event.orderId(),
+                                event.productId()));
+        storageSlotService.park(vehicle);
     }
 
     /**
-     * 창고에 있는 완성차 한 대를 출고한다: SHIPPED + shipped_at, shipment.completed. 없으면
+     * 창고에 있는 완성차 한 대를 출고한다: SHIPPED + shipped_at, 자리를 비우고 기다리던 차를 세운 뒤 shipment.completed. 없으면
      * FINISHED_VEHICLE_NOT_FOUND, 이미 출고됐으면 FINISHED_VEHICLE_ALREADY_SHIPPED, 다른 요청이 먼저 바꿨으면
      * FINISHED_VEHICLE_CONFLICT.
      */
@@ -82,6 +88,7 @@ public class FinishedVehicleService {
         if (!vehicle.ship(LocalDateTime.now())) {
             throw new CustomException(InventoryErrorCode.FINISHED_VEHICLE_ALREADY_SHIPPED);
         }
+        storageSlotService.vacate(vehicle);
         flushOrConflict(vin);
         eventPublisher.publish(
                 new ShipmentCompleted(

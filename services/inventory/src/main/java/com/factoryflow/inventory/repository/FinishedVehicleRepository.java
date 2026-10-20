@@ -16,6 +16,12 @@ public interface FinishedVehicleRepository extends JpaRepository<FinishedVehicle
 
     boolean existsByVin(String vin);
 
+    /** 자리를 기다리는 가장 먼저 완성된 차 (창고에 있고 자리 없음). */
+    Optional<FinishedVehicle> findFirstByStatusAndSlotCodeIsNullOrderByIdAsc(
+            FinishedVehicleStatus status);
+
+    long countByStatusAndSlotCodeIsNull(FinishedVehicleStatus status);
+
     List<FinishedVehicle> findAllByVinIn(Collection<String> vins);
 
     /** beforeId 보다 오래된 완성차, 최신 먼저. */
