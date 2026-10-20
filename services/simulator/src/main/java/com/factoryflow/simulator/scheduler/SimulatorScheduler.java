@@ -18,7 +18,7 @@ public class SimulatorScheduler {
     private final EquipmentService equipmentService;
     private final SimulatorProperties properties;
 
-    /** 재시작하면 설비가 모두 RUNNING 으로 시작한다. production 이 아는 상태를 맞추려고 바로 알린다. */
+    /** 재시작하면 설비가 모두 RUNNING 으로 시작한다. mes 가 아는 상태를 맞추려고 바로 알린다. */
     @EventListener(ApplicationReadyEvent.class)
     public void announceStatusesOnStartup() {
         equipmentService.announceStatuses();

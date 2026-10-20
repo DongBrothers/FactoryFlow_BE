@@ -2,20 +2,24 @@
 
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 8~10번이다 (#73).
-검사(INSPECTION)를 양품으로 끝내면 production 이 차대번호(VIN)를 발행하고 작업지시·생산 건을 COMPLETED 로 바꾼 뒤 `production.completed` 를 발행한다.
+검사(INSPECTION)를 양품으로 끝내면 mes 가 차대번호(VIN)를 발행하고 작업지시를 COMPLETED 로 바꾼 뒤 `mes.vehicle-completed { productionId, workOrderId, vin }` 을 보낸다. production 이 받아 생산 건을 COMPLETED 로 바꾸고 `production.completed` 를 발행한다 (docs/specs/mes-split.md "3. 완성").
 inventory 는 그 차에 잡아 둔 부품을 사용 처리(CONSUMED)하고 완성차 재고를 1대 늘린다. order 는 차량을 COMPLETED 로 바꾸고 품목·주문 상태를 다시 요약한다.
 부품 LOT ↔ VIN 연결(#76), 출고(#77)는 이 작업에 넣지 않는다.
 
 ## 흐름
 1. 작업자(또는 설비)가 검사 공정을 GOOD 으로 끝낸다 (`WorkOrderService.completeStep` / `reportStepCompleted` 의 공통 `finishStep`)
-2. 같은 트랜잭션에서 (production)
-   - 실적 GOOD + 공정 DONE + 설비 비움 (지금과 같음)
+2. 같은 트랜잭션에서 (mes)
+   - 실적 GOOD + 공정 DONE + 설비 비움
    - 그 공정이 마지막 공정(INSPECTION)이면 완료 처리:
      - VIN 발행 (아래 "VIN 형식")
      - 작업지시 IN_PROGRESS → COMPLETED (vin, completed_at)
-     - 생산 건 IN_PROGRESS → COMPLETED (완료 시각은 작업지시만 갖는다, #123)
-     - `production.completed { orderId, productionId, productId, vin }` 발행
-   - 동시 변경은 지금처럼 version 으로 막는다 (작업자 API 는 409 `PRODUCTION_CONFLICT`)
+     - `mes.vehicle-completed { productionId, workOrderId, vin }` 발행
+   - 동시 변경은 version 으로 막는다 (작업자 API 는 409 `MES_CONFLICT`)
+   - 취소된 작업지시는 409 `WORK_ORDER_CLOSED`
+2-1. production 이 큐 `production.mes-vehicle-completed` 로 받는다 (ProcessedEventGuard, 같은 트랜잭션)
+   - 생산 건 IN_PROGRESS → COMPLETED (시작 알림보다 먼저 왔으면 READY 에서도. 완료 시각은 mes 작업지시만 갖는다)
+   - `production.completed { orderId, productionId, productId, vin }` 발행
+   - 이미 완료됐거나 취소된 생산 건이면 그대로 둔다 (INFO·WARN)
 3. inventory 가 큐 `inventory.production-completed` 로 받는다 (ProcessedEventGuard, 아래는 같은 트랜잭션)
    - 그 생산 건의 RESERVED 예약 줄을 모두 CONSUMED 로 바꾼다. 부품마다 reserved −qty (available 은 그대로), stock_history CONSUME (ref PRODUCTION, productionId)
    - 완성차 재고 1줄: `finished_vehicle { vin, productionId, orderId, productId, status IN_STOCK }`

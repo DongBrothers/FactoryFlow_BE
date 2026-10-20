@@ -6,11 +6,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.factoryflow.production.scheduler.LineDispatcher;
 import com.factoryflow.production.service.ProductionService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +22,10 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-/** 작업지시 수동 발행과 발행 대기 목록 (docs/specs/work-order-release.md). */
+/**
+ * 작업지시 수동 발행과 발행 대기 목록 (docs/specs/work-order-release.md). 작업지시와 공정은 production.released 를 받은 mes 가
+ * 만든다 (docs/specs/mes-split.md "1. 작업지시 발행").
+ */
 @SpringBootTest
 @Import(TestContainersConfig.class)
 class WorkOrderReleaseTest {
@@ -30,7 +33,6 @@ class WorkOrderReleaseTest {
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
     @Autowired ProductionService productionService;
-    @Autowired LineDispatcher dispatcher;
 
     MockMvc mockMvc;
     long avante;
@@ -39,15 +41,11 @@ class WorkOrderReleaseTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-        jdbc.update("DELETE FROM production_result");
-        jdbc.update("DELETE FROM work_order_step");
-        jdbc.update("DELETE FROM work_order");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM bom");
         jdbc.update("DELETE FROM product");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
-        jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
         jdbc.update(
                 "INSERT INTO product (code, name, created_at, updated_at)"
                         + " VALUES ('AVANTE', '아반떼', NOW(6), NOW(6))");
@@ -55,68 +53,37 @@ class WorkOrderReleaseTest {
     }
 
     @Test
-    void reservedProductionWaitsForTheWorkOrder() {
+    void reservedProductionWaitsForTheRelease() {
         long production = readyProduction();
 
-        // 부품이 다 잡혀도 작업지시는 생산 담당이 발행할 때까지 없다
+        // 부품이 다 잡혀도 생산 담당이 발행할 때까지 mes 에 넘기지 않는다
         assertThat(statusOf(production)).isEqualTo("READY");
-        assertThat(workOrderCount(production)).isZero();
+        assertThat(releasedAt(production)).isNull();
+        assertThat(outboxCount("production.released")).isZero();
     }
 
     @Test
-    void releaseCreatesTheWorkOrderWithFiveStepsAndSendsNoEvent() throws Exception {
+    void releaseRecordsTheTimeAndHandsTheCarToMes() throws Exception {
         long production = readyProduction();
         jdbc.update("DELETE FROM outbox");
 
-        String body =
-                release(production)
-                        .andExpect(status().isCreated())
-                        .andExpect(jsonPath("$.data.productionId").value(production))
-                        .andExpect(jsonPath("$.data.status").value("RELEASED"))
-                        .andExpect(jsonPath("$.data.steps.length()").value(5))
-                        .andExpect(jsonPath("$.data.steps[0].process").value("PRESS"))
-                        .andExpect(jsonPath("$.data.steps[4].process").value("INSPECTION"))
-                        .andReturn()
-                        .getResponse()
-                        .getContentAsString();
+        release(production)
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value(202))
+                .andExpect(jsonPath("$.data.productionId").value(production))
+                .andExpect(jsonPath("$.data.releasedAt").exists());
 
-        long workOrder = JsonPath.<Number>read(body, "$.data.workOrderId").longValue();
-        assertThat(
-                        jdbc.queryForList(
-                                "SELECT process FROM work_order_step WHERE work_order_id = ?"
-                                        + " ORDER BY seq",
-                                String.class,
-                                workOrder))
-                .containsExactly("PRESS", "BODY", "PAINT", "ASSEMBLY", "INSPECTION");
-        assertThat(
-                        jdbc.queryForList(
-                                "SELECT DISTINCT status FROM work_order_step WHERE work_order_id = ?",
-                                String.class,
-                                workOrder))
-                .containsExactly("PENDING");
         assertThat(statusOf(production)).isEqualTo("READY");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
-    }
-
-    @Test
-    void pressIsDispatchedOnlyAfterTheRelease() throws Exception {
-        long production = readyProduction();
-
-        dispatcher.dispatchAll();
-        assertThat(outboxCount("production.step-dispatched")).isZero();
-
-        release(production).andExpect(status().isCreated());
-        dispatcher.dispatchAll();
-
-        assertThat(
-                        jdbc.queryForObject(
-                                "SELECT s.status FROM work_order_step s JOIN work_order w"
-                                        + " ON w.id = s.work_order_id"
-                                        + " WHERE w.production_id = ? AND s.process = 'PRESS'",
-                                String.class,
-                                production))
-                .isEqualTo("DISPATCHED");
-        assertThat(outboxCount("production.step-dispatched")).isOne();
+        assertThat(releasedAt(production)).isNotNull();
+        String released =
+                jdbc.queryForObject(
+                        "SELECT payload FROM outbox WHERE event_name = 'production.released'",
+                        String.class);
+        assertThat(JsonPath.<Map<String, Object>>read(released, "$.payload"))
+                .containsEntry("productionId", (int) production)
+                .containsEntry("orderId", 700)
+                .containsEntry("productId", (int) avante);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isOne();
     }
 
     @Test
@@ -127,19 +94,19 @@ class WorkOrderReleaseTest {
             release(production)
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.code").value("PRODUCTION_NOT_READY"));
-            assertThat(workOrderCount(production)).isZero();
+            assertThat(releasedAt(production)).isNull();
         }
     }
 
     @Test
-    void secondReleaseIs409AndKeepsOneWorkOrder() throws Exception {
+    void secondReleaseIs409AndSendsOneEvent() throws Exception {
         long production = readyProduction();
-        release(production).andExpect(status().isCreated());
+        release(production).andExpect(status().isAccepted());
 
         release(production)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("WORK_ORDER_ALREADY_RELEASED"));
-        assertThat(workOrderCount(production)).isOne();
+        assertThat(outboxCount("production.released")).isOne();
     }
 
     @Test
@@ -151,12 +118,12 @@ class WorkOrderReleaseTest {
     }
 
     @Test
-    void awaitingReleaseListsReadyProductionsWithoutAWorkOrderOldestFirst() throws Exception {
+    void awaitingReleaseListsReadyProductionsNotYetReleasedOldestFirst() throws Exception {
         long first = readyProduction();
         long released = readyProduction();
         long second = readyProduction();
         insertProduction("PLANNED");
-        release(released).andExpect(status().isCreated());
+        release(released).andExpect(status().isAccepted());
 
         mockMvc.perform(get("/production/productions/awaiting-release").param("size", "1"))
                 .andExpect(status().isOk())
@@ -187,6 +154,10 @@ class WorkOrderReleaseTest {
                         jsonPath(
                                         "$.paths['/production/productions/{productionId}/work-order'].post.summary")
                                 .value("작업지시 발행"))
+                .andExpect(
+                        jsonPath(
+                                        "$.paths['/production/productions/{productionId}/work-order'].post.responses['202']")
+                                .exists())
                 .andExpect(
                         jsonPath(
                                         "$.paths['/production/productions/{productionId}/work-order'].post.responses['409']")
@@ -224,11 +195,9 @@ class WorkOrderReleaseTest {
                 "SELECT status FROM production WHERE id = ?", String.class, production);
     }
 
-    private int workOrderCount(long production) {
+    private Object releasedAt(long production) {
         return jdbc.queryForObject(
-                "SELECT COUNT(*) FROM work_order WHERE production_id = ?",
-                Integer.class,
-                production);
+                "SELECT released_at FROM production WHERE id = ?", Object.class, production);
     }
 
     private int outboxCount(String eventName) {

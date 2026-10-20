@@ -1,17 +1,14 @@
-# production 서비스 (ERP 생산 계획 + MES)
+# production 서비스 (ERP 생산 계획)
+- 역할: 무엇을 만들지 정한다. 제품·BOM, 차 한 대씩 생산 건, 부품 요청, 작업지시 발행 결정. 현장 실행(작업지시·공정·설비)은 mes 가 맡는다 (docs/specs/mes-split.md)
 - DB: production_db (Flyway: src/main/resources/db/migration)
   - 제품: product, bom
-  - 생산: production (생산 건 = 차량 1대. SAGA 상태)
-  - MES: work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력)
-- 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
-- 생산 트리거: inventory.reserved 수신 시 생산 건 READY(작업지시 발행 대기)까지. 생산 담당이 POST /production/productions/{id}/work-order 로 발행하면 작업지시 1건과 공정 5개 생성 (생산 건을 PESSIMISTIC_FORCE_INCREMENT 로 잠가 취소와 겹치면 취소가 재시도), 발행 대기 목록 GET /production/productions/awaiting-release (docs/specs/work-order-release.md)
-- 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + production.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API 로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
-- 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
-- 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
+  - 생산: production (생산 건 = 차량 1대. SAGA 상태, 작업지시 발행 시각 released_at)
+  - work_order, work_order_step, production_result, equipment, equipment_status_history 는 mes 로 옮겼다 (데이터 이전 뒤 다음 마이그레이션에서 지운다. 코드는 쓰지 않는다)
+- 생산 트리거: inventory.reserved 수신 시 생산 건 READY(작업지시 발행 대기)까지. 생산 담당이 POST /production/productions/{id}/work-order 로 발행하면 released_at + production.released (202, 작업지시는 mes 가 만든다. 생산 건을 PESSIMISTIC_FORCE_INCREMENT 로 잠가 취소와 겹치면 취소가 재시도), 발행 대기 목록 GET /production/productions/awaiting-release = READY 이고 released_at NULL (docs/specs/work-order-release.md)
+- 생산 시작·완료: mes.production-started 수신 시 READY → IN_PROGRESS + status-changed, mes.vehicle-completed 수신 시 COMPLETED + production.completed (시작보다 먼저 오면 READY 에서도 완료)
 - 제품 목록: GET /production/products 는 주문할 수 있는 제품(삭제 안 됨, BOM 있음)만 (docs/specs/list-apis.md)
 - 제품 등록·수정·상세: POST /production/products, PUT·GET /production/products/{id} (docs/specs/master-data.md). BOM 부품은 client/inventory PartClient 로 inventory GET /internal/parts 에 확인 (ProductService 가 트랜잭션 밖에서, 저장은 ProductWriter). 실패·시간 초과는 INVENTORY_UNAVAILABLE(503), 주소는 clients.inventory.url. BOM 수정은 이미 요청한 차에 영향 없음
-- 완료: 검사 양품 → VIN 발행 → production.completed
-- 발행: production.material-requested, production.status-changed, production.step-dispatched, production.cancelled, production.cancel-rejected, production.completed
-- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, inventory.reservation-failed, equipment.step-started, equipment.step-completed, equipment.status-changed
-- 보상: order.cancel-requested 수신 시 프레스 배정 전이면 CANCELLED + production.cancelled (예약 해제), 아니면 production.cancel-rejected. 주문 뒤 제품·BOM 이 사라졌으면 수량만큼 CANCELLED 생산 건 + status-changed(CANCELLED), 부품이 없다는 inventory.reservation-failed 를 받으면 PLANNED 생산 건 CANCELLED + production.cancelled (docs/specs/stalled-flows.md). 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
+- 발행: production.material-requested, production.status-changed, production.released, production.release-cancel-requested, production.cancelled, production.cancel-rejected, production.completed
+- 수신: order.created, order.cancel-requested, inventory.reserved, inventory.reservation-pending, inventory.reservation-failed, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected
+- 보상: order.cancel-requested 수신 시 발행 전 차(PLANNED, WAITING_MATERIAL, 발행 전 READY)는 CANCELLED + production.cancelled (예약 해제), 발행한 READY 는 production.release-cancel-requested 로 mes 에 묻고 mes.work-order-cancelled 면 CANCELLED + production.cancelled, mes.work-order-cancel-rejected 면 production.cancel-rejected, IN_PROGRESS 이후는 production.cancel-rejected. 주문 뒤 제품·BOM 이 사라졌으면 수량만큼 CANCELLED 생산 건 + status-changed(CANCELLED), 부품이 없다는 inventory.reservation-failed 를 받으면 PLANNED 생산 건 CANCELLED + production.cancelled (docs/specs/stalled-flows.md)
 - 동시 변경: 생산 건은 @Version 으로 막는다 (docs/specs/saga-order-fulfillment.md)

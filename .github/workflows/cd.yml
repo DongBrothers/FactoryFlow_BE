@@ -28,7 +28,7 @@ jobs:
           BEFORE: ${{ github.event.before }}
           SERVICES_INPUT: ${{ inputs.services }}
         run: |
-          ALL="gateway order inventory purchase production auth simulator"
+          ALL="gateway order inventory purchase production auth simulator mes"
           # 수동 실행에서 services 를 지정하면 그 서비스만 배포한다
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$SERVICES_INPUT" ]; then
             list=""

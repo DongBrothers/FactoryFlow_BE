@@ -3,9 +3,8 @@ package com.factoryflow.production.controller;
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.production.dto.response.AwaitingReleaseResponse;
-import com.factoryflow.production.dto.response.WorkOrderDetailResponse;
+import com.factoryflow.production.dto.response.ReleaseWorkOrderResponse;
 import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,7 +30,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductionController {
 
     private final ProductionService productionService;
-    private final WorkOrderService workOrderService;
 
     @Operation(
             summary = "작업지시 발행 대기 목록",
@@ -64,11 +62,11 @@ public class ProductionController {
     @Operation(
             summary = "작업지시 발행",
             description =
-                    "부품이 다 잡힌(READY) 생산 건에 작업지시 1건과 공정 5개를 만든다. 발행해야 배정 스케줄러와 작업자가 공정을 시작할 수 있다. 이벤트는 보내지 않는다.")
+                    "부품이 다 잡힌(READY) 생산 건의 작업지시를 발행한다. 작업지시 1건과 공정 5개는 mes 가 이어서 만들고(production.released), 그 뒤 배정 스케줄러와 작업자가 공정을 시작할 수 있다. 발행한 차의 취소는 mes 가 첫 공정 시작 여부로 판단한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "201",
-                description = "발행함. 작업지시 상세를 돌려준다"),
+                responseCode = "202",
+                description = "발행 접수함. 작업지시는 mes 작업지시 목록에서 본다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description = "productionId 가 양수가 아님"),
@@ -81,13 +79,13 @@ public class ProductionController {
                         "READY 가 아님, 부품 확보 전이거나 이미 시작·완료·취소 (PRODUCTION_NOT_READY), 이미 발행함 (WORK_ORDER_ALREADY_RELEASED)")
     })
     @PostMapping("/{productionId}/work-order")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<WorkOrderDetailResponse> release(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<ReleaseWorkOrderResponse> release(
             @Parameter(description = "생산 건 번호", example = "101")
                     @PathVariable("productionId")
                     @Positive
                     Long productionId) {
-        WorkOrderDetailResponse workOrder = workOrderService.release(productionId);
-        return ApiResponse.created(workOrder);
+        ReleaseWorkOrderResponse released = productionService.release(productionId);
+        return ApiResponse.accepted(released);
     }
 }

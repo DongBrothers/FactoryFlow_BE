@@ -25,7 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Configuration
 public class EventQueueConfig {
 
-    public static final String STEP_DISPATCHED_QUEUE = "simulator.production-step-dispatched";
+    public static final String STEP_DISPATCHED_QUEUE = "simulator.mes-step-dispatched";
     public static final String EXCHANGE = "factoryflow.events";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
@@ -49,8 +49,7 @@ public class EventQueueConfig {
 
     @Bean
     Declarables stepDispatchedQueues(TopicExchange factoryFlowEventsExchange) {
-        return receive(
-                factoryFlowEventsExchange, STEP_DISPATCHED_QUEUE, "production.step-dispatched");
+        return receive(factoryFlowEventsExchange, STEP_DISPATCHED_QUEUE, "mes.step-dispatched");
     }
 
     // ---- 실패 처리 ----

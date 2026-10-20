@@ -28,8 +28,8 @@ class RolePermissionTest {
         "/api/orders, SALES",
         "/api/orders/" + ORDER_NO + "/cancel, SALES",
         "/api/orders/customers, SALES",
-        "/api/production/work-orders/1/steps/PRESS/start, PRODUCTION",
-        "/api/production/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
+        "/api/mes/work-orders/1/steps/PRESS/start, PRODUCTION",
+        "/api/mes/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
         "/api/purchases, PURCHASE",
         "/api/purchases/1/receive, PURCHASE",
         "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION",
@@ -52,10 +52,10 @@ class RolePermissionTest {
         "/api/orders/customers, PURCHASE",
         "/api/orders/customers, PRODUCTION",
         "/api/orders/customers, ADMIN",
-        "/api/production/work-orders/1/steps/PRESS/start, SALES",
-        "/api/production/work-orders/1/steps/PRESS/start, PURCHASE",
-        "/api/production/work-orders/1/steps/PRESS/start, ADMIN",
-        "/api/production/work-orders/1/steps/INSPECTION/complete, SALES",
+        "/api/mes/work-orders/1/steps/PRESS/start, SALES",
+        "/api/mes/work-orders/1/steps/PRESS/start, PURCHASE",
+        "/api/mes/work-orders/1/steps/PRESS/start, ADMIN",
+        "/api/mes/work-orders/1/steps/INSPECTION/complete, SALES",
         "/api/purchases, SALES",
         "/api/purchases, PRODUCTION",
         "/api/purchases, ADMIN",
@@ -112,23 +112,21 @@ class RolePermissionTest {
     @ParameterizedTest(name = "합쳐 없어진 WORKER 토큰은 {0} 을 할 수 없다")
     @ValueSource(
             strings = {
-                "/api/production/work-orders/1/steps/PRESS/start",
-                "/api/production/work-orders/1/steps/INSPECTION/complete",
+                "/api/mes/work-orders/1/steps/PRESS/start",
+                "/api/mes/work-orders/1/steps/INSPECTION/complete",
                 "/api/inventory/finished-vehicles/" + VIN + "/ship"
             })
     void mergedWorkerRoleHasNoPermission(String path) {
         // WORKER 는 PRODUCTION 으로 합쳤다 (#118). 합치기 전에 받은 토큰은 다시 로그인해야 한다
         post(path, "WORKER").expectStatus().isForbidden();
-        request(HttpMethod.GET, "/api/production/work-orders", "WORKER")
-                .expectStatus()
-                .isForbidden();
+        request(HttpMethod.GET, "/api/mes/work-orders", "WORKER").expectStatus().isForbidden();
     }
 
     @ParameterizedTest(name = "표에 없는 요청은 {0} 도 할 수 없다")
     @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "ADMIN"})
     void requestNotInTheTableIsDeniedToEveryone(String role) {
         // 설비 등록은 만들지 않았다 (docs/specs/master-data.md)
-        post("/api/production/equipments", role).expectStatus().isForbidden();
+        post("/api/mes/equipments", role).expectStatus().isForbidden();
         request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, role).expectStatus().isForbidden();
         request(HttpMethod.DELETE, "/api/purchases/1", role).expectStatus().isForbidden();
     }
@@ -156,7 +154,7 @@ class RolePermissionTest {
             "/api/orders/customers",
             "/api/production/productions/awaiting-release",
             "/api/purchases?status=ORDERED",
-            "/api/production/work-orders",
+            "/api/mes/work-orders",
             "/api/inventory/parts"
         };
     }

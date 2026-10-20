@@ -7,6 +7,7 @@ import static org.assertj.core.groups.Tuple.tuple;
 import com.factoryflow.test.db.MigrationTestSupport;
 import java.sql.Connection;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
@@ -21,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("9");
+        jdbc = migrateTo("10");
     }
 
     @Test
@@ -75,6 +76,40 @@ class MigrationTest extends MigrationTestSupport {
             ScriptUtils.executeSqlScript(
                     connection, new ClassPathResource("db/seed-dev/R__dev_seed.sql"));
         }
+    }
+
+    @Test
+    void v10AddsReleasedAtAndFillsItFromExistingWorkOrders() {
+        // 작업지시는 mes 로 옮긴다. production 은 발행 시각만 갖는다 (docs/specs/mes-split.md, #134)
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE production_v10");
+        var dataSource =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl()
+                                .replace("/" + mysql.getDatabaseName(), "/production_v10"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure()
+                .dataSource(dataSource)
+                .target(MigrationVersion.fromVersion("9"))
+                .load()
+                .migrate();
+        var db = new JdbcTemplate(dataSource);
+        db.update(
+                "INSERT INTO production (id, order_id, product_id, seq, status, created_at, updated_at)"
+                        + " VALUES (1, 10, 1, 1, 'READY', NOW(6), NOW(6)), (2, 10, 1, 2, 'READY', NOW(6), NOW(6))");
+        db.update(
+                "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
+                        + " created_at, updated_at)"
+                        + " VALUES (1, 10, 1, 'RELEASED', '2026-10-20 09:00:00', NOW(6), NOW(6))");
+
+        Flyway.configure().dataSource(dataSource).load().migrate();
+
+        assertThat(
+                        db.queryForList(
+                                "SELECT CAST(released_at AS CHAR) FROM production ORDER BY id",
+                                String.class))
+                .containsExactly("2026-10-20 09:00:00.000000", null);
     }
 
     @Test

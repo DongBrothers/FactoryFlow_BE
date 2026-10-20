@@ -4,10 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.scheduler.LineDispatcher;
 import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
@@ -29,7 +26,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
-/** order.cancel-requested 수신으로 차량(생산 건)별 취소·거절 (docs/specs/order-cancel.md "2. 차량별 판단"). */
+/**
+ * order.cancel-requested 수신으로 차량(생산 건)별 취소·거절 (docs/specs/order-cancel.md "2. 차량별 판단"). 작업지시를 발행한
+ * 차는 시작 여부를 아는 mes 에 묻는다 (docs/specs/mes-split.md "4. 주문 취소").
+ */
 @SpringBootTest(
         properties = {
             "spring.rabbitmq.listener.simple.retry.initial-interval=100ms",
@@ -43,8 +43,6 @@ class OrderCancelRequestedTest {
 
     @Autowired OrderEventListener listener;
     @Autowired ProductionService productionService;
-    @Autowired WorkOrderService workOrderService;
-    @Autowired LineDispatcher dispatcher;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
     @Autowired RabbitTemplate rabbitTemplate;
@@ -52,23 +50,20 @@ class OrderCancelRequestedTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM production_result");
-        jdbc.update("DELETE FROM work_order_step");
-        jdbc.update("DELETE FROM work_order");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
-        jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
         amqpAdmin.purgeQueue(DLQ, false);
     }
 
     @Test
-    void carsBeforeThePressAreCancelledAndStartedCarsAreRejected() {
+    void carsBeforeReleaseAreCancelledReleasedCarsAreAskedToMesAndStartedCarsAreRejected() {
         long planned = production(1L, 1, "PLANNED");
         long waiting = production(1L, 2, "WAITING_MATERIAL");
         long ready = readyProduction(2L, 1);
-        long started = readyProduction(3L, 1);
-        workOrderService.startStep(workOrderOf(started), ProductionProcess.PRESS, "PRESS-01");
+        long released = releasedProduction(4L, 1);
+        long started = releasedProduction(3L, 1);
+        productionService.startProduction(started);
         jdbc.update("DELETE FROM outbox");
 
         listener.onCancelRequested(cancelRequested(UUID.randomUUID()));
@@ -76,13 +71,20 @@ class OrderCancelRequestedTest {
         assertThat(statusOf(planned)).isEqualTo("CANCELLED");
         assertThat(statusOf(waiting)).isEqualTo("CANCELLED");
         assertThat(statusOf(ready)).isEqualTo("CANCELLED");
-        assertThat(workOrderStatus(ready)).isEqualTo("CANCELLED");
+        // 발행한 차는 mes 의 답(취소·거절)을 기다린다
+        assertThat(statusOf(released)).isEqualTo("READY");
         assertThat(statusOf(started)).isEqualTo("IN_PROGRESS");
-        assertThat(workOrderStatus(started)).isEqualTo("IN_PROGRESS");
 
         assertThat(outbox("production.cancelled"))
                 .extracting(p -> number(p, "$.payload.productionId"))
                 .containsExactlyInAnyOrder(planned, waiting, ready);
+        assertThat(outbox("production.release-cancel-requested"))
+                .singleElement()
+                .satisfies(
+                        p -> {
+                            assertThat(number(p, "$.payload.productionId")).isEqualTo(released);
+                            assertThat(number(p, "$.payload.orderId")).isEqualTo(ORDER);
+                        });
         assertThat(outbox("production.cancelled"))
                 .allSatisfy(p -> assertThat(number(p, "$.payload.orderId")).isEqualTo(ORDER));
         String rejected = outbox("production.cancel-rejected").get(0);
@@ -91,23 +93,6 @@ class OrderCancelRequestedTest {
                 .isEqualTo("ALREADY_STARTED");
         assertThat(JsonPath.<String>read(rejected, "$.payload.status")).isEqualTo("IN_PROGRESS");
         assertThat(outbox("production.cancel-rejected")).hasSize(1);
-    }
-
-    @Test
-    void cancelledWorkOrderIsNotDispatched() {
-        long ready = readyProduction(1L, 1);
-        jdbc.update(
-                "UPDATE work_order SET released_at = NOW(6) - INTERVAL 10 MINUTE WHERE production_id = ?",
-                ready);
-
-        listener.onCancelRequested(cancelRequested(UUID.randomUUID()));
-        dispatcher.dispatchAll();
-
-        assertThat(
-                        jdbc.queryForObject(
-                                "SELECT COUNT(*) FROM work_order_step WHERE status = 'DISPATCHED'",
-                                Integer.class))
-                .isZero();
     }
 
     @Test
@@ -165,27 +150,23 @@ class OrderCancelRequestedTest {
                 seq);
     }
 
+    /** 부품이 다 잡혀 작업지시 발행을 기다리는 차. */
     private long readyProduction(long productId, int seq) {
         long production = production(productId, seq, "PLANNED");
         productionService.markReserved(production);
-        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
-        workOrderService.release(production);
         return production;
     }
 
-    private long workOrderOf(long production) {
-        return jdbc.queryForObject(
-                "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
+    /** 생산 담당이 작업지시를 발행한 차 (작업지시는 mes 가 만든다). */
+    private long releasedProduction(long productId, int seq) {
+        long production = readyProduction(productId, seq);
+        productionService.release(production);
+        return production;
     }
 
     private String statusOf(long production) {
         return jdbc.queryForObject(
                 "SELECT status FROM production WHERE id = ?", String.class, production);
-    }
-
-    private String workOrderStatus(long production) {
-        return jdbc.queryForObject(
-                "SELECT status FROM work_order WHERE production_id = ?", String.class, production);
     }
 
     private EventEnvelope cancelRequested(UUID eventId) {

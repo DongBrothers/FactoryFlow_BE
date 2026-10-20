@@ -45,8 +45,6 @@ class InventoryEventListenerTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM production_result");
-        jdbc.update("DELETE FROM work_order_step");
-        jdbc.update("DELETE FROM work_order");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
@@ -69,14 +67,14 @@ class InventoryEventListenerTest {
 
     @Test
     void reservedWaitsForTheWorkOrderToBeReleased() {
-        // 예약 완료로 READY 가 되지만 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md). 공정 5개는
-        // WorkOrderReleaseTest 가 확인한다
+        // 예약 완료로 READY 가 되지만 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md). 발행은
+        // WorkOrderReleaseTest, 작업지시·공정 5개는 mes 가 확인한다
         long production = insertProduction(42L, 1L, "PLANNED");
 
         listener.onReserved(reserved(production));
 
         assertThat(statusOf(production)).isEqualTo("READY");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM work_order", Integer.class)).isZero();
+        assertNotReleased(production);
     }
 
     @Test
@@ -96,7 +94,7 @@ class InventoryEventListenerTest {
 
         listener.onReservationPending(reservationPending(production));
 
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM work_order", Integer.class)).isZero();
+        assertNotReleased(production);
     }
 
     @Test
@@ -276,5 +274,16 @@ class InventoryEventListenerTest {
 
     private static long number(String json, String path) {
         return ((Number) JsonPath.read(json, path)).longValue();
+    }
+
+    /** 작업지시를 발행하지 않았다: 발행 시각이 없고 mes 에 넘기지 않았다. */
+    private void assertNotReleased(long production) {
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT released_at IS NULL FROM production WHERE id = ?",
+                                Boolean.class,
+                                production))
+                .isTrue();
+        assertThat(outbox("production.released")).isEmpty();
     }
 }

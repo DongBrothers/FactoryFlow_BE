@@ -1,10 +1,12 @@
 # MES 작업지시·공정·실적 (inventory.reserved 트리거 + 혼합 자동화: 로봇 공정 배정·설비 보고 + 작업자 API)
 
+> 작업지시·공정·실적·설비·배정은 mes 서비스가 맡는다. 작업지시는 생산 담당이 발행해 `production.released` 를 받은 mes 가 만들고, 첫 시작·완성은 mes 가 production 에 알린다. API 는 `/mes/work-orders`, `/mes/equipments` (docs/specs/mes-split.md, docs/specs/work-order-release.md)
+
 ## 목적
 기획서(docs/planning/production-flow.md)와 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 6~7번이다.
 부품 예약이 끝나면(`inventory.reserved`) production 이 차량 1대(생산 건)마다 작업지시 1건과 공정 5개를 만든다.
 공정 진행은 혼합 자동화다 (기획서 "정한 것"):
-- 로봇 공정(PRESS, BODY, PAINT): production 의 배정 스케줄러가 비어 있는 설비에 차를 배정하고, 설비가 시작·완료·양품/불량을 보고한다
+- 로봇 공정(PRESS, BODY, PAINT): mes 의 배정 스케줄러가 비어 있는 설비에 차를 배정하고, 설비가 시작·완료·양품/불량을 보고한다
 - 사람 공정(ASSEMBLY, INSPECTION): 라인 작업자가 시작·종료하며 양품·불량 실적을 입력한다. 작업자 API 는 로봇 공정의 수동 개입에도 쓴다
 
 이 작업은 production 쪽(배정, 보고 수신, 작업자 API)까지다. 배정을 받아 일하는 가상 설비(simulator)는 다음 작업이고, 그 전까지는 작업자 API 로 로봇 공정도 진행할 수 있다.
@@ -26,11 +28,11 @@
 
 | API | 하는 일 |
 |---|---|
-| `GET /production/work-orders?status=RELEASED&lastId=0&size=20` | 작업지시 목록. status 는 RELEASED, IN_PROGRESS. id 커서(`CursorPage`, size 1~100). 항목: workOrderId, productionId, orderId, productId, status, 현재 공정 |
-| `GET /production/work-orders/{workOrderId}` | 작업지시 상세: 공정 5개(상태, 시작·종료 시각)와 공정별 실적 |
-| `POST /production/work-orders/{workOrderId}/steps/{process}/start` | 공정 시작. 본문 `{ "equipmentCode": "PRESS-01" }` (이 공정을 하는 설비) |
-| `GET /production/equipments?process=PRESS` | 공정의 설비 목록과 상태 (작업자가 설비를 고를 때) |
-| `POST /production/work-orders/{workOrderId}/steps/{process}/complete` | 공정 종료 + 실적. 본문 `{ "result": "GOOD" \| "DEFECT", "defectReason": "도장 얼룩" }` |
+| `GET /mes/work-orders?status=RELEASED&lastId=0&size=20` | 작업지시 목록. status 는 RELEASED, IN_PROGRESS. id 커서(`CursorPage`, size 1~100). 항목: workOrderId, productionId, orderId, productId, status, 현재 공정 |
+| `GET /mes/work-orders/{workOrderId}` | 작업지시 상세: 공정 5개(상태, 시작·종료 시각)와 공정별 실적 |
+| `POST /mes/work-orders/{workOrderId}/steps/{process}/start` | 공정 시작. 본문 `{ "equipmentCode": "PRESS-01" }` (이 공정을 하는 설비) |
+| `GET /mes/equipments?process=PRESS` | 공정의 설비 목록과 상태 (작업자가 설비를 고를 때) |
+| `POST /mes/work-orders/{workOrderId}/steps/{process}/complete` | 공정 종료 + 실적. 본문 `{ "result": "GOOD" \| "DEFECT", "defectReason": "도장 얼룩" }` |
 
 **시작**
 - 앞 공정이 모두 DONE 이고, 이 공정이 PENDING 일 때만 시작한다. 한 작업지시에서 IN_PROGRESS 공정은 하나뿐이다
@@ -50,10 +52,10 @@
 2. 그 공정이 PENDING 이고 앞 공정이 모두 DONE 인 작업지시를, 비어 있는 설비 수만큼 작업지시 id 순서(먼저 발행된 차)로 고른다. 작업지시는 RELEASED 또는 IN_PROGRESS
    - PRESS 도 발행되자마자 고른다 (기다리지 않는다). 그래서 부품이 다 잡힌 차는 다음 배정 주기에 프레스가 배정되어 취소할 수 없게 된다
    - 다 읽지 않고 필요한 개수만 DB 에서 고른다
-3. 한 차씩 따로 트랜잭션으로 배정한다: 공정 DISPATCHED(설비 기록) + `production.step-dispatched { workOrderId, process, equipmentCode }`. 작업지시의 첫 시작이면 작업지시·생산 건 IN_PROGRESS + status-changed (취소 불가)
+3. 한 차씩 따로 트랜잭션으로 배정한다: 공정 DISPATCHED(설비 기록) + `mes.step-dispatched { workOrderId, process, equipmentCode }`. 작업지시의 첫 시작이면 작업지시 IN_PROGRESS + `mes.production-started` (production 이 생산 건 IN_PROGRESS + status-changed, 취소 불가)
    - 배정하려는 순간 상태가 바뀌었으면(작업자가 먼저 시작 등) 그 차는 이번 주기에서 빼고 다음 후보로 그 설비를 채운다. 설비 쪽 이유(정지, 다른 차가 먼저 잡음)면 그 설비만 빼고 같은 차로 다음 설비를 시도한다 (먼저 발행된 차가 밀리지 않게). 계속 실패하는 차가 뒤의 차를 막지 않는다. 뺀 차는 다음 주기에 다시 본다
 
-**설비 보고** (simulator → production, ProcessedEventGuard)
+**설비 보고** (simulator → mes, ProcessedEventGuard)
 | 받은 이벤트 | 조건 | 처리 |
 |---|---|---|
 | `equipment.step-started` | 그 공정이 DISPATCHED 이고 같은 설비 | IN_PROGRESS (started_at) |
@@ -97,7 +99,7 @@
 | 이벤트 | 발행 → 수신 | payload |
 |---|---|---|
 | inventory.reserved | inventory → production | productionId |
-| production.step-dispatched | production → simulator | workOrderId, process, equipmentCode |
+| mes.step-dispatched | mes → simulator | workOrderId, process, equipmentCode |
 | equipment.step-started | simulator → production (`production.equipment-step-started`) | equipmentCode, workOrderId, process |
 | equipment.step-completed | simulator → production (`production.equipment-step-completed`) | equipmentCode, workOrderId, process, result, defectReason |
 | production.status-changed | production → order | orderId, productionId, productId, status |

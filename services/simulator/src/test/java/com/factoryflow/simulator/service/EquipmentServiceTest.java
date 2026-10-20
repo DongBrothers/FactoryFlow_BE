@@ -102,7 +102,7 @@ class EquipmentServiceTest {
 
     @Test
     void announceSendsTheStatusOfEveryEquipment() {
-        // 시작할 때 보내는 알림: 설비가 기준이라 production 이 고장으로 알던 설비도 지금 상태로 맞춘다
+        // 시작할 때 보내는 알림: 설비가 기준이라 mes 가 고장으로 알던 설비도 지금 상태로 맞춘다
         equipmentService.changeStatus("PRESS-02", EquipmentStatus.FAULT);
         assertThat(field(support.next(5000), "$.payload.status")).isEqualTo("FAULT");
 

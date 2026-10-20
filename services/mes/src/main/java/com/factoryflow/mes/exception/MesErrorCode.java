@@ -1,0 +1,30 @@
+package com.factoryflow.mes.exception;
+
+import com.factoryflow.common.web.exception.errorcode.ErrorCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+@Getter
+@RequiredArgsConstructor
+public enum MesErrorCode implements ErrorCode {
+    WORK_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "작업지시를 찾을 수 없습니다."),
+    STEP_NOT_FOUND(HttpStatus.NOT_FOUND, "공정을 찾을 수 없습니다."),
+    EQUIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "설비를 찾을 수 없습니다."),
+    WORK_ORDER_CLOSED(HttpStatus.CONFLICT, "취소된 작업지시입니다."),
+    STEP_OUT_OF_ORDER(HttpStatus.CONFLICT, "앞 공정이 끝나지 않았습니다."),
+    INVALID_STEP_STATUS(HttpStatus.CONFLICT, "지금 공정 상태에서는 할 수 없는 작업입니다."),
+    EQUIPMENT_PROCESS_MISMATCH(HttpStatus.CONFLICT, "이 공정의 설비가 아닙니다."),
+    EQUIPMENT_NOT_RUNNING(HttpStatus.CONFLICT, "설비가 가동 중이 아닙니다."),
+    EQUIPMENT_BUSY(HttpStatus.CONFLICT, "설비가 다른 차를 작업 중입니다."),
+    MES_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요."),
+    VIN_RANGE_EXCEEDED(HttpStatus.INTERNAL_SERVER_ERROR, "차대번호 자리를 넘어 발행할 수 없습니다.");
+
+    private final HttpStatus httpStatus;
+    private final String message;
+
+    @Override
+    public String getCode() {
+        return name();
+    }
+}

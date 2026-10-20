@@ -26,11 +26,12 @@ public class EventQueueConfig {
     public static final String RESERVATION_PENDING_QUEUE =
             "production.inventory-reservation-pending";
     public static final String RESERVATION_FAILED_QUEUE = "production.inventory-reservation-failed";
-    public static final String EQUIPMENT_STEP_STARTED_QUEUE = "production.equipment-step-started";
-    public static final String EQUIPMENT_STEP_COMPLETED_QUEUE =
-            "production.equipment-step-completed";
-    public static final String EQUIPMENT_STATUS_CHANGED_QUEUE =
-            "production.equipment-status-changed";
+    public static final String MES_PRODUCTION_STARTED_QUEUE = "production.mes-production-started";
+    public static final String MES_VEHICLE_COMPLETED_QUEUE = "production.mes-vehicle-completed";
+    public static final String MES_WORK_ORDER_CANCELLED_QUEUE =
+            "production.mes-work-order-cancelled";
+    public static final String MES_WORK_ORDER_CANCEL_REJECTED_QUEUE =
+            "production.mes-work-order-cancel-rejected";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -68,25 +69,31 @@ public class EventQueueConfig {
     }
 
     @Bean
-    Declarables equipmentStepStartedQueues(TopicExchange factoryFlowEventsExchange) {
+    Declarables mesProductionStartedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
-                factoryFlowEventsExchange, EQUIPMENT_STEP_STARTED_QUEUE, "equipment.step-started");
+                factoryFlowEventsExchange, MES_PRODUCTION_STARTED_QUEUE, "mes.production-started");
     }
 
     @Bean
-    Declarables equipmentStepCompletedQueues(TopicExchange factoryFlowEventsExchange) {
+    Declarables mesVehicleCompletedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
-                factoryFlowEventsExchange,
-                EQUIPMENT_STEP_COMPLETED_QUEUE,
-                "equipment.step-completed");
+                factoryFlowEventsExchange, MES_VEHICLE_COMPLETED_QUEUE, "mes.vehicle-completed");
     }
 
     @Bean
-    Declarables equipmentStatusChangedQueues(TopicExchange factoryFlowEventsExchange) {
+    Declarables mesWorkOrderCancelledQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
                 factoryFlowEventsExchange,
-                EQUIPMENT_STATUS_CHANGED_QUEUE,
-                "equipment.status-changed");
+                MES_WORK_ORDER_CANCELLED_QUEUE,
+                "mes.work-order-cancelled");
+    }
+
+    @Bean
+    Declarables mesWorkOrderCancelRejectedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange,
+                MES_WORK_ORDER_CANCEL_REJECTED_QUEUE,
+                "mes.work-order-cancel-rejected");
     }
 
     // ---- 실패 처리 ----

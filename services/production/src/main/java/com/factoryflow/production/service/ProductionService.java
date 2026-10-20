@@ -7,20 +7,22 @@ import com.factoryflow.production.domain.Bom;
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.domain.Production;
 import com.factoryflow.production.domain.ProductionStatus;
-import com.factoryflow.production.domain.WorkOrder;
 import com.factoryflow.production.dto.response.AwaitingReleaseResponse;
+import com.factoryflow.production.dto.response.ReleaseWorkOrderResponse;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelRejected;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelled;
 import com.factoryflow.production.event.publisher.payload.ProductionCompleted;
+import com.factoryflow.production.event.publisher.payload.ProductionReleased;
 import com.factoryflow.production.event.publisher.payload.ProductionStatusChanged;
+import com.factoryflow.production.event.publisher.payload.ReleaseCancelRequested;
 import com.factoryflow.production.exception.ProductionErrorCode;
 import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
-import com.factoryflow.production.repository.WorkOrderRepository;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +43,6 @@ public class ProductionService {
     private final ProductionRepository productionRepository;
     private final ProductRepository productRepository;
     private final BomRepository bomRepository;
-    private final WorkOrderRepository workOrderRepository;
     private final EventPublisher eventPublisher;
 
     /**
@@ -168,11 +169,12 @@ public class ProductionService {
     }
 
     /**
-     * 작업지시를 발행할 생산 건: 잠그고 version 을 올려 읽는다 (같은 차의 취소 수신과 겹치면 취소 쪽이 재시도). READY 가 아니면
-     * PRODUCTION_NOT_READY. 작업지시 발행(WorkOrderService.release)과 같은 트랜잭션에서 부른다.
+     * 생산 담당이 작업지시를 발행한다: READY 이고 아직 발행하지 않은 생산 건에 발행 시각을 남기고 production.released 로 mes 에 넘긴다.
+     * 작업지시는 mes 가 만든다. 생산 건은 잠그고 version 을 올려 읽어, 같은 차의 취소 수신과 겹치면 취소 쪽이 재시도해 발행된 차로 처리한다
+     * (docs/specs/mes-split.md).
      */
     @Transactional
-    public Production lockForRelease(Long productionId) {
+    public ReleaseWorkOrderResponse release(Long productionId) {
         Production production = findProductionForRelease(productionId);
         if (production.getStatus() != ProductionStatus.READY) {
             log.info(
@@ -181,10 +183,17 @@ public class ProductionService {
                     production.getStatus());
             throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_READY);
         }
-        return production;
+        if (production.isReleased()) {
+            throw new CustomException(ProductionErrorCode.WORK_ORDER_ALREADY_RELEASED);
+        }
+        production.release(LocalDateTime.now());
+        eventPublisher.publish(
+                new ProductionReleased(
+                        production.getId(), production.getOrderId(), production.getProductId()));
+        return ReleaseWorkOrderResponse.from(production);
     }
 
-    /** 작업지시 발행 대기 목록: READY 이고 작업지시가 없는 생산 건, 먼저 생긴 순 (docs/specs/work-order-release.md). */
+    /** 작업지시 발행 대기 목록: READY 이고 아직 발행하지 않은 생산 건, 먼저 생긴 순 (docs/specs/work-order-release.md). */
     @Transactional(readOnly = true)
     public CursorPage<AwaitingReleaseResponse> findAwaitingRelease(Long lastId, int size) {
         List<Production> rows = findAwaitingReleaseAfter(lastId, size + 1);
@@ -214,37 +223,41 @@ public class ProductionService {
     }
 
     /**
-     * 첫 공정(프레스)을 시작했다: 생산 건 READY → IN_PROGRESS, order 에 알린다. 이후에는 취소할 수 없다. 작업자의 공정 시작
-     * (WorkOrderService)과 같은 트랜잭션에서 부른다.
+     * mes.production-started: mes 가 첫 공정(프레스)을 시작했다. 생산 건 READY → IN_PROGRESS, order 에 알린다. 이후에는
+     * 취소할 수 없다. 이미 시작·완료됐으면(다시 온 알림, 완성이 먼저 온 경우) 그대로 둔다 (docs/specs/mes-split.md).
      */
     @Transactional
     public void startProduction(Long productionId) {
         Production production = findProduction(productionId);
         if (!production.start()) {
-            log.info(
-                    "READY 가 아니라 생산을 시작할 수 없음: productionId={} status={}",
-                    productionId,
-                    production.getStatus());
-            throw new CustomException(ProductionErrorCode.WORK_ORDER_CLOSED);
+            if (production.isClosed()) {
+                log.warn("취소된 생산 건에 생산 시작이 와 무시: productionId={}", productionId);
+            } else {
+                log.info(
+                        "READY 가 아니라 생산 시작 알림 무시: productionId={} status={}",
+                        productionId,
+                        production.getStatus());
+            }
+            return;
         }
         flushOrConflict(productionId);
         publishStatusChanged(production);
     }
 
     /**
-     * 검사 양품으로 차가 완성됐다: 생산 건 IN_PROGRESS → COMPLETED 후 production.completed (inventory 는 부품 사용 처리와
-     * 완성차 재고, order 는 차량 COMPLETED). IN_PROGRESS 가 아니면 WORK_ORDER_CLOSED. 공정 종료(WorkOrderService)와
-     * 같은 트랜잭션에서 부른다 (docs/specs/production-completion.md).
+     * mes.vehicle-completed: mes 가 검사 양품으로 차를 완성했다. 생산 건 IN_PROGRESS(시작 알림보다 먼저 왔으면 READY) →
+     * COMPLETED 후 production.completed (inventory 는 부품 사용 처리와 완성차 재고, order 는 차량 COMPLETED). 이미
+     * 완료됐거나 다른 상태면 그대로 둔다 (docs/specs/production-completion.md, docs/specs/mes-split.md).
      */
     @Transactional
     public void completeProduction(Long productionId, String vin) {
         Production production = findProduction(productionId);
         if (!production.complete()) {
             log.info(
-                    "IN_PROGRESS 가 아니라 생산을 완료할 수 없음: productionId={} status={}",
+                    "IN_PROGRESS·READY 가 아니라 완성 알림 무시: productionId={} status={}",
                     productionId,
                     production.getStatus());
-            throw new CustomException(ProductionErrorCode.WORK_ORDER_CLOSED);
+            return;
         }
         flushOrConflict(productionId);
         eventPublisher.publish(
@@ -256,9 +269,10 @@ public class ProductionService {
     }
 
     /**
-     * order.cancel-requested: 주문의 생산 건마다 프레스 배정 전이면 취소(작업지시도) + production.cancelled, 배정 후면
-     * production.cancel-rejected(ALREADY_STARTED, 지금 상태). 이미 취소된 건은 cancelled 를 다시 보낸다. 생산 건이 없으면
-     * PRODUCTION_NOT_FOUND (order 가 차량을 다 알 때만 요청하므로 정상 흐름에서는 없음, docs/specs/order-cancel.md).
+     * order.cancel-requested: 주문의 생산 건마다 판단한다. 이미 취소됐으면 production.cancelled 를 다시, 작업지시 발행 전이면 취소 +
+     * production.cancelled, 발행했으면 시작 여부를 아는 mes 에 production.release-cancel-requested 로 묻고, 시작했으면
+     * production.cancel-rejected(ALREADY_STARTED, 지금 상태). 생산 건이 없으면 PRODUCTION_NOT_FOUND (order 가
+     * 차량을 다 알 때만 요청하므로 정상 흐름에서는 없음, docs/specs/order-cancel.md, docs/specs/mes-split.md).
      */
     @Transactional
     public void cancelAll(Long orderId) {
@@ -266,34 +280,51 @@ public class ProductionService {
         if (productions.isEmpty()) {
             throw new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND);
         }
-        Map<Long, WorkOrder> workOrdersByProductionId =
-                findWorkOrdersOf(productions.stream().map(Production::getId).toList());
-        for (Production production : productions) {
-            if (production.isClosed() || production.cancel()) {
-                WorkOrder workOrder = workOrdersByProductionId.get(production.getId());
-                if (workOrder != null) {
-                    workOrder.cancel();
-                }
-                publishCancelled(production);
-            } else {
-                eventPublisher.publish(
-                        new ProductionCancelRejected(
-                                orderId,
-                                production.getId(),
-                                ProductionCancelRejected.ALREADY_STARTED,
-                                production.getStatus()));
-            }
+        productions.forEach(this::cancelOne);
+    }
+
+    private void cancelOne(Production production) {
+        if (production.isClosed()) {
+            publishCancelled(production);
+        } else if (production.getStatus() == ProductionStatus.READY && production.isReleased()) {
+            eventPublisher.publish(
+                    new ReleaseCancelRequested(production.getOrderId(), production.getId()));
+        } else if (production.cancel()) {
+            publishCancelled(production);
+        } else {
+            publishCancelRejected(production, production.getStatus());
         }
+    }
+
+    /**
+     * mes.work-order-cancelled: 발행한 차를 mes 가 첫 공정 전에 취소했다. 생산 건 CANCELLED + production.cancelled
+     * (예약 해제, order 차량 CANCELLED). 이미 취소됐으면 cancelled 를 다시 보낸다. 다른 상태면 그대로 둔다.
+     */
+    @Transactional
+    public void cancelReleased(Long productionId) {
+        Production production = findProduction(productionId);
+        if (production.isClosed() || production.cancel()) {
+            publishCancelled(production);
+            return;
+        }
+        log.warn(
+                "취소할 수 없는 상태라 작업지시 취소 알림 무시: productionId={} status={}",
+                productionId,
+                production.getStatus());
+    }
+
+    /**
+     * mes.work-order-cancel-rejected: 발행한 차의 첫 공정을 mes 가 이미 시작해 취소를 거절했다.
+     * production.cancel-rejected 를 작업지시 상태(IN_PROGRESS, COMPLETED)로 보낸다. 생산 건은 시작 알림이 아직 오지 않아
+     * READY 일 수 있어 mes 가 알려 준 상태를 쓴다.
+     */
+    @Transactional
+    public void rejectReleasedCancel(Long productionId, ProductionStatus startedStatus) {
+        publishCancelRejected(findProduction(productionId), startedStatus);
     }
 
     private List<Production> findProductionsOf(Long orderId) {
         return productionRepository.findAllByOrderIdOrderByIdAsc(orderId);
-    }
-
-    /** 생산 건들의 작업지시를 한 번에 읽는다 (작업지시가 아직 없는 생산 건은 빠진다). */
-    private Map<Long, WorkOrder> findWorkOrdersOf(List<Long> productionIds) {
-        return workOrderRepository.findAllByProductionIdIn(productionIds).stream()
-                .collect(Collectors.toMap(WorkOrder::getProductionId, Function.identity()));
     }
 
     /**
@@ -356,6 +387,16 @@ public class ProductionService {
     private void publishMaterialRequested(
             Production production, List<MaterialRequestedPart> parts) {
         eventPublisher.publish(new MaterialRequested(production.getId(), parts));
+    }
+
+    /** 취소를 거절했다고 order 에 알린다. status 는 order 가 취소 요청 중이던 차량을 되돌릴 상태다. */
+    private void publishCancelRejected(Production production, ProductionStatus status) {
+        eventPublisher.publish(
+                new ProductionCancelRejected(
+                        production.getOrderId(),
+                        production.getId(),
+                        ProductionCancelRejected.ALREADY_STARTED,
+                        status));
     }
 
     /** 생산 건의 예약을 풀도록 inventory 에 알린다. */

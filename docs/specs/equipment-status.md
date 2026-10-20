@@ -2,7 +2,7 @@
 
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) "3. 설비 상태" 다 (#93).
-production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 이력을 남긴다 (OEE 데이터).
+mes 가 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 이력을 남긴다 (OEE 데이터).
 고장(FAULT)이나 정지(STOPPED)가 되면 **그 설비에** 배정되었거나(DISPATCHED) 진행 중(IN_PROGRESS)인 공정을 "시작 전"(PENDING)으로 되돌리고 설비를 비운다.
 배정 스케줄러(로봇 공정)나 작업자(사람 공정)가 같은 공정의 다른 설비로 이어서 진행하고, 다른 설비가 없으면 고쳐질 때까지 기다린다.
 
@@ -14,7 +14,7 @@ production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 
 
 ## 흐름
 1. simulator 가 설비 상태가 바뀔 때마다 `equipment.status-changed { equipmentCode, process, status }` 를 보낸다 (status: RUNNING, STOPPED, FAULT)
-2. production 이 큐 `production.equipment-status-changed` 로 받는다. `ProcessedEventGuard` 로 같은 이벤트를 한 번만 처리하고, 아래는 처리 기록과 같은 트랜잭션이다
+2. mes 가 큐 `mes.equipment-status-changed` 로 받는다. `ProcessedEventGuard` 로 같은 이벤트를 한 번만 처리하고, 아래는 처리 기록과 같은 트랜잭션이다
 3. 설비를 코드로 찾는다. 없으면 처리 오류 `EQUIPMENT_NOT_FOUND` → 재시도 → DLQ
 4. 상태가 지금과 같으면 아무것도 하지 않는다 (INFO 로그)
 5. 상태를 바꾸고 이력 1줄: `equipment_status_history { equipment_code, from_status, to_status, changed_at }`. changed_at 은 이벤트가 생긴 시각(envelope.occurredAt)
@@ -54,7 +54,7 @@ production 이 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 
 ## 관련 이벤트 (events.md 참조)
 | 이벤트 | 발행 → 수신 (큐) | payload |
 |---|---|---|
-| equipment.status-changed | simulator → production (`production.equipment-status-changed`) | equipmentCode, process, status (RUNNING, STOPPED, FAULT) |
+| equipment.status-changed | simulator → mes (`mes.equipment-status-changed`) | equipmentCode, process, status (RUNNING, STOPPED, FAULT) |
 | ~~production.failed~~ | 없앤다 | |
 
 ## 완료 조건 (테스트로 확인할 것)

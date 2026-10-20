@@ -23,8 +23,3 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-rabbitmq'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 }
-
-// 테스트에서는 로봇 공정 배정 스케줄러를 끈다. 배정은 테스트가 LineDispatcher 를 직접 불러 확인한다
-tasks.named('test') {
-    systemProperty 'factoryflow.line.dispatch-enabled', 'false'
-}
