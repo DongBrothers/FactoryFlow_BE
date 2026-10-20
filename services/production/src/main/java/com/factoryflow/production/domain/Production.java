@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -44,7 +45,10 @@ public class Production extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private ProductionStatus status;
 
-    /** 같은 생산 건을 동시에 바꾸면(프레스 시작 vs 취소 수신 등) 늦은 쪽이 실패한다. */
+    /** 작업지시를 발행한 시각. 발행 전이면 NULL. 발행한 뒤의 취소는 mes 가 판단한다 (docs/specs/mes-split.md). */
+    private LocalDateTime releasedAt;
+
+    /** 같은 생산 건을 동시에 바꾸면(발행 vs 취소 수신 등) 늦은 쪽이 실패한다. */
     @Version private Long version;
 
     private Production(Long orderId, Long productId, int seq) {
@@ -83,10 +87,16 @@ public class Production extends BaseTimeEntity {
         return true;
     }
 
-    /**
-     * 첫 공정(프레스)을 시작했다. READY 에서만 바뀐다. 이후에는 취소할 수 없다. 바뀌었으면 true. 시작 시각은 작업지시가 갖는다 ({@link
-     * WorkOrder#start}).
-     */
+    /** 생산 담당이 작업지시를 발행했다. 상태는 READY 그대로이고, 이후 시작·취소 판단은 mes 가 한다. */
+    public void release(LocalDateTime now) {
+        this.releasedAt = now;
+    }
+
+    public boolean isReleased() {
+        return releasedAt != null;
+    }
+
+    /** mes 가 첫 공정(프레스)을 시작했다. READY 에서만 바뀐다. 이후에는 취소할 수 없다. 바뀌었으면 true. 시작 시각은 mes 작업지시가 갖는다. */
     public boolean start() {
         if (status != ProductionStatus.READY) {
             return false;
@@ -106,9 +116,12 @@ public class Production extends BaseTimeEntity {
         return true;
     }
 
-    /** 검사 양품으로 차가 완성됐다. IN_PROGRESS 에서만 바뀐다. 바뀌었으면 true. 완료 시각은 작업지시가 갖는다. */
+    /**
+     * mes 가 검사 양품으로 차를 완성했다. IN_PROGRESS 에서 바뀌고, 시작 알림보다 완성 알림이 먼저 오면 READY 에서도 바뀐다 (큐가 다르다). 바뀌었으면
+     * true. 완료 시각은 mes 작업지시가 갖는다.
+     */
     public boolean complete() {
-        if (status != ProductionStatus.IN_PROGRESS) {
+        if (status != ProductionStatus.IN_PROGRESS && status != ProductionStatus.READY) {
             return false;
         }
         this.status = ProductionStatus.COMPLETED;
