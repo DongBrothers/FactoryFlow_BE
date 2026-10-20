@@ -53,7 +53,15 @@ import java.util.stream.Stream;
  */
 public final class FactoryFlowRules {
     private static final List<String> SERVICES =
-            List.of("gateway", "order", "inventory", "purchase", "production", "auth", "simulator");
+            List.of(
+                    "gateway",
+                    "order",
+                    "inventory",
+                    "purchase",
+                    "production",
+                    "auth",
+                    "simulator",
+                    "mes");
 
     private static final String REST_CONTROLLER =
             "org.springframework.web.bind.annotation.RestController";
