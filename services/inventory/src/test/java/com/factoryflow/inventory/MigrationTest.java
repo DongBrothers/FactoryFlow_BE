@@ -22,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("8");
+        jdbc = migrateTo("9");
     }
 
     @Test
@@ -399,6 +399,73 @@ class MigrationTest extends MigrationTestSupport {
                 purchaseId,
                 receivedQty,
                 remainingQty);
+    }
+
+    @Test
+    void v9CreatesFortySlotsInTwoZonesAndOneVehiclePerSlot() {
+        // 완성차 보관 위치 (docs/specs/finished-vehicle-location.md, #138)
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM storage_slot", Integer.class))
+                .isEqualTo(40);
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT code FROM storage_slot WHERE code IN ('A-01', 'A-20', 'B-01', 'B-20')"
+                                        + " ORDER BY code",
+                                String.class))
+                .containsExactly("A-01", "A-20", "B-01", "B-20");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT zone, COUNT(*) AS n FROM storage_slot GROUP BY zone ORDER BY zone"))
+                .extracting(r -> r.get("zone"), r -> ((Number) r.get("n")).intValue())
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("A", 20),
+                        org.assertj.core.groups.Tuple.tuple("B", 20));
+        jdbc.update("UPDATE storage_slot SET finished_vehicle_id = 900 WHERE code = 'A-01'");
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "UPDATE storage_slot SET finished_vehicle_id = 900 WHERE code = 'A-02'"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_storage_slot_vehicle");
+        jdbc.update("UPDATE storage_slot SET finished_vehicle_id = NULL");
+    }
+
+    @Test
+    void v9GivesVehiclesInStockASlotInIdOrder() {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE inventory_v9");
+        var upgrade =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/inventory_v9"),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(upgrade).target("8").load().migrate();
+        var db = new JdbcTemplate(upgrade);
+        // 창고에 있는 차 두 대(1, 3)와 출고된 차 한 대(2)
+        db.update(
+                "INSERT INTO finished_vehicle (id, vin, production_id, order_id, product_id, status,"
+                        + " created_at, updated_at) VALUES"
+                        + " (1, 'KMH000017TU000001', 1, 1, 1, 'IN_STOCK', NOW(6), NOW(6)),"
+                        + " (2, 'KMH000017TU000002', 2, 1, 1, 'SHIPPED', NOW(6), NOW(6)),"
+                        + " (3, 'KMH000017TU000003', 3, 1, 1, 'IN_STOCK', NOW(6), NOW(6))");
+
+        Flyway.configure().dataSource(upgrade).target("9").load().migrate();
+
+        assertThat(db.queryForList("SELECT id, slot_code FROM finished_vehicle ORDER BY id"))
+                .extracting(r -> ((Number) r.get("id")).longValue(), r -> r.get("slot_code"))
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(1L, "A-01"),
+                        org.assertj.core.groups.Tuple.tuple(2L, null),
+                        org.assertj.core.groups.Tuple.tuple(3L, "A-02"));
+        assertThat(
+                        db.queryForList(
+                                "SELECT code, finished_vehicle_id FROM storage_slot"
+                                        + " WHERE finished_vehicle_id IS NOT NULL ORDER BY code"))
+                .extracting(
+                        r -> r.get("code"),
+                        r -> ((Number) r.get("finished_vehicle_id")).longValue())
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("A-01", 1L),
+                        org.assertj.core.groups.Tuple.tuple("A-02", 3L));
     }
 
     @Test
