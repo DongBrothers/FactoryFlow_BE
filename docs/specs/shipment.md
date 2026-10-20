@@ -26,7 +26,7 @@ gateway 경로는 `/api/inventory/finished-vehicles/{vin}/ship`. 요청 본문 �
 - `shipment.completed { orderId, productionId, vin }` (Outbox)
 - 응답 200
 ```json
-{ "vin": "KMH00001?TU000012", "productId": 1, "status": "SHIPPED", "shippedAt": "2026-10-16T21:00:00" }
+{ "vin": "KMH00001?TU000012", "productId": 1, "status": "SHIPPED", "shippedAt": "2026-10-16T21:00:00", "slotCode": "A-01" }
 ```
 내부 id(생산 건 id, 주문 id)는 내보내지 않는다 (주문 상세 조회와 같은 기준).
 

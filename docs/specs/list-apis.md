@@ -47,7 +47,7 @@ gateway `/api/inventory/parts`. 삭제되지 않은 부품, 부품 코드 순
 ### 4. 완성차 목록 (inventory) `GET /inventory/finished-vehicles?status=&lastVin=&size=20`
 gateway `/api/inventory/finished-vehicles`
 ```json
-{ "items": [ { "vin": "KMH…", "productId": 1, "status": "IN_STOCK", "completedAt": "2026-10-17T10:00:00", "shippedAt": null } ],
+{ "items": [ { "vin": "KMH…", "productId": 1, "status": "IN_STOCK", "slotCode": "A-01", "completedAt": "2026-10-17T10:00:00", "shippedAt": null } ],
   "count": 1, "last": true, "nextVin": null }
 ```
 - 최신 완성차 먼저 (completedAt = 완성차 재고에 들어온 시각). status 가 있으면 그 상태만 (IN_STOCK, SHIPPED)

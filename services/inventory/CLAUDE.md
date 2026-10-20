@@ -1,5 +1,5 @@
 # inventory 서비스
-- DB: inventory_db (Flyway: src/main/resources/db/migration). 테이블: part (재고 수량 포함), part_reservation, stock_history, stock_adjustment (재고 조정), 완성차 재고(finished_vehicle), 부품 LOT(part_lot), 완성차에 쓰인 LOT(part_lot_usage)
+- DB: inventory_db (Flyway: src/main/resources/db/migration). 테이블: part (재고 수량 포함), part_reservation, stock_history, stock_adjustment (재고 조정), 완성차 재고(finished_vehicle, 자리 slot_code), 출고장 자리(storage_slot), 부품 LOT(part_lot), 완성차에 쓰인 LOT(part_lot_usage)
 - part.reserved 는 part_reservation 의 RESERVED 합계와 같다. 예약 변경과 같은 트랜잭션에서 갱신
 - 발행: inventory.reserved, inventory.reservation-pending, inventory.reservation-failed (BOM 부품이 없을 때, docs/specs/stalled-flows.md), shipment.completed. 부족은 이벤트로 알리지 않고 부족 부품 조회 GET /inventory/parts/shortages 로 보여 준다 (docs/specs/purchase-manual.md). 내부 API GET /internal/parts (purchase 의 구매 건, production 의 BOM 부품 확인)
 - 수신: production.material-requested, production.cancelled, production.completed, purchase.received
@@ -9,4 +9,5 @@
 - 부품 등록·수정: POST /inventory/parts, PUT /inventory/parts/{id} (재고 0·LOT 없음으로 시작, 수정은 이름·단위만, docs/specs/master-data.md)
 - 조회: 부품 재고 GET /inventory/parts, LOT 별 재고 GET /inventory/parts/{partId}/lots, 완성차 목록 GET /inventory/finished-vehicles (최신 먼저, lastVin 으로 다음 페이지) (docs/specs/list-apis.md)
 - 출고: POST /inventory/finished-vehicles/{vin}/ship 으로 완성차 한 대 SHIPPED + shipment.completed (docs/specs/shipment.md)
+- 보관 위치: 출고장 40자리(A-01~B-20). 완성차가 들어오면 빈 자리 중 코드 순 첫 자리에 자동 배정, 다 차면 자리 대기. 출고하면 자리를 비우고 가장 먼저 완성된 대기 차를 세운다. 자리 version 으로 동시 배정을 막는다. 현황 GET /inventory/storage-slots (docs/specs/finished-vehicle-location.md)
 - 보상: production.cancelled 수신 시 예약 RELEASED + available 복구. 재고 변동은 모두 stock_history 에 기록
