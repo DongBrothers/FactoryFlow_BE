@@ -3,7 +3,7 @@
 - DB: production_db (Flyway: src/main/resources/db/migration)
   - 제품: product, bom
   - 생산: production (생산 건 = 차량 1대. SAGA 상태, 작업지시 발행 시각 released_at)
-  - work_order, work_order_step, production_result, equipment, equipment_status_history 는 mes 로 옮겼다 (데이터 이전 뒤 다음 마이그레이션에서 지운다. 코드는 쓰지 않는다)
+  - 작업지시·공정·실적·설비 테이블은 mes 가 갖는다 (V11 에서 삭제, docs/specs/mes-split.md)
 - 생산 트리거: inventory.reserved 수신 시 생산 건 READY(작업지시 발행 대기)까지. 생산 담당이 POST /production/productions/{id}/work-order 로 발행하면 released_at + production.released (202, 작업지시는 mes 가 만든다. 생산 건을 PESSIMISTIC_FORCE_INCREMENT 로 잠가 취소와 겹치면 취소가 재시도), 발행 대기 목록 GET /production/productions/awaiting-release = READY 이고 released_at NULL (docs/specs/work-order-release.md)
 - 생산 시작·완료: mes.production-started 수신 시 READY → IN_PROGRESS + status-changed, mes.vehicle-completed 수신 시 COMPLETED + production.completed (시작보다 먼저 오면 READY 에서도 완료)
 - 제품 목록: GET /production/products 는 주문할 수 있는 제품(삭제 안 됨, BOM 있음)만 (docs/specs/list-apis.md)
