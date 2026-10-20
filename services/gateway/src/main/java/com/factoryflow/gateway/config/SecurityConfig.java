@@ -104,8 +104,8 @@ public class SecurityConfig {
                 .hasRole(SALES)
                 .pathMatchers(
                         HttpMethod.POST,
-                        "/api/production/work-orders/*/steps/*/start",
-                        "/api/production/work-orders/*/steps/*/complete",
+                        "/api/mes/work-orders/*/steps/*/start",
+                        "/api/mes/work-orders/*/steps/*/complete",
                         "/api/inventory/finished-vehicles/*/ship",
                         "/api/production/products",
                         "/api/production/productions/*/work-order")
