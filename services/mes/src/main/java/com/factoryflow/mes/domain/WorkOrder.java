@@ -1,4 +1,4 @@
-package com.factoryflow.production.domain;
+package com.factoryflow.mes.domain;
 
 import com.factoryflow.common.web.BaseTimeEntity;
 import jakarta.persistence.Column;
@@ -17,9 +17,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/**
- * 작업지시: 생산 건(차량 1대)당 1건. 부품 예약이 끝나면(inventory.reserved) 발행한다 (docs/specs/production-work-order.md).
- */
+/** 작업지시: 생산 건(차량 1대)당 1건. production 이 발행하면(production.released) 만든다 (docs/specs/mes-split.md). */
 @Getter
 @Entity
 @Table(name = "work_order")
@@ -61,16 +59,29 @@ public class WorkOrder extends BaseTimeEntity {
     /** 같은 작업지시를 동시에 바꾸면(같은 공정을 두 작업자가 시작 등) 늦은 쪽이 실패한다. */
     @Version private Long version;
 
-    private WorkOrder(Production production, LocalDateTime now) {
-        this.productionId = production.getId();
-        this.orderId = production.getOrderId();
-        this.productId = production.getProductId();
-        this.status = WorkOrderStatus.RELEASED;
+    private WorkOrder(
+            Long productionId,
+            Long orderId,
+            Long productId,
+            WorkOrderStatus status,
+            LocalDateTime now) {
+        this.productionId = productionId;
+        this.orderId = orderId;
+        this.productId = productId;
+        this.status = status;
         this.releasedAt = now;
     }
 
-    public static WorkOrder release(Production production, LocalDateTime now) {
-        return new WorkOrder(production, now);
+    /** production 이 발행한 차(production.released)의 작업지시. */
+    public static WorkOrder release(
+            Long productionId, Long orderId, Long productId, LocalDateTime now) {
+        return new WorkOrder(productionId, orderId, productId, WorkOrderStatus.RELEASED, now);
+    }
+
+    /** 발행 이벤트보다 취소 요청이 먼저 왔다: 취소된 작업지시를 남겨 뒤에 온 발행을 건너뛰게 한다. 제품은 아직 몰라 0 이다 (작업지시는 진행되지 않는다). */
+    public static WorkOrder cancelBeforeRelease(
+            Long productionId, Long orderId, LocalDateTime now) {
+        return new WorkOrder(productionId, orderId, 0L, WorkOrderStatus.CANCELLED, now);
     }
 
     /** 취소되어 더 진행하지 않는 작업지시. */
@@ -83,9 +94,16 @@ public class WorkOrder extends BaseTimeEntity {
         this.stepChangedAt = now;
     }
 
-    /** 생산 건이 취소됐다 (프레스 배정 전). 배정·작업자 시작 대상에서 빠진다. */
-    public void cancel() {
+    /**
+     * production 의 취소 요청: 첫 공정을 시작하기 전(RELEASED)이면 CANCELLED. 배정·작업자 시작 대상에서 빠진다. 시작했거나 끝났으면 그대로.
+     * 바뀌었으면 true.
+     */
+    public boolean cancel() {
+        if (status != WorkOrderStatus.RELEASED) {
+            return false;
+        }
         this.status = WorkOrderStatus.CANCELLED;
+        return true;
     }
 
     /** 마지막 공정(검사)이 양품으로 끝나 차가 완성됐다: VIN 을 붙이고 COMPLETED. */

@@ -1,28 +1,32 @@
-package com.factoryflow.production.service;
+package com.factoryflow.mes.service;
 
 import com.factoryflow.common.event.EventPublisher;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.common.web.response.CursorPage;
-import com.factoryflow.production.domain.Equipment;
-import com.factoryflow.production.domain.Production;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.domain.ProductionResult;
-import com.factoryflow.production.domain.StepResult;
-import com.factoryflow.production.domain.StepStatus;
-import com.factoryflow.production.domain.Vin;
-import com.factoryflow.production.domain.WorkOrder;
-import com.factoryflow.production.domain.WorkOrderStatus;
-import com.factoryflow.production.domain.WorkOrderStep;
-import com.factoryflow.production.dto.response.ProductionResultResponse;
-import com.factoryflow.production.dto.response.WorkOrderDetailResponse;
-import com.factoryflow.production.dto.response.WorkOrderResponse;
-import com.factoryflow.production.dto.response.WorkOrderStepResponse;
-import com.factoryflow.production.event.publisher.payload.StepDispatched;
-import com.factoryflow.production.exception.ProductionErrorCode;
-import com.factoryflow.production.repository.EquipmentRepository;
-import com.factoryflow.production.repository.ProductionResultRepository;
-import com.factoryflow.production.repository.WorkOrderRepository;
-import com.factoryflow.production.repository.WorkOrderStepRepository;
+import com.factoryflow.mes.domain.Equipment;
+import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.domain.ProductionResult;
+import com.factoryflow.mes.domain.StepResult;
+import com.factoryflow.mes.domain.StepStatus;
+import com.factoryflow.mes.domain.Vin;
+import com.factoryflow.mes.domain.WorkOrder;
+import com.factoryflow.mes.domain.WorkOrderStatus;
+import com.factoryflow.mes.domain.WorkOrderStep;
+import com.factoryflow.mes.dto.response.ProductionResultResponse;
+import com.factoryflow.mes.dto.response.WorkOrderDetailResponse;
+import com.factoryflow.mes.dto.response.WorkOrderResponse;
+import com.factoryflow.mes.dto.response.WorkOrderStepResponse;
+import com.factoryflow.mes.event.listener.payload.ProductionReleased;
+import com.factoryflow.mes.event.publisher.payload.ProductionStarted;
+import com.factoryflow.mes.event.publisher.payload.StepDispatched;
+import com.factoryflow.mes.event.publisher.payload.VehicleCompleted;
+import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelRejected;
+import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelled;
+import com.factoryflow.mes.exception.MesErrorCode;
+import com.factoryflow.mes.repository.EquipmentRepository;
+import com.factoryflow.mes.repository.ProductionResultRepository;
+import com.factoryflow.mes.repository.WorkOrderRepository;
+import com.factoryflow.mes.repository.WorkOrderStepRepository;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
@@ -39,7 +43,10 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** MES 작업지시: 작업자의 공정 시작·종료와 실적 (docs/specs/production-work-order.md). */
+/**
+ * MES 작업지시: 발행 수신, 공정 시작·종료와 실적, 설비 배정, 취소 판단 (docs/specs/production-work-order.md,
+ * docs/specs/mes-split.md).
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -49,7 +56,6 @@ public class WorkOrderService {
     private final WorkOrderStepRepository workOrderStepRepository;
     private final ProductionResultRepository productionResultRepository;
     private final EquipmentRepository equipmentRepository;
-    private final ProductionService productionService;
     private final EventPublisher eventPublisher;
 
     /** 작업지시 목록 (RELEASED 또는 IN_PROGRESS), id 순서로 lastId 다음부터 size 개. 다음 페이지가 있는지 알려고 하나 더 읽는다. */
@@ -72,24 +78,53 @@ public class WorkOrderService {
     }
 
     /**
-     * 생산 담당이 작업지시를 발행한다: READY 생산 건에 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING). 생산 건은 잠그고 version
-     * 을 올려 읽어, 같은 차의 취소와 겹치면 취소 쪽이 재시도해 작업지시도 함께 취소한다. 이벤트는 보내지 않는다
-     * (docs/specs/work-order-release.md).
+     * production.released: 생산 담당이 발행한 차에 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING). 같은 생산 건의 작업지시가
+     * 이미 있으면(다시 온 발행, 먼저 온 취소 요청으로 만든 취소 작업지시) 건너뛴다 (docs/specs/mes-split.md).
      */
     @Transactional
-    public WorkOrderDetailResponse release(Long productionId) {
-        Production production = productionService.lockForRelease(productionId);
-        if (hasWorkOrder(productionId)) {
-            throw new CustomException(ProductionErrorCode.WORK_ORDER_ALREADY_RELEASED);
+    public void release(ProductionReleased event) {
+        if (hasWorkOrder(event.productionId())) {
+            log.info("작업지시가 이미 있어 발행 건너뜀: productionId={}", event.productionId());
+            return;
         }
         WorkOrder workOrder =
-                workOrderRepository.save(WorkOrder.release(production, LocalDateTime.now()));
-        List<WorkOrderStep> steps =
-                workOrderStepRepository.saveAll(
-                        Arrays.stream(ProductionProcess.values())
-                                .map(process -> WorkOrderStep.plan(workOrder.getId(), process))
-                                .toList());
-        return detail(workOrder, steps);
+                workOrderRepository.save(
+                        WorkOrder.release(
+                                event.productionId(),
+                                event.orderId(),
+                                event.productId(),
+                                LocalDateTime.now()));
+        workOrderStepRepository.saveAll(
+                Arrays.stream(ProductionProcess.values())
+                        .map(process -> WorkOrderStep.plan(workOrder.getId(), process))
+                        .toList());
+    }
+
+    /**
+     * production.release-cancel-requested: 첫 공정을 시작하기 전이면 작업지시를 취소하고 mes.work-order-cancelled,
+     * 시작했으면 mes.work-order-cancel-rejected. 발행 이벤트보다 먼저 왔으면 취소된 작업지시를 남겨 뒤에 온 발행을 막는다
+     * (docs/specs/mes-split.md).
+     */
+    @Transactional
+    public void cancelRelease(Long productionId, Long orderId) {
+        Optional<WorkOrder> found = findWorkOrderOfProduction(productionId);
+        if (found.isEmpty()) {
+            log.info("발행보다 취소 요청이 먼저 와 취소된 작업지시를 남김: productionId={}", productionId);
+            workOrderRepository.save(
+                    WorkOrder.cancelBeforeRelease(productionId, orderId, LocalDateTime.now()));
+            eventPublisher.publish(new WorkOrderCancelled(productionId));
+            return;
+        }
+        WorkOrder workOrder = found.get();
+        if (workOrder.cancel() || workOrder.isClosed()) {
+            eventPublisher.publish(new WorkOrderCancelled(productionId));
+            return;
+        }
+        log.info(
+                "첫 공정을 이미 시작해 취소 거절: productionId={} status={}",
+                productionId,
+                workOrder.getStatus());
+        eventPublisher.publish(new WorkOrderCancelRejected(productionId, workOrder.getStatus()));
     }
 
     @Transactional(readOnly = true)
@@ -100,7 +135,7 @@ public class WorkOrderService {
 
     /**
      * 설비에서 공정을 시작한다. 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이며, 설비가 이 공정의 것이고 RUNNING 일 때만 된다. 작업지시의 첫
-     * 시작(프레스)이면 생산 건도 시작한다 (이후 취소 불가). 프레스 불량 재작업으로 다시 시작할 때는 생산 건을 건드리지 않는다.
+     * 시작(프레스)이면 production 에 생산 시작을 알린다 (이후 취소 불가). 프레스 불량 재작업으로 다시 시작할 때는 알리지 않는다.
      */
     @Transactional
     public WorkOrderDetailResponse startStep(
@@ -131,8 +166,8 @@ public class WorkOrderService {
     }
 
     /**
-     * 로봇 공정을 설비에 배정한다: 공정 DISPATCHED + production.step-dispatched. 작업지시의 첫 시작(프레스)이면 생산 건도 시작한다 (생산
-     * 순서 확정, 이후 취소 불가). 시작과 같은 조건을 다시 확인한다.
+     * 로봇 공정을 설비에 배정한다: 공정 DISPATCHED + mes.step-dispatched. 작업지시의 첫 시작(프레스)이면 production 에 생산 시작을
+     * 알린다 (생산 순서 확정, 이후 취소 불가). 시작과 같은 조건을 다시 확인한다.
      */
     @Transactional
     public void dispatch(Long workOrderId, ProductionProcess process, String equipmentCode) {
@@ -147,8 +182,8 @@ public class WorkOrderService {
     }
 
     /**
-     * 공정 시작(작업자)과 배정(스케줄러)의 공통: 작업지시·순서·설비를 확인하고, 공정을 바꾸고(begin: 시작 또는 배정), 설비를 점유하고, 작업지시의 첫 시작이면
-     * 생산 건도 시작한 뒤 저장한다. 두 경로가 같은 규칙을 쓰게 하려고 한곳에 둔다.
+     * 공정 시작(작업자)과 배정(스케줄러)의 공통: 작업지시·순서·설비를 확인하고, 공정을 바꾸고(begin: 시작 또는 배정), 설비를 점유하고 저장한 뒤, 작업지시의 첫
+     * 시작이면 mes.production-started 를 보낸다. 두 경로가 같은 규칙을 쓰게 하려고 한곳에 둔다.
      */
     private WorkOrder beginStep(
             Long workOrderId,
@@ -165,10 +200,11 @@ public class WorkOrderService {
         begin.accept(step, now);
         equipment.occupy(step.getId());
         workOrder.recordStepChange(now);
-        if (workOrder.start(now)) {
-            productionService.startProduction(workOrder.getProductionId());
-        }
+        boolean firstStart = workOrder.start(now);
         flushOrConflict(workOrderId);
+        if (firstStart) {
+            eventPublisher.publish(new ProductionStarted(workOrder.getProductionId(), workOrderId));
+        }
         return workOrder;
     }
 
@@ -355,23 +391,27 @@ public class WorkOrderService {
         }
     }
 
-    /** 마지막 공정(검사)이 양품으로 끝났다: VIN 을 발행하고 작업지시·생산 건을 완료한다 (docs/specs/production-completion.md). */
+    /**
+     * 마지막 공정(검사)이 양품으로 끝났다: VIN 을 발행하고 작업지시를 완료한 뒤 production 에 알린다
+     * (docs/specs/production-completion.md).
+     */
     private void completeWorkOrder(WorkOrder workOrder, LocalDateTime now) {
         if (!Vin.fits(workOrder.getProductId(), workOrder.getId())) {
             log.error(
                     "VIN_RANGE_EXCEEDED workOrderId={} productId={}",
                     workOrder.getId(),
                     workOrder.getProductId());
-            throw new CustomException(ProductionErrorCode.VIN_RANGE_EXCEEDED);
+            throw new CustomException(MesErrorCode.VIN_RANGE_EXCEEDED);
         }
         String vin = Vin.issue(workOrder.getProductId(), workOrder.getId(), now.getYear());
         workOrder.complete(vin, now);
-        productionService.completeProduction(workOrder.getProductionId(), vin);
+        eventPublisher.publish(
+                new VehicleCompleted(workOrder.getProductionId(), workOrder.getId(), vin));
     }
 
     /**
      * 설비가 고장·정지해 그 설비가 맡은 공정(배정·진행 중일 때만)을 시작 전으로 되돌린다 (EquipmentService 와 같은 트랜잭션). 작업지시 변경을 기록해
-     * 같은 작업지시를 동시에 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시·생산 건 상태는 그대로다.
+     * 같은 작업지시를 동시에 바꾸는 작업자 요청과 version 으로 부딪히게 한다. 작업지시 상태는 그대로다.
      */
     @Transactional
     public void interruptStep(Long stepId) {
@@ -398,20 +438,20 @@ public class WorkOrderService {
                         .filter(s -> s.getSeq() < step.getSeq())
                         .allMatch(WorkOrderStep::isDone);
         if (!previousDone) {
-            throw new CustomException(ProductionErrorCode.STEP_OUT_OF_ORDER);
+            throw new CustomException(MesErrorCode.STEP_OUT_OF_ORDER);
         }
     }
 
     /** 이 공정의 설비이고, 가동 중이고, 다른 공정을 맡고 있지 않아야 한다. 같은 설비를 동시에 잡으면 설비 version 충돌로 한쪽만 성공한다. */
     private void requireUsable(Equipment equipment, ProductionProcess process) {
         if (equipment.getProcess() != process) {
-            throw new CustomException(ProductionErrorCode.EQUIPMENT_PROCESS_MISMATCH);
+            throw new CustomException(MesErrorCode.EQUIPMENT_PROCESS_MISMATCH);
         }
         if (!equipment.isRunning()) {
-            throw new CustomException(ProductionErrorCode.EQUIPMENT_NOT_RUNNING);
+            throw new CustomException(MesErrorCode.EQUIPMENT_NOT_RUNNING);
         }
         if (equipment.isOccupied()) {
-            throw new CustomException(ProductionErrorCode.EQUIPMENT_BUSY);
+            throw new CustomException(MesErrorCode.EQUIPMENT_BUSY);
         }
     }
 
@@ -421,7 +461,7 @@ public class WorkOrderService {
                 step.getWorkOrderId(),
                 step.getProcess(),
                 step.getStatus());
-        return new CustomException(ProductionErrorCode.INVALID_STEP_STATUS);
+        return new CustomException(MesErrorCode.INVALID_STEP_STATUS);
     }
 
     /** 라우팅 순서로 끝나지 않은 첫 공정. 모두 끝났으면 null. */
@@ -437,7 +477,7 @@ public class WorkOrderService {
         return steps.stream()
                 .filter(s -> s.getProcess() == process)
                 .findFirst()
-                .orElseThrow(() -> new CustomException(ProductionErrorCode.WORK_ORDER_NOT_FOUND));
+                .orElseThrow(() -> new CustomException(MesErrorCode.WORK_ORDER_NOT_FOUND));
     }
 
     /** 공정 5개와 공정별 실적. 실적은 한 번에 읽는다. */
@@ -473,7 +513,7 @@ public class WorkOrderService {
     private WorkOrder findOpenWorkOrder(Long workOrderId) {
         WorkOrder workOrder = findWorkOrderById(workOrderId);
         if (workOrder.isClosed()) {
-            throw new CustomException(ProductionErrorCode.WORK_ORDER_CLOSED);
+            throw new CustomException(MesErrorCode.WORK_ORDER_CLOSED);
         }
         return workOrder;
     }
@@ -481,7 +521,7 @@ public class WorkOrderService {
     private WorkOrder findWorkOrderById(Long workOrderId) {
         return workOrderRepository
                 .findById(workOrderId)
-                .orElseThrow(() -> new CustomException(ProductionErrorCode.WORK_ORDER_NOT_FOUND));
+                .orElseThrow(() -> new CustomException(MesErrorCode.WORK_ORDER_NOT_FOUND));
     }
 
     private List<WorkOrder> findWorkOrdersAfter(WorkOrderStatus status, Long lastId, int limit) {
@@ -493,7 +533,7 @@ public class WorkOrderService {
     private WorkOrderStep findStep(Long stepId) {
         return workOrderStepRepository
                 .findById(stepId)
-                .orElseThrow(() -> new CustomException(ProductionErrorCode.STEP_NOT_FOUND));
+                .orElseThrow(() -> new CustomException(MesErrorCode.STEP_NOT_FOUND));
     }
 
     private List<WorkOrderStep> findDispatchedBefore(LocalDateTime deadline, int limit) {
@@ -523,6 +563,10 @@ public class WorkOrderService {
         return workOrderRepository.existsByProductionId(productionId);
     }
 
+    private Optional<WorkOrder> findWorkOrderOfProduction(Long productionId) {
+        return workOrderRepository.findByProductionId(productionId);
+    }
+
     private Optional<WorkOrder> findWorkOrderIfExists(Long workOrderId) {
         return workOrderRepository.findById(workOrderId);
     }
@@ -539,16 +583,16 @@ public class WorkOrderService {
     private Equipment findEquipment(String equipmentCode) {
         return equipmentRepository
                 .findByCodeAndIsDeletedFalse(equipmentCode)
-                .orElseThrow(() -> new CustomException(ProductionErrorCode.EQUIPMENT_NOT_FOUND));
+                .orElseThrow(() -> new CustomException(MesErrorCode.EQUIPMENT_NOT_FOUND));
     }
 
-    /** 응답을 만들기 전에 저장해 version 을 확인한다. 다른 요청이 먼저 바꿨으면 PRODUCTION_CONFLICT. */
+    /** 응답·이벤트를 만들기 전에 저장해 version 을 확인한다. 다른 요청이 먼저 바꿨으면 MES_CONFLICT. */
     private void flushOrConflict(Long workOrderId) {
         try {
             workOrderRepository.flush();
         } catch (OptimisticLockingFailureException e) {
             log.info("다른 작업이 먼저 바꿔 거절: workOrderId={}", workOrderId);
-            throw new CustomException(ProductionErrorCode.PRODUCTION_CONFLICT);
+            throw new CustomException(MesErrorCode.MES_CONFLICT);
         }
     }
 }
