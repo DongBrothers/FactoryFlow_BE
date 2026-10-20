@@ -1,6 +1,6 @@
 package com.factoryflow.simulator.domain;
 
-/** 공정. production 의 ProductionProcess 와 같은 이름이다. 로봇 공정만 배정을 받는다. */
+/** 공정. mes 의 ProductionProcess 와 같은 이름이다. 로봇 공정만 배정을 받는다. */
 public enum LineProcess {
     PRESS(true, "찍힘"),
     BODY(true, "용접 불량"),

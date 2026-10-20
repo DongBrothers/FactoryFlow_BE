@@ -44,10 +44,10 @@ public class EquipmentService {
     private final Map<String, VirtualEquipment> fleet = createFleet();
     private final SeenEvents seen = new SeenEvents();
 
-    /** 공정마다 설비 수. production 의 기본 설비 데이터(V4)와 같아야 한다. */
+    /** 공정마다 설비 수. mes 의 기본 설비 데이터(V2)와 같아야 한다. */
     private static final int EQUIPMENT_PER_PROCESS = 2;
 
-    /** production 의 equipment 와 같은 코드: {공정}-{두 자리 번호} (예: PRESS-01). */
+    /** mes 의 equipment 와 같은 코드: {공정}-{두 자리 번호} (예: PRESS-01). */
     private static Map<String, VirtualEquipment> createFleet() {
         Map<String, VirtualEquipment> fleet = new LinkedHashMap<>();
         for (LineProcess process : LineProcess.values()) {
@@ -60,8 +60,8 @@ public class EquipmentService {
     }
 
     /**
-     * production.step-dispatched: 같은 메시지는 한 번만. 설비가 없거나, 사람 공정 설비이거나, 가동 중이 아니거나, 다른 작업 중이면 무시한다
-     * (production 이 시작 보고 시간 초과로 되돌린다). 맡으면 시작 지연 뒤 시작 보고를 보낸다.
+     * mes.step-dispatched: 같은 메시지는 한 번만. 설비가 없거나, 사람 공정 설비이거나, 가동 중이 아니거나, 다른 작업 중이면 무시한다 (mes 가 시작
+     * 보고 시간 초과로 되돌린다). 맡으면 시작 지연 뒤 시작 보고를 보낸다.
      */
     public synchronized void acceptDispatch(UUID eventId, String traceId, StepDispatched dispatch) {
         if (!seen.markIfNew(eventId, properties.seenEventLimit())) {
@@ -129,7 +129,7 @@ public class EquipmentService {
     }
 
     /**
-     * 설비마다 지금 상태를 알린다. simulator 가 시작할 때 production 이 고장·정지로 알던 설비를 맞추려고 보낸다 (설비가 기준,
+     * 설비마다 지금 상태를 알린다. simulator 가 시작할 때 mes 가 고장·정지로 알던 설비를 맞추려고 보낸다 (설비가 기준,
      * docs/specs/simulator-restart.md).
      */
     public synchronized void announceStatuses() {

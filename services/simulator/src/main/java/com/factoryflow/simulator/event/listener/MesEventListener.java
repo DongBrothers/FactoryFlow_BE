@@ -10,12 +10,12 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * production 의 배정을 받는다. DB 가 없어 ProcessedEventGuard 대신 EquipmentService 가 eventId 를 메모리로 기억해 중복을
- * 거른다 (docs/specs/simulator.md).
+ * mes 의 배정을 받는다. DB 가 없어 ProcessedEventGuard 대신 EquipmentService 가 eventId 를 메모리로 기억해 중복을 거른다
+ * (docs/specs/simulator.md).
  */
 @Component
 @RequiredArgsConstructor
-public class ProductionEventListener {
+public class MesEventListener {
 
     private final EquipmentService equipmentService;
     private final ObjectMapper objectMapper;

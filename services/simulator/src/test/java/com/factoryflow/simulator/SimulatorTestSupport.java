@@ -40,13 +40,13 @@ public class SimulatorTestSupport {
         amqpAdmin.purgeQueue(captureQueue, false);
     }
 
-    /** production 이 보내는 것과 같은 모양의 배정 메시지 (배정 회차 1). */
+    /** mes 가 보내는 것과 같은 모양의 배정 메시지 (배정 회차 1). */
     public Map<String, Object> dispatch(
             UUID eventId, String traceId, long workOrderId, String process, String equipmentCode) {
         return dispatch(eventId, traceId, workOrderId, process, equipmentCode, 1);
     }
 
-    /** production 이 보내는 것과 같은 모양의 배정 메시지. */
+    /** mes 가 보내는 것과 같은 모양의 배정 메시지. */
     public Map<String, Object> dispatch(
             UUID eventId,
             String traceId,
@@ -58,7 +58,7 @@ public class SimulatorTestSupport {
                 "eventId",
                 eventId.toString(),
                 "eventName",
-                "production.step-dispatched",
+                "mes.step-dispatched",
                 "traceId",
                 traceId,
                 "version",
@@ -76,7 +76,7 @@ public class SimulatorTestSupport {
     public void send(Map<String, Object> envelope) {
         rabbitTemplate.send(
                 "factoryflow.events",
-                "production.step-dispatched",
+                "mes.step-dispatched",
                 MessageBuilder.withBody(
                                 objectMapper
                                         .writeValueAsString(envelope)
