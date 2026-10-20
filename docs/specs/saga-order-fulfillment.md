@@ -12,7 +12,7 @@
 |---|---|---|
 | PLANNED | 부품 예약 요청함 | order.created 수신 |
 | WAITING_MATERIAL | 부품 일부가 입고를 기다림 | inventory.reservation-pending |
-| READY | 부품 예약 끝, 작업지시 발행 (첫 공정 대기) | inventory.reserved |
+| READY | 부품 예약 끝, 작업지시 발행 대기 (발행 뒤 첫 공정 전까지도 READY) | inventory.reserved |
 | IN_PROGRESS | 첫 공정(프레스)을 설비에 배정함(= 생산 순서 확정). 이후 취소할 수 없다 | 프레스 배정 (또는 작업자의 프레스 시작) |
 | COMPLETED | 검사 양품 → VIN 발행 | 검사 종료(양품) |
 | CANCELLED | 프레스 배정 전에 취소됨 | order.cancel-requested 승인 |
@@ -52,8 +52,8 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 4. production: reservation-pending → WAITING_MATERIAL + `production.status-changed`
 5. 입고: 구매 담당자가 발주(ORDERED) 후 입고 처리(RECEIVED) → `purchase.received` → inventory available + (stock_history RECEIVE),
    그 부품의 WAITING 줄을 id 순서(먼저 온 순서)로 RESERVED 처리 (앞 줄이 안 들어가면 거기서 멈춤). 어떤 생산 건의 모든 줄이 RESERVED 가 되면 `inventory.reserved` (상세: docs/specs/purchase-receiving.md)
-6. production: **inventory.reserved 가 생산의 트리거**다. 생산 건을 READY 로 바꾸고, 작업지시 1건(RELEASED)과
-   라우팅 순서대로 공정 5개(PENDING)를 만든다 + `production.status-changed`(READY)
+6. production: inventory.reserved 를 받으면 생산 건을 READY(작업지시 발행 대기)로 바꾸고 `production.status-changed`(READY).
+   **생산 담당이 작업지시를 발행**하면 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING)가 생긴다 (docs/specs/work-order-release.md)
 7. 공정을 순서대로 진행한다 (아래 "공정 진행", 혼합 자동화)
    - 로봇 공정(프레스·차체·도장): production 의 배정 스케줄러가 비어 있는 설비에 배정 → `production.step-dispatched` → 설비(simulator)가 `equipment.step-started`, `equipment.step-completed`(양품/불량) 보고
    - 사람 공정(의장·검사): 라인 작업자가 작업자 API 로 시작·종료와 실적 입력
@@ -108,8 +108,8 @@ order 는 차량(생산 건)마다 상태를 갖고, 품목 상태는 그 품목
 
 | 생산 건 | order 의 차량 |
 |---|---|
-| PLANNED, WAITING_MATERIAL | RECEIVED (부품 대기는 주문 쪽 상태가 아니다, #117) |
-| READY, IN_PROGRESS | IN_PRODUCTION |
+| PLANNED, WAITING_MATERIAL, READY | RECEIVED (부품 대기는 주문 쪽 상태가 아니다 #117, READY 는 작업지시 발행 대기 #131) |
+| IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
 

@@ -168,6 +168,8 @@ class OrderCancelRequestedTest {
     private long readyProduction(long productId, int seq) {
         long production = production(productId, seq, "PLANNED");
         productionService.markReserved(production);
+        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
+        workOrderService.release(production);
         return production;
     }
 

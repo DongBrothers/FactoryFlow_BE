@@ -107,7 +107,8 @@ public class SecurityConfig {
                         "/api/production/work-orders/*/steps/*/start",
                         "/api/production/work-orders/*/steps/*/complete",
                         "/api/inventory/finished-vehicles/*/ship",
-                        "/api/production/products")
+                        "/api/production/products",
+                        "/api/production/productions/*/work-order")
                 .hasRole(PRODUCTION)
                 .pathMatchers(HttpMethod.PUT, "/api/production/products/*")
                 .hasRole(PRODUCTION)

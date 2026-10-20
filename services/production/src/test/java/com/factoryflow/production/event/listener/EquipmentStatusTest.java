@@ -290,6 +290,8 @@ class EquipmentStatusTest {
                 jdbc.queryForObject(
                         "SELECT id FROM production WHERE order_id = ?", Long.class, orderId);
         productionService.markReserved(production);
+        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
+        workOrderService.release(production);
         return jdbc.queryForObject(
                 "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
     }

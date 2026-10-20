@@ -71,15 +71,32 @@ class ProductionEventListenerTest {
     }
 
     @Test
-    void oneOfTwoVehiclesReadyMakesItemAndOrderInProduction() {
+    void oneOfTwoVehiclesStartedMakesItemAndOrderInProduction() {
         listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
         listener.onStatusChanged(statusChanged(102L, CAR_A, "PLANNED"));
 
-        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "IN_PROGRESS"));
 
         assertThat(vehicleStatus(101L)).isEqualTo("IN_PRODUCTION");
         assertThat(vehicleStatus(102L)).isEqualTo("RECEIVED");
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
+        assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
+    }
+
+    @Test
+    void readyShowsAsReceivedUntilThePressStarts() {
+        // READY 는 부품이 다 잡혀 작업지시 발행을 기다리는 상태다. 고객에게는 프레스를 시작해야 생산 중이다
+        // (docs/specs/work-order-release.md)
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "PLANNED"));
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+
+        assertThat(vehicleStatus(101L)).isEqualTo("RECEIVED");
+        assertThat(itemStatus(CAR_A)).isEqualTo("RECEIVED");
+        assertThat(orderStatus()).isEqualTo("RECEIVED");
+
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "IN_PROGRESS"));
+
+        assertThat(vehicleStatus(101L)).isEqualTo("IN_PRODUCTION");
         assertThat(orderStatus()).isEqualTo("IN_PRODUCTION");
     }
 
@@ -119,7 +136,7 @@ class ProductionEventListenerTest {
 
     @Test
     void itemsCanDifferAndOrderShowsInProduction() {
-        listener.onStatusChanged(statusChanged(101L, CAR_A, "READY"));
+        listener.onStatusChanged(statusChanged(101L, CAR_A, "IN_PROGRESS"));
         listener.onStatusChanged(statusChanged(201L, CAR_B, "WAITING_MATERIAL"));
 
         assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION");
@@ -183,7 +200,7 @@ class ProductionEventListenerTest {
 
     @Test
     void sameEventTwiceIsAppliedOnce() {
-        EventEnvelope event = statusChanged(101L, CAR_A, "READY");
+        EventEnvelope event = statusChanged(101L, CAR_A, "IN_PROGRESS");
         listener.onStatusChanged(event);
         jdbc.update("UPDATE order_vehicle SET status = 'RECEIVED' WHERE production_id = 101");
 
@@ -194,7 +211,7 @@ class ProductionEventListenerTest {
 
     @Test
     void receivesStatusChangedFromRabbitMq() {
-        send(statusChanged(101L, CAR_A, "READY"));
+        send(statusChanged(101L, CAR_A, "IN_PROGRESS"));
 
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> assertThat(itemStatus(CAR_A)).isEqualTo("IN_PRODUCTION"));

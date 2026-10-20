@@ -15,8 +15,8 @@
 
 | production.status | 차량 상태 |
 |---|---|
-| PLANNED, WAITING_MATERIAL | RECEIVED (부품 대기는 주문 쪽 상태가 아니다, #117) |
-| READY, IN_PROGRESS | IN_PRODUCTION |
+| PLANNED, WAITING_MATERIAL, READY | RECEIVED (부품 대기는 주문 쪽 상태가 아니다 #117, READY 는 작업지시 발행 대기 #131) |
+| IN_PROGRESS | IN_PRODUCTION |
 | COMPLETED | COMPLETED |
 | CANCELLED | CANCELLED |
 

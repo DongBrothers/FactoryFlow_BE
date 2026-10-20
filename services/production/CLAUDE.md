@@ -4,7 +4,7 @@
   - 생산: production (생산 건 = 차량 1대. SAGA 상태)
   - MES: work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력)
 - 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
-- 생산 트리거: inventory.reserved 수신 시 생산 건 READY + 작업지시 1건과 공정 5개 생성
+- 생산 트리거: inventory.reserved 수신 시 생산 건 READY(작업지시 발행 대기)까지. 생산 담당이 POST /production/productions/{id}/work-order 로 발행하면 작업지시 1건과 공정 5개 생성 (생산 건을 PESSIMISTIC_FORCE_INCREMENT 로 잠가 취소와 겹치면 취소가 재시도), 발행 대기 목록 GET /production/productions/awaiting-release (docs/specs/work-order-release.md)
 - 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + production.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API 로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
 - 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
 - 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
