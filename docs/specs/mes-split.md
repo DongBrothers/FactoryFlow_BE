@@ -101,7 +101,7 @@ mes 는 취소한 작업지시를 다시 시작하지 않고, 시작한 작업�
 |---|---|
 | mes (V1~) | equipment, equipment_status_history, work_order, work_order_step, production_result, outbox, processed_event 생성 (production 의 V4~V9 최종 모양 그대로). 설비 10대 시드 |
 | production (V10) | `production.released_at` DATETIME(6) NULL 추가. 이미 작업지시가 있는 생산 건은 `work_order.released_at` 으로 채운다 |
-| production (V11, 다음 PR) | MES 테이블 5개 삭제. mes 가 dev 에서 정상인 것을 본 뒤 (되돌릴 수 있게 한 PR 늦춘다) |
+| production (V11, #136) | MES 테이블 5개 삭제. mes 가 dev 에서 정상인 것을 본 뒤 (되돌릴 수 있게 한 PR 늦췄다) |
 
 ### 데이터 이전 (dev, 한 번)
 같은 RDS 인스턴스라 DB 사이 `INSERT … SELECT` 로 옮긴다. id 를 그대로 옮겨 VIN(작업지시 id 포함)이 겹치지 않게 한다.

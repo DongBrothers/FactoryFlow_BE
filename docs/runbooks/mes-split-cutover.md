@@ -51,5 +51,5 @@ id 를 그대로 넣으면 AUTO_INCREMENT 는 가장 큰 id 다음으로 맞춰�
 - /ecs/ff-mes 로그 ERROR 없음
 
 ## 롤백
-- production·mes·simulator 를 이전 태스크 정의로 되돌리고 ff-mes desired 0. production_db 의 MES 테이블은 지우지 않았으므로(다음 PR) 데이터가 남아 있다
+- production·mes·simulator 를 이전 태스크 정의로 되돌리고 ff-mes desired 0. production_db 의 MES 테이블이 남아 있을 때(production V11 적용 전)만 가능하다. V11(#136) 뒤에는 mes 를 되돌리지 않고 앞으로 고친다
 - 2 이후 mes 에서 생긴 작업지시·공정 변경은 production_db 에 없다 (dev 라 버린다)

@@ -35,7 +35,6 @@ class ReservationFailedTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM production_result");
         jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
