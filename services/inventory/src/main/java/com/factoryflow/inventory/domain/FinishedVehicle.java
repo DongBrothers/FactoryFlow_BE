@@ -48,6 +48,13 @@ public class FinishedVehicle extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private FinishedVehicleStatus status;
 
+    /**
+     * 출고장 자리 (예: A-01). 자리 대기면 null. 출고한 뒤에도 어디서 나갔는지 남는다
+     * (docs/specs/finished-vehicle-location.md).
+     */
+    @Column(length = 10)
+    private String slotCode;
+
     private LocalDateTime shippedAt;
 
     @Version
@@ -66,6 +73,11 @@ public class FinishedVehicle extends BaseTimeEntity {
     public static FinishedVehicle stock(
             String vin, Long productionId, Long orderId, Long productId) {
         return new FinishedVehicle(vin, productionId, orderId, productId);
+    }
+
+    /** 출고장 자리에 섰다 ({@link StorageSlot#park} 에서 부른다). */
+    void parkAt(String slotCode) {
+        this.slotCode = slotCode;
     }
 
     /** 창고에 있는 차를 출고한다. 이미 출고됐으면 바꾸지 않는다. 바뀌었으면 true. */

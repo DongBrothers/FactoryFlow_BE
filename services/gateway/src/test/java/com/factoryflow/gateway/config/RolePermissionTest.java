@@ -155,7 +155,8 @@ class RolePermissionTest {
             "/api/production/productions/awaiting-release",
             "/api/purchases?status=ORDERED",
             "/api/mes/work-orders",
-            "/api/inventory/parts"
+            "/api/inventory/parts",
+            "/api/inventory/storage-slots"
         };
     }
 
