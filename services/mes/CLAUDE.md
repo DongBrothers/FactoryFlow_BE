@@ -1,0 +1,18 @@
+# mes 서비스 (MES 현장 실행)
+- 역할: 어떻게 만들고 있는지 관리한다. 작업지시·공정 진행, 로봇 공정 배정, 설비 상태, 실적, VIN. 무엇을 만들지는 production 이 정한다 (docs/specs/mes-split.md)
+- DB: mes_db (Flyway: src/main/resources/db/migration)
+  - work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력 equipment_status_history)
+  - 생산 건·제품은 id 로만 가리킨다 (production_id, product_id)
+- 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
+- 작업지시 생성: production.released 수신 시 작업지시 RELEASED + 공정 5개 PENDING. 같은 생산 건이 이미 있으면 건너뜀
+- 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + mes.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API(/mes/work-orders/{id}/steps/{process}/start·complete)로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
+- 생산 시작: 작업지시의 첫 시작(배정 또는 작업자 시작)에서 mes.production-started (이후 취소 불가). 불량 재작업 재시작은 보내지 않음
+- 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
+- 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
+- 완료: 검사 양품 → VIN 발행 → 작업지시 COMPLETED + mes.vehicle-completed (production 이 생산 건 완료와 production.completed)
+- 취소 판단: production.release-cancel-requested 수신 시 작업지시가 RELEASED(첫 공정 전)면 CANCELLED + mes.work-order-cancelled, 시작했으면 mes.work-order-cancel-rejected(작업지시 상태). 작업지시가 아직 없으면(발행보다 먼저 옴) CANCELLED 작업지시를 남기고 cancelled
+- 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
+- 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected
+- 수신: production.released, production.release-cancel-requested, equipment.step-started, equipment.step-completed, equipment.status-changed
+- API: GET /mes/work-orders, /mes/work-orders/{id}, POST 공정 시작·종료, GET /mes/equipments?process= (gateway /api/mes/**)
+- 동시 변경: 작업지시·설비는 @Version (공정이 바뀔 때마다 작업지시 step_changed_at 을 바꿔 version 을 올린다)
