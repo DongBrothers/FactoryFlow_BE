@@ -3,13 +3,15 @@
 AWS 준비(ECR ff-mes, 로그 그룹 /ecs/ff-mes, 태스크 정의 ff-mes, ECS 서비스 ff-mes desired 0)는 끝나 있다.
 
 ## 0. 미리 (PR 머지 전)
-- GitHub 시크릿 APP_DEV_YML_MES 등록 (production 것에서 DB 이름만 mes_db, flyway seed-dev·clients.inventory 없음)
+- GitHub 시크릿 APP_DEV_YML_MES 등록 (production 것에서 DB 이름 mes_db, 계정 mes_user, flyway seed-dev·clients.inventory 없음)
 - GitHub 시크릿 APP_DEV_YML_GATEWAY 에 라우트 추가: id mes, uri http://mes.factoryflow.local:8080, Path=/api/mes/** (다른 라우트와 같은 필터)
-- RDS 에 DB 와 권한 (CloudShell VPC 환경: 서브넷 subnet-0659fd37622a2a142, 보안 그룹 sg-0535230f2f50fab11, 마스터 계정)
+- RDS 에 DB 와 전용 계정 (서비스마다 {서비스}_user 가 자기 DB 에만 권한을 갖는다. CloudShell VPC 환경: 서브넷 subnet-0659fd37622a2a142, 보안 그룹 sg-0535230f2f50fab11, 마스터 계정)
   ```sql
   CREATE DATABASE IF NOT EXISTS mes_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-  GRANT ALL PRIVILEGES ON mes_db.* TO '<앱 계정>'@'%';
+  CREATE USER IF NOT EXISTS 'mes_user'@'%' IDENTIFIED BY '<APP_DEV_YML_MES 의 비밀번호>';
+  GRANT ALL PRIVILEGES ON mes_db.* TO 'mes_user'@'%';
   ```
+- 3번의 데이터 옮기기는 두 DB 를 함께 읽어야 하므로 마스터 계정으로 한다
 
 ## 1. 멈춤
 - ff-production, ff-simulator desired 0 (진행 중인 배정은 mes 의 시작 보고 시간 초과(1분)가 되돌린다)
