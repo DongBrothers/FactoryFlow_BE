@@ -31,12 +31,10 @@ public class StorageSlotService {
      */
     @Transactional
     public void park(FinishedVehicle vehicle) {
-        Optional<StorageSlot> free = findFirstFreeSlot();
-        if (free.isEmpty()) {
-            log.warn("자리 없음: vin={}", vehicle.getVin());
-            return;
-        }
-        free.get().park(vehicle);
+        findFirstFreeSlot()
+                .ifPresentOrElse(
+                        slot -> slot.park(vehicle),
+                        () -> log.warn("자리 없음: vin={}", vehicle.getVin()));
     }
 
     /**
@@ -45,12 +43,12 @@ public class StorageSlotService {
      */
     @Transactional
     public void vacate(FinishedVehicle shipped) {
-        Optional<StorageSlot> slot = findSlotOf(shipped.getId());
-        if (slot.isEmpty()) {
-            return;
-        }
-        slot.get().vacate();
-        findOldestWaitingVehicle().ifPresent(slot.get()::park);
+        findSlotOf(shipped.getId())
+                .ifPresent(
+                        slot -> {
+                            slot.vacate();
+                            findOldestWaitingVehicle().ifPresent(slot::park);
+                        });
     }
 
     /** 자리 현황: 40자리를 코드 순으로, 서 있는 차의 VIN, 차가 선 자리 수(자리 기준), 자리를 기다리는 차 수. */
