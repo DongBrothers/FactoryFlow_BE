@@ -1,4 +1,4 @@
-package com.factoryflow.production.event.listener;
+package com.factoryflow.mes.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -6,12 +6,12 @@ import static org.awaitility.Awaitility.await;
 
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.domain.StepResult;
-import com.factoryflow.production.exception.ProductionErrorCode;
-import com.factoryflow.production.scheduler.LineDispatcher;
-import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
+import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.domain.StepResult;
+import com.factoryflow.mes.event.listener.payload.ProductionReleased;
+import com.factoryflow.mes.exception.MesErrorCode;
+import com.factoryflow.mes.scheduler.LineDispatcher;
+import com.factoryflow.mes.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -44,12 +44,11 @@ import tools.jackson.databind.ObjectMapper;
 @Import(TestContainersConfig.class)
 class EquipmentStatusTest {
 
-    static final String DLQ = "production.equipment-status-changed.dlq";
+    static final String DLQ = "mes.equipment-status-changed.dlq";
     static final String WORKER = "3f2a9c1e-0000-4000-8000-000000000001";
 
     @Autowired SimulatorEventListener listener;
     @Autowired LineDispatcher dispatcher;
-    @Autowired ProductionService productionService;
     @Autowired WorkOrderService workOrderService;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
@@ -64,7 +63,6 @@ class EquipmentStatusTest {
         jdbc.update("DELETE FROM production_result");
         jdbc.update("DELETE FROM work_order_step");
         jdbc.update("DELETE FROM work_order");
-        jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
@@ -118,7 +116,7 @@ class EquipmentStatusTest {
         assertThat(occupiedStepOf("PRESS-01")).isNull();
         // 차는 실패하지 않는다: 작업지시·생산 건 상태 그대로, 실적·이벤트 없음
         assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
+        assertThat(productionStartedSent(workOrder)).isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
                 .isZero();
         assertThat(outboxCount()).isEqualTo(eventsBefore);
@@ -246,9 +244,7 @@ class EquipmentStatusTest {
                                         statusChanged("PRESS-01", "FAULT", Instant.now())))
                 .isInstanceOfSatisfying(
                         CustomException.class,
-                        e ->
-                                assertThat(e.getErrorCode())
-                                        .isEqualTo(ProductionErrorCode.STEP_NOT_FOUND));
+                        e -> assertThat(e.getErrorCode()).isEqualTo(MesErrorCode.STEP_NOT_FOUND));
 
         assertThat(equipmentStatus("PRESS-01")).isEqualTo("RUNNING");
         assertThat(history()).isEmpty();
@@ -280,18 +276,10 @@ class EquipmentStatusTest {
         assertThat(history()).isEmpty();
     }
 
+    /** production 이 발행한 차(production.released)를 받아 작업지시와 공정 5개를 만든다. */
     private long releasedWorkOrder() {
-        long orderId = nextOrderId++;
-        jdbc.update(
-                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
-                        + " VALUES (?, 1, 1, 'PLANNED', NOW(6), NOW(6))",
-                orderId);
-        long production =
-                jdbc.queryForObject(
-                        "SELECT id FROM production WHERE order_id = ?", Long.class, orderId);
-        productionService.markReserved(production);
-        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
-        workOrderService.release(production);
+        long production = nextOrderId++;
+        workOrderService.release(new ProductionReleased(production, production, 1L));
         return jdbc.queryForObject(
                 "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
     }
@@ -359,12 +347,14 @@ class EquipmentStatusTest {
                 "SELECT status FROM work_order WHERE id = ?", String.class, workOrder);
     }
 
-    private String productionStatusOf(long workOrder) {
+    /** production 에 생산 시작을 알렸는지 (mes.production-started, docs/specs/mes-split.md "2. 생산 시작"). */
+    private boolean productionStartedSent(long workOrder) {
         return jdbc.queryForObject(
-                "SELECT p.status FROM production p JOIN work_order w ON w.production_id = p.id"
-                        + " WHERE w.id = ?",
-                String.class,
-                workOrder);
+                        "SELECT COUNT(*) FROM outbox WHERE event_name = 'mes.production-started'"
+                                + " AND JSON_EXTRACT(payload, '$.payload.workOrderId') = ?",
+                        Integer.class,
+                        workOrder)
+                > 0;
     }
 
     private int outboxCount() {

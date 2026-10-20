@@ -1,15 +1,15 @@
-package com.factoryflow.production.scheduler;
+package com.factoryflow.mes.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.event.listener.SimulatorEventListener;
-import com.factoryflow.production.exception.ProductionErrorCode;
-import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
+import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.event.listener.SimulatorEventListener;
+import com.factoryflow.mes.event.listener.payload.ProductionReleased;
+import com.factoryflow.mes.exception.MesErrorCode;
+import com.factoryflow.mes.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
@@ -33,7 +33,6 @@ class LineDispatchTest {
 
     @Autowired LineDispatcher dispatcher;
     @Autowired SimulatorEventListener listener;
-    @Autowired ProductionService productionService;
     @Autowired WorkOrderService workOrderService;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
@@ -45,7 +44,6 @@ class LineDispatchTest {
         jdbc.update("DELETE FROM production_result");
         jdbc.update("DELETE FROM work_order_step");
         jdbc.update("DELETE FROM work_order");
-        jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("DELETE FROM processed_event");
         jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
@@ -67,7 +65,7 @@ class LineDispatchTest {
                                 step(first, "PRESS").get("equipment_code"),
                                 step(second, "PRESS").get("equipment_code")))
                 .containsExactlyInAnyOrder("PRESS-01", "PRESS-02");
-        List<String> dispatched = outbox("production.step-dispatched");
+        List<String> dispatched = outbox("mes.step-dispatched");
         assertThat(dispatched).hasSize(2);
         assertThat(JsonPath.<String>read(dispatched.get(0), "$.payload.process"))
                 .isEqualTo("PRESS");
@@ -80,10 +78,8 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
-        assertThat(outbox("production.status-changed"))
-                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
-                .containsExactly("READY", "IN_PROGRESS");
+        assertThat(productionStartedSent(workOrder)).isTrue();
+        assertThat(outbox("mes.production-started")).hasSize(1);
     }
 
     @Test
@@ -94,16 +90,16 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
+        assertThat(productionStartedSent(workOrder)).isTrue();
     }
 
     @Test
     void aCarThatKeepsFailingDoesNotBlockTheCarsBehindIt() {
-        // 맨 앞 차는 생산 건이 취소됐는데 작업지시만 남아 배정할 때마다 실패한다 (WORK_ORDER_CLOSED)
+        // 맨 앞 차는 공정 데이터가 꼬여(프레스가 2번째) 후보로는 뽑히지만 배정할 때마다 실패한다 (STEP_OUT_OF_ORDER)
         long broken = releasedWorkOrder();
         jdbc.update(
-                "UPDATE production SET status = 'CANCELLED' WHERE id ="
-                        + " (SELECT production_id FROM work_order WHERE id = ?)",
+                "UPDATE work_order_step SET seq = CASE process WHEN 'PRESS' THEN 2 ELSE 1 END"
+                        + " WHERE work_order_id = ? AND process IN ('PRESS', 'BODY')",
                 broken);
         long second = releasedWorkOrder();
         long third = releasedWorkOrder();
@@ -123,7 +119,7 @@ class LineDispatchTest {
 
         dispatcher.dispatchAll();
 
-        assertThat(outbox("production.step-dispatched")).hasSize(1);
+        assertThat(outbox("mes.step-dispatched")).hasSize(1);
         assertThat(
                         jdbc.queryForList(
                                 "SELECT equipment_code FROM work_order_step WHERE status = 'DISPATCHED'",
@@ -140,7 +136,7 @@ class LineDispatchTest {
 
         dispatcher.dispatchAll();
 
-        assertThat(outbox("production.step-dispatched")).hasSize(2);
+        assertThat(outbox("mes.step-dispatched")).hasSize(2);
     }
 
     @Test
@@ -182,9 +178,7 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
         assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
         // 재작업으로 다시 배정해도 생산 시작 알림은 처음 한 번뿐이다
-        assertThat(outbox("production.status-changed"))
-                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
-                .containsExactly("READY", "IN_PROGRESS");
+        assertThat(outbox("mes.production-started")).hasSize(1);
     }
 
     @Test
@@ -200,7 +194,7 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(step(workOrder, "ASSEMBLY")).containsEntry("status", "PENDING");
-        assertThat(outbox("production.step-dispatched")).hasSize(3);
+        assertThat(outbox("mes.step-dispatched")).hasSize(3);
     }
 
     @Test
@@ -264,10 +258,8 @@ class LineDispatchTest {
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
                 .isZero();
-        assertThat(outbox("production.step-dispatched")).hasSize(2);
-        assertThat(outbox("production.status-changed"))
-                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
-                .containsExactly("READY", "IN_PROGRESS");
+        assertThat(outbox("mes.step-dispatched")).hasSize(2);
+        assertThat(outbox("mes.production-started")).hasSize(1);
     }
 
     @Test
@@ -281,7 +273,7 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(dispatchSeq(workOrder, "PRESS")).isEqualTo(2);
-        assertThat(outbox("production.step-dispatched"))
+        assertThat(outbox("mes.step-dispatched"))
                 .extracting(d -> JsonPath.<Integer>read(d, "$.payload.dispatchSeq"))
                 .containsExactly(1, 2);
     }
@@ -379,7 +371,7 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(step(workOrder, "PRESS")).containsEntry("status", "IN_PROGRESS");
-        assertThat(outbox("production.step-dispatched")).hasSize(1);
+        assertThat(outbox("mes.step-dispatched")).hasSize(1);
     }
 
     @Test
@@ -390,7 +382,7 @@ class LineDispatchTest {
         dispatcher.dispatchAll();
 
         assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
-        assertThat(outbox("production.step-dispatched")).hasSize(1);
+        assertThat(outbox("mes.step-dispatched")).hasSize(1);
     }
 
     @Test
@@ -429,28 +421,15 @@ class LineDispatchTest {
                                         workOrder, ProductionProcess.PRESS, "PRESS-01"))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
-                .isEqualTo(ProductionErrorCode.INVALID_STEP_STATUS);
+                .isEqualTo(MesErrorCode.INVALID_STEP_STATUS);
     }
 
-    /** 생산 건을 만들고 예약 완료를 반영해 작업지시를 발행한다. */
+    /** production 이 발행한 차(production.released)를 받아 작업지시와 공정 5개를 만든다. */
     private long releasedWorkOrder() {
-        long orderId = nextOrderId++;
-        jdbc.update(
-                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
-                        + " VALUES (?, 1, 1, 'PLANNED', NOW(6), NOW(6))",
-                orderId);
-        long production =
-                jdbc.queryForObject(
-                        "SELECT id FROM production WHERE order_id = ?", Long.class, orderId);
-        productionService.markReserved(production);
-        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
-        workOrderService.release(production);
-        long workOrder =
-                jdbc.queryForObject(
-                        "SELECT id FROM work_order WHERE production_id = ?",
-                        Long.class,
-                        production);
-        return workOrder;
+        long production = nextOrderId++;
+        workOrderService.release(new ProductionReleased(production, production, 1L));
+        return jdbc.queryForObject(
+                "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
     }
 
     private EventEnvelope started(
@@ -572,12 +551,14 @@ class LineDispatchTest {
                 "SELECT status FROM work_order WHERE id = ?", String.class, workOrder);
     }
 
-    private String productionStatusOf(long workOrder) {
+    /** production 에 생산 시작을 알렸는지 (mes.production-started, docs/specs/mes-split.md "2. 생산 시작"). */
+    private boolean productionStartedSent(long workOrder) {
         return jdbc.queryForObject(
-                "SELECT p.status FROM production p JOIN work_order w ON w.production_id = p.id"
-                        + " WHERE w.id = ?",
-                String.class,
-                workOrder);
+                        "SELECT COUNT(*) FROM outbox WHERE event_name = 'mes.production-started'"
+                                + " AND JSON_EXTRACT(payload, '$.payload.workOrderId') = ?",
+                        Integer.class,
+                        workOrder)
+                > 0;
     }
 
     private List<String> outbox(String eventName) {

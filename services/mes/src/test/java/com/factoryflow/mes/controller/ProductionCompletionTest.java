@@ -1,4 +1,4 @@
-package com.factoryflow.production.controller;
+package com.factoryflow.mes.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -6,10 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.factoryflow.common.web.TraceIdFilter;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.domain.StepResult;
-import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
+import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.domain.StepResult;
+import com.factoryflow.mes.event.listener.payload.ProductionReleased;
+import com.factoryflow.mes.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
@@ -26,7 +26,10 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-/** 검사 양품 → VIN 발행 → 생산 완료 (docs/specs/production-completion.md). */
+/**
+ * 검사 양품 → VIN 발행 → 작업지시 완료 → production 에 완성 알림 (docs/specs/production-completion.md). 생산 건 완료와
+ * production.completed 는 production 이 알림을 받아 한다 (production MesEventListenerTest).
+ */
 @SpringBootTest
 @Import(TestContainersConfig.class)
 class ProductionCompletionTest {
@@ -36,10 +39,10 @@ class ProductionCompletionTest {
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
-    @Autowired ProductionService productionService;
     @Autowired WorkOrderService workOrderService;
 
     MockMvc mockMvc;
+    long nextProductionId = 900;
 
     @BeforeEach
     void setUp() {
@@ -49,13 +52,12 @@ class ProductionCompletionTest {
         jdbc.update("DELETE FROM production_result");
         jdbc.update("DELETE FROM work_order_step");
         jdbc.update("DELETE FROM work_order");
-        jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
     }
 
     @Test
-    void inspectionGoodIssuesVinAndCompletesWorkOrderAndProduction() throws Exception {
+    void inspectionGoodIssuesVinCompletesTheWorkOrderAndTellsProduction() throws Exception {
         long workOrder = workOrderAtInspection(42L, 1L);
         start(workOrder, "INSPECTION", "INSPECTION-01");
 
@@ -66,14 +68,10 @@ class ProductionCompletionTest {
 
         Map<String, Object> row =
                 jdbc.queryForMap(
-                        "SELECT w.status w_status, w.vin, w.completed_at w_done,"
-                                + " p.status p_status, p.id production_id"
-                                + " FROM work_order w JOIN production p ON p.id = w.production_id"
-                                + " WHERE w.id = ?",
+                        "SELECT status w_status, vin, completed_at w_done, production_id"
+                                + " FROM work_order WHERE id = ?",
                         workOrder);
-        assertThat(row)
-                .containsEntry("w_status", "COMPLETED")
-                .containsEntry("p_status", "COMPLETED");
+        assertThat(row).containsEntry("w_status", "COMPLETED");
         // 완료 시각은 작업지시가 갖는다 (#123)
         assertThat(row.get("w_done")).isNotNull();
         String vin = (String) row.get("vin");
@@ -82,13 +80,13 @@ class ProductionCompletionTest {
                 .startsWith("KMH00001")
                 .endsWith(String.format("%06d", workOrder));
 
-        List<String> completed = outbox("production.completed");
+        List<String> completed = outbox("mes.vehicle-completed");
         assertThat(completed).hasSize(1);
         String event = completed.get(0);
-        assertThat(JsonPath.<Integer>read(event, "$.payload.orderId")).isEqualTo(42);
         assertThat(((Number) JsonPath.read(event, "$.payload.productionId")).longValue())
                 .isEqualTo(((Number) row.get("production_id")).longValue());
-        assertThat(JsonPath.<Integer>read(event, "$.payload.productId")).isEqualTo(1);
+        assertThat(((Number) JsonPath.read(event, "$.payload.workOrderId")).longValue())
+                .isEqualTo(workOrder);
         assertThat(JsonPath.<String>read(event, "$.payload.vin")).isEqualTo(vin);
         assertThat(JsonPath.<String>read(event, "$.traceId")).isEqualTo(TRACE_ID);
     }
@@ -107,9 +105,8 @@ class ProductionCompletionTest {
                 null);
 
         assertThat(workOrderStatus(workOrder)).isEqualTo("COMPLETED");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("COMPLETED");
         assertThat(vinOf(workOrder)).hasSize(17);
-        assertThat(outbox("production.completed")).hasSize(1);
+        assertThat(outbox("mes.vehicle-completed")).hasSize(1);
     }
 
     @Test
@@ -125,27 +122,25 @@ class ProductionCompletionTest {
                 .andExpect(status().isOk());
 
         assertThat(workOrderStatus(other)).isEqualTo("IN_PROGRESS");
-        assertThat(productionStatusOf(other)).isEqualTo("IN_PROGRESS");
+        assertThat(productionStartedSent(other)).isTrue();
         assertThat(vinOf(other)).isNull();
-        assertThat(outbox("production.completed")).isEmpty();
+        assertThat(outbox("mes.vehicle-completed")).isEmpty();
     }
 
     @Test
-    void productionThatIsNoLongerInProgressCannotComplete() throws Exception {
+    void cancelledWorkOrderCannotComplete() throws Exception {
+        // 끝난 차는 완성할 수 없다. mes 에서 차가 끝났다는 것은 작업지시 취소다 (생산 건 상태는 production 이 갖는다)
         long workOrder = workOrderAtInspection(42L, 1L);
         start(workOrder, "INSPECTION", "INSPECTION-01");
-        jdbc.update(
-                "UPDATE production SET status = 'CANCELLED' WHERE id ="
-                        + " (SELECT production_id FROM work_order WHERE id = ?)",
-                workOrder);
+        jdbc.update("UPDATE work_order SET status = 'CANCELLED' WHERE id = ?", workOrder);
 
         complete(workOrder, "INSPECTION", "{\"result\":\"GOOD\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("WORK_ORDER_CLOSED"));
 
-        assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
+        assertThat(workOrderStatus(workOrder)).isEqualTo("CANCELLED");
         assertThat(stepStatus(workOrder, "INSPECTION")).isEqualTo("IN_PROGRESS");
-        assertThat(outbox("production.completed")).isEmpty();
+        assertThat(outbox("mes.vehicle-completed")).isEmpty();
     }
 
     @Test
@@ -160,7 +155,7 @@ class ProductionCompletionTest {
 
         assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
         assertThat(stepStatus(workOrder, "INSPECTION")).isEqualTo("IN_PROGRESS");
-        assertThat(outbox("production.completed")).isEmpty();
+        assertThat(outbox("mes.vehicle-completed")).isEmpty();
     }
 
     /** 작업지시를 발행하고 검사 앞 공정 4개를 양품으로 끝낸다. */
@@ -176,21 +171,10 @@ class ProductionCompletionTest {
         return workOrder;
     }
 
+    /** production 이 발행한 차(production.released)를 받아 작업지시와 공정 5개를 만든다. */
     private long releasedWorkOrder(long orderId, long productId) {
-        jdbc.update(
-                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
-                        + " VALUES (?, ?, 1, 'PLANNED', NOW(6), NOW(6))",
-                orderId,
-                productId);
-        long production =
-                jdbc.queryForObject(
-                        "SELECT id FROM production WHERE order_id = ? AND product_id = ?",
-                        Long.class,
-                        orderId,
-                        productId);
-        productionService.markReserved(production);
-        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
-        workOrderService.release(production);
+        long production = nextProductionId++;
+        workOrderService.release(new ProductionReleased(production, orderId, productId));
         return jdbc.queryForObject(
                 "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
     }
@@ -198,14 +182,14 @@ class ProductionCompletionTest {
     private ResultActions start(long workOrder, String process, String equipmentCode)
             throws Exception {
         return mockMvc.perform(
-                post("/production/work-orders/{id}/steps/{process}/start", workOrder, process)
+                post("/mes/work-orders/{id}/steps/{process}/start", workOrder, process)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"equipmentCode\":\"" + equipmentCode + "\"}"));
     }
 
     private ResultActions complete(long workOrder, String process, String body) throws Exception {
         return mockMvc.perform(
-                post("/production/work-orders/{id}/steps/{process}/complete", workOrder, process)
+                post("/mes/work-orders/{id}/steps/{process}/complete", workOrder, process)
                         .header("X-User-Id", WORKER)
                         .header("X-Trace-Id", TRACE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -222,12 +206,14 @@ class ProductionCompletionTest {
                 "SELECT status FROM work_order WHERE id = ?", String.class, workOrder);
     }
 
-    private String productionStatusOf(long workOrder) {
+    /** production 에 생산 시작을 알렸는지 (mes.production-started, docs/specs/mes-split.md "2. 생산 시작"). */
+    private boolean productionStartedSent(long workOrder) {
         return jdbc.queryForObject(
-                "SELECT p.status FROM production p JOIN work_order w ON w.production_id = p.id"
-                        + " WHERE w.id = ?",
-                String.class,
-                workOrder);
+                        "SELECT COUNT(*) FROM outbox WHERE event_name = 'mes.production-started'"
+                                + " AND JSON_EXTRACT(payload, '$.payload.workOrderId') = ?",
+                        Integer.class,
+                        workOrder)
+                > 0;
     }
 
     private String stepStatus(long workOrder, String process) {

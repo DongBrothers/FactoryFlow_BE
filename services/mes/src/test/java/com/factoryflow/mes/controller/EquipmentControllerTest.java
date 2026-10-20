@@ -1,4 +1,4 @@
-package com.factoryflow.production.controller;
+package com.factoryflow.mes.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,7 +35,7 @@ class EquipmentControllerTest {
     void listsEquipmentOfTheProcessWithStatus() throws Exception {
         jdbc.update("UPDATE equipment SET status = 'FAULT' WHERE code = 'BODY-02'");
 
-        mockMvc.perform(get("/production/equipments").param("process", "BODY"))
+        mockMvc.perform(get("/mes/equipments").param("process", "BODY"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[0].equipmentCode").value("BODY-01"))
@@ -46,8 +46,8 @@ class EquipmentControllerTest {
 
     @Test
     void unknownProcessIs400() throws Exception {
-        mockMvc.perform(get("/production/equipments").param("process", "WELDING"))
+        mockMvc.perform(get("/mes/equipments").param("process", "WELDING"))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/production/equipments")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/mes/equipments")).andExpect(status().isBadRequest());
     }
 }

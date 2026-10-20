@@ -1,4 +1,4 @@
-package com.factoryflow.production.scheduler;
+package com.factoryflow.mes.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

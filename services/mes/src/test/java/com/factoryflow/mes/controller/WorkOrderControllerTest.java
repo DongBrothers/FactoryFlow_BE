@@ -1,4 +1,4 @@
-package com.factoryflow.production.controller;
+package com.factoryflow.mes.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -8,12 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.factoryflow.common.web.exception.CustomException;
-import com.factoryflow.production.domain.ProductionProcess;
-import com.factoryflow.production.exception.ProductionErrorCode;
-import com.factoryflow.production.repository.EquipmentRepository;
-import com.factoryflow.production.repository.WorkOrderRepository;
-import com.factoryflow.production.service.ProductionService;
-import com.factoryflow.production.service.WorkOrderService;
+import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.event.listener.payload.ProductionReleased;
+import com.factoryflow.mes.exception.MesErrorCode;
+import com.factoryflow.mes.repository.EquipmentRepository;
+import com.factoryflow.mes.repository.WorkOrderRepository;
+import com.factoryflow.mes.service.WorkOrderService;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
@@ -39,12 +39,12 @@ class WorkOrderControllerTest {
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
-    @Autowired ProductionService productionService;
     @Autowired WorkOrderService workOrderService;
     @Autowired WorkOrderRepository workOrderRepository;
     @Autowired EquipmentRepository equipmentRepository;
 
     MockMvc mockMvc;
+    long nextProductionId = 900;
 
     @BeforeEach
     void setUp() {
@@ -52,13 +52,12 @@ class WorkOrderControllerTest {
         jdbc.update("DELETE FROM production_result");
         jdbc.update("DELETE FROM work_order_step");
         jdbc.update("DELETE FROM work_order");
-        jdbc.update("DELETE FROM production");
         jdbc.update("DELETE FROM outbox");
         jdbc.update("UPDATE equipment SET status = 'RUNNING', occupied_step_id = NULL");
     }
 
     @Test
-    void pressStartMovesStepWorkOrderAndProductionToInProgress() throws Exception {
+    void pressStartMovesStepAndWorkOrderToInProgressAndTellsProduction() throws Exception {
         long workOrder = releasedWorkOrder(42L, 1L);
 
         start(workOrder, "PRESS", "PRESS-01")
@@ -69,7 +68,7 @@ class WorkOrderControllerTest {
                 .andExpect(jsonPath("$.data.steps[0].equipmentCode").value("PRESS-01"));
 
         assertThat(workOrderStatus(workOrder)).isEqualTo("IN_PROGRESS");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("IN_PROGRESS");
+        assertThat(productionStartedSent(workOrder)).isTrue();
         assertThat(
                         jdbc.queryForObject(
                                 // 생산 시작 시각은 작업지시가 갖는다 (#123)
@@ -77,10 +76,12 @@ class WorkOrderControllerTest {
                                 Boolean.class,
                                 workOrder))
                 .isTrue();
-        List<String> changed = outbox("production.status-changed");
-        assertThat(changed)
-                .extracting(c -> JsonPath.<String>read(c, "$.payload.status"))
-                .containsExactly("READY", "IN_PROGRESS");
+        // 생산 건 상태는 production 이 이 알림을 받아 IN_PROGRESS 로 바꾼다 (docs/specs/mes-split.md "2. 생산 시작")
+        String started = outbox("mes.production-started").get(0);
+        assertThat(JsonPath.<Integer>read(started, "$.payload.productionId")).isEqualTo(900);
+        assertThat(((Number) JsonPath.read(started, "$.payload.workOrderId")).longValue())
+                .isEqualTo(workOrder);
+        assertThat(outbox("mes.production-started")).hasSize(1);
     }
 
     @Test
@@ -119,7 +120,7 @@ class WorkOrderControllerTest {
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_NOT_RUNNING"));
 
         assertThat(stepStatus(workOrder, "PRESS")).isEqualTo("PENDING");
-        assertThat(productionStatusOf(workOrder)).isEqualTo("READY");
+        assertThat(productionStartedSent(workOrder)).isFalse();
     }
 
     @Test
@@ -169,7 +170,7 @@ class WorkOrderControllerTest {
                                         second, ProductionProcess.PRESS, "PRESS-01"))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
-                .isEqualTo(ProductionErrorCode.PRODUCTION_CONFLICT);
+                .isEqualTo(MesErrorCode.MES_CONFLICT);
     }
 
     @Test
@@ -200,7 +201,7 @@ class WorkOrderControllerTest {
     void defectRecordsResultAndSendsStepBackForRework() throws Exception {
         long workOrder = releasedWorkOrder(42L, 1L);
         start(workOrder, "PRESS", "PRESS-01");
-        int eventsBefore = outbox("production.status-changed").size();
+        int eventsBefore = outbox("mes.production-started").size();
 
         complete(workOrder, "PRESS", "{\"result\":\"DEFECT\",\"defectReason\":\"찍힘\"}")
                 .andExpect(status().isOk())
@@ -208,7 +209,7 @@ class WorkOrderControllerTest {
                 .andExpect(jsonPath("$.data.steps[0].results[0].defectReason").value("찍힘"));
 
         assertThat(stepStatus(workOrder, "PRESS")).isEqualTo("PENDING");
-        assertThat(outbox("production.status-changed")).hasSize(eventsBefore);
+        assertThat(outbox("mes.production-started")).hasSize(eventsBefore);
         // 같은 공정을 다시 한다
         start(workOrder, "PRESS", "PRESS-02").andExpect(status().isOk());
         complete(workOrder, "PRESS", "{\"result\":\"GOOD\"}").andExpect(status().isOk());
@@ -269,11 +270,11 @@ class WorkOrderControllerTest {
         start(workOrder, "WELDING", "BODY-01").andExpect(status().isBadRequest());
         // 실적의 작업자(X-User-Id)가 없음
         mockMvc.perform(
-                        post("/production/work-orders/{id}/steps/PRESS/complete", workOrder)
+                        post("/mes/work-orders/{id}/steps/PRESS/complete", workOrder)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"result\":\"GOOD\"}"))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/production/work-orders").param("status", "COMPLETED"))
+        mockMvc.perform(get("/mes/work-orders").param("status", "COMPLETED"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -282,8 +283,7 @@ class WorkOrderControllerTest {
         start(999_999L, "PRESS", "PRESS-01")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WORK_ORDER_NOT_FOUND"));
-        mockMvc.perform(get("/production/work-orders/{id}", 999_999L))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/mes/work-orders/{id}", 999_999L)).andExpect(status().isNotFound());
     }
 
     @Test
@@ -293,10 +293,7 @@ class WorkOrderControllerTest {
         long third = releasedWorkOrder(43L, 1L);
         start(third, "PRESS", "PRESS-01");
 
-        mockMvc.perform(
-                        get("/production/work-orders")
-                                .param("status", "RELEASED")
-                                .param("size", "1"))
+        mockMvc.perform(get("/mes/work-orders").param("status", "RELEASED").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.count").value(1))
                 .andExpect(jsonPath("$.data.last").value(false))
@@ -304,13 +301,13 @@ class WorkOrderControllerTest {
                 .andExpect(jsonPath("$.data.items[0].workOrderId").value(first))
                 .andExpect(jsonPath("$.data.items[0].currentProcess").value("PRESS"));
         mockMvc.perform(
-                        get("/production/work-orders")
+                        get("/mes/work-orders")
                                 .param("status", "RELEASED")
                                 .param("size", "1")
                                 .param("lastId", String.valueOf(first)))
                 .andExpect(jsonPath("$.data.items[0].workOrderId").value(second))
                 .andExpect(jsonPath("$.data.last").value(true));
-        mockMvc.perform(get("/production/work-orders").param("status", "IN_PROGRESS"))
+        mockMvc.perform(get("/mes/work-orders").param("status", "IN_PROGRESS"))
                 .andExpect(jsonPath("$.data.count").value(1))
                 .andExpect(jsonPath("$.data.items[0].workOrderId").value(third));
     }
@@ -319,7 +316,7 @@ class WorkOrderControllerTest {
     void detailShowsStepsInRoutingOrder() throws Exception {
         long workOrder = releasedWorkOrder(42L, 1L);
 
-        mockMvc.perform(get("/production/work-orders/{id}", workOrder))
+        mockMvc.perform(get("/mes/work-orders/{id}", workOrder))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.workOrderId").value(workOrder))
                 .andExpect(jsonPath("$.data.status").value("RELEASED"))
@@ -333,7 +330,7 @@ class WorkOrderControllerTest {
      */
     @Test
     @Transactional
-    void concurrentChangeIsProductionConflict() {
+    void concurrentChangeIsMesConflict() {
         long workOrder = releasedWorkOrder(42L, 1L);
         workOrderRepository.findById(workOrder);
         jdbc.update("UPDATE work_order SET version = version + 1 WHERE id = ?", workOrder);
@@ -344,28 +341,28 @@ class WorkOrderControllerTest {
                                         workOrder, ProductionProcess.PRESS, "PRESS-01"))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
-                .isEqualTo(ProductionErrorCode.PRODUCTION_CONFLICT);
+                .isEqualTo(MesErrorCode.MES_CONFLICT);
     }
 
     @Test
     void workOrderApiIsDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['/production/work-orders'].get.summary").exists())
+                .andExpect(jsonPath("$.paths['/mes/work-orders'].get.summary").exists())
                 .andExpect(
                         jsonPath(
-                                        "$.paths['/production/work-orders/{workOrderId}/steps/{process}/start'].post.responses['409']")
+                                        "$.paths['/mes/work-orders/{workOrderId}/steps/{process}/start'].post.responses['409']")
                                 .exists())
                 .andExpect(
                         jsonPath(
-                                        "$.paths['/production/work-orders/{workOrderId}/steps/{process}/complete'].post.responses['400']")
+                                        "$.paths['/mes/work-orders/{workOrderId}/steps/{process}/complete'].post.responses['400']")
                                 .exists());
     }
 
     private ResultActions start(long workOrder, String process, String equipmentCode)
             throws Exception {
         return mockMvc.perform(
-                post("/production/work-orders/{id}/steps/{process}/start", workOrder, process)
+                post("/mes/work-orders/{id}/steps/{process}/start", workOrder, process)
                         .header("X-User-Id", WORKER)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"equipmentCode\":\"" + equipmentCode + "\"}"));
@@ -373,28 +370,16 @@ class WorkOrderControllerTest {
 
     private ResultActions complete(long workOrder, String process, String body) throws Exception {
         return mockMvc.perform(
-                post("/production/work-orders/{id}/steps/{process}/complete", workOrder, process)
+                post("/mes/work-orders/{id}/steps/{process}/complete", workOrder, process)
                         .header("X-User-Id", WORKER)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body));
     }
 
-    /** 생산 건을 만들고 예약 완료(inventory.reserved)를 반영해 작업지시를 발행한다. */
+    /** production 이 발행한 차(production.released)를 받아 작업지시와 공정 5개를 만든다. */
     private long releasedWorkOrder(long orderId, long productId) {
-        jdbc.update(
-                "INSERT INTO production (order_id, product_id, seq, status, created_at, updated_at)"
-                        + " VALUES (?, ?, 1, 'PLANNED', NOW(6), NOW(6))",
-                orderId,
-                productId);
-        long production =
-                jdbc.queryForObject(
-                        "SELECT id FROM production WHERE order_id = ? AND product_id = ?",
-                        Long.class,
-                        orderId,
-                        productId);
-        productionService.markReserved(production);
-        // 작업지시는 생산 담당이 발행한다 (docs/specs/work-order-release.md)
-        workOrderService.release(production);
+        long production = nextProductionId++;
+        workOrderService.release(new ProductionReleased(production, orderId, productId));
         return jdbc.queryForObject(
                 "SELECT id FROM work_order WHERE production_id = ?", Long.class, production);
     }
@@ -409,12 +394,14 @@ class WorkOrderControllerTest {
                 "SELECT status FROM work_order WHERE id = ?", String.class, workOrder);
     }
 
-    private String productionStatusOf(long workOrder) {
+    /** production 에 생산 시작을 알렸는지 (mes.production-started, docs/specs/mes-split.md "2. 생산 시작"). */
+    private boolean productionStartedSent(long workOrder) {
         return jdbc.queryForObject(
-                "SELECT p.status FROM production p JOIN work_order w ON w.production_id = p.id"
-                        + " WHERE w.id = ?",
-                String.class,
-                workOrder);
+                        "SELECT COUNT(*) FROM outbox WHERE event_name = 'mes.production-started'"
+                                + " AND JSON_EXTRACT(payload, '$.payload.workOrderId') = ?",
+                        Integer.class,
+                        workOrder)
+                > 0;
     }
 
     private String stepStatus(long workOrder, String process) {

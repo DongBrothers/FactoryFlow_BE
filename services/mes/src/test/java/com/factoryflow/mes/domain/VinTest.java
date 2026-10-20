@@ -1,4 +1,4 @@
-package com.factoryflow.production.domain;
+package com.factoryflow.mes.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

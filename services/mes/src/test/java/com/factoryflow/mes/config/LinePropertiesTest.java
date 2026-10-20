@@ -1,9 +1,9 @@
-package com.factoryflow.production.config;
+package com.factoryflow.mes.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.factoryflow.production.scheduler.LineDispatchScheduler;
-import com.factoryflow.production.scheduler.LineDispatcher;
+import com.factoryflow.mes.scheduler.LineDispatchScheduler;
+import com.factoryflow.mes.scheduler.LineDispatcher;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
