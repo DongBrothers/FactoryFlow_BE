@@ -125,7 +125,9 @@ class StorageSlotTest {
     @Test
     @Transactional
     void twoCarsPickingTheSameSlotConflict() {
-        // 이 차가 빈 자리 A-01 을 읽은 뒤 다른 차가 먼저 그 자리를 잡았다 → 저장 때 충돌, 리스너는 재시도해 다음 자리를 고른다
+        // 충돌 감지까지만 본다 (재시도는 리스너 설정 spring.rabbitmq.listener.simple.retry 가 맡는다).
+        // A-01 을 이 트랜잭션에 먼저 읽어 두면 stock 이 빈 자리로 고를 때 같은 version 0 의 A-01 을 쓴다.
+        // 그 뒤 다른 트랜잭션이 A-01 을 잡은 것처럼 DB 의 version 을 올리면, 저장(flush) 때 낡은 version 이라 실패해야 한다
         storageSlotRepository.findByCode("A-01");
         jdbc.update("UPDATE storage_slot SET version = version + 1 WHERE code = 'A-01'");
 
@@ -159,12 +161,23 @@ class StorageSlotTest {
     }
 
     @Test
-    void slotApiIsDocumented() throws Exception {
+    void slotApiAndSlotCodesAreDocumented() throws Exception {
         String path = "$.paths['/inventory/storage-slots'].get";
+        String schemas = "$.components.schemas";
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(path + ".summary").value("완성차 자리 현황"))
-                .andExpect(jsonPath(path + ".responses['200']").exists());
+                .andExpect(jsonPath(path + ".responses['200']").exists())
+                .andExpect(
+                        jsonPath(
+                                        schemas
+                                                + ".FinishedVehicleSummaryResponse.properties.slotCode.description")
+                                .isNotEmpty())
+                .andExpect(
+                        jsonPath(
+                                        schemas
+                                                + ".ShipFinishedVehicleResponse.properties.slotCode.description")
+                                .isNotEmpty());
     }
 
     /** 생산 건 n 의 차가 완성돼 창고에 들어온다 (production.completed). */
