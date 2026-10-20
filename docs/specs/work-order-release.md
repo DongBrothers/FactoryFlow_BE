@@ -35,13 +35,13 @@ gateway `/api/production/productions/awaiting-release?lastId=&size=20`
 ### 3. 작업지시 발행 `POST /production/productions/{productionId}/work-order` (PRODUCTION)
 gateway `/api/production/productions/{productionId}/work-order`, 본문 없음
 1. 생산 건을 잠그고 읽는다 (`PESSIMISTIC_FORCE_INCREMENT`: 행을 잠그고 version 을 바로 올린다)
-2. READY 인지, 작업지시가 아직 없는지 확인
-3. 작업지시 1건(RELEASED, released_at = 지금) + 라우팅 순서대로 공정 5개(PENDING). 지금 자동 발행 코드(`releaseWorkOrder`)를 그대로 쓴다
-4. `201` 작업지시 상세 (`GET /production/work-orders/{id}` 와 같은 모양)
-- 이벤트는 보내지 않는다 (생산 건 상태가 바뀌지 않음)
-- 발행하면 다음 배정 바퀴(5초)에 프레스가 비어 있으면 배정된다
+2. READY 인지, 아직 발행하지 않았는지(`production.released_at` NULL) 확인
+3. `released_at` = 지금 + `production.released { productionId, orderId, productId }`. 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING)는 이 이벤트를 받은 mes 가 만든다 (docs/specs/mes-split.md)
+4. `202` `{ productionId, releasedAt }`. 작업지시는 mes 작업지시 목록(`GET /api/mes/work-orders`)에서 본다
+- 생산 건 상태는 READY 그대로다
+- mes 가 작업지시를 만든 뒤 다음 배정 바퀴(5초)에 프레스가 비어 있으면 배정된다
 
-**취소와 동시에 오면**: 발행이 생산 건의 version 을 올리므로, 같은 차의 취소 수신(`order.cancel-requested`)이 먼저 읽은 상태로 저장하려 하면 충돌하고 재시도한다. 재시도는 발행된 작업지시를 보고 생산 건과 작업지시를 함께 취소한다. 취소가 먼저 끝났으면 발행은 READY 가 아니라 409 다.
+**취소와 동시에 오면**: 발행이 생산 건의 version 을 올리므로, 같은 차의 취소 수신(`order.cancel-requested`)이 먼저 읽은 상태로 저장하려 하면 충돌하고 재시도한다. 재시도는 발행된 차로 보고 mes 에 취소를 묻는다(`production.release-cancel-requested`, docs/specs/mes-split.md "4"). 취소가 먼저 끝났으면 발행은 READY 가 아니라 409 다.
 
 ### 4. 고객에게 보이는 상태 (order)
 - 생산 건 READY 를 차량 **접수(RECEIVED)** 로 보인다 (지금은 생산 중). 작업지시를 발행하기 전 차가 고객에게 "생산 중" 으로 보이지 않게 한다
@@ -84,7 +84,7 @@ gateway `/api/production/productions/{productionId}/work-order`, 본문 없음
 
 ## 완료 조건 (테스트로 확인할 것)
 - [ ] inventory.reserved 수신: 생산 건 READY + status-changed(READY), 작업지시·공정 없음
-- [ ] 발행: READY 생산 건에 작업지시 RELEASED + 공정 5개(PENDING, 라우팅 순), 201 작업지시 상세, 이벤트 없음
+- [ ] 발행: READY 생산 건에 released_at + production.released, 202 (작업지시 RELEASED + 공정 5개는 mes 가 만든다)
 - [ ] 발행 뒤 배정 스케줄러가 프레스를 배정한다 (발행 전에는 배정하지 않음)
 - [ ] 없는 생산 건 404, READY 아님 409 (PLANNED, WAITING_MATERIAL, IN_PROGRESS, CANCELLED), 이미 발행 409
 - [ ] 발행 대기 목록: READY 이고 작업지시 없는 것만, id 순, 커서, 제품 코드·이름

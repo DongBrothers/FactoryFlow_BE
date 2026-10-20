@@ -53,13 +53,13 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 5. 입고: 구매 담당자가 발주(ORDERED) 후 입고 처리(RECEIVED) → `purchase.received` → inventory available + (stock_history RECEIVE),
    그 부품의 WAITING 줄을 id 순서(먼저 온 순서)로 RESERVED 처리 (앞 줄이 안 들어가면 거기서 멈춤). 어떤 생산 건의 모든 줄이 RESERVED 가 되면 `inventory.reserved` (상세: docs/specs/purchase-receiving.md)
 6. production: inventory.reserved 를 받으면 생산 건을 READY(작업지시 발행 대기)로 바꾸고 `production.status-changed`(READY).
-   **생산 담당이 작업지시를 발행**하면 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING)가 생긴다 (docs/specs/work-order-release.md)
+   **생산 담당이 작업지시를 발행**하면 `production.released` 를 받은 mes 가 작업지시 1건(RELEASED)과 라우팅 순서대로 공정 5개(PENDING)를 만든다 (docs/specs/work-order-release.md, docs/specs/mes-split.md)
 7. 공정을 순서대로 진행한다 (아래 "공정 진행", 혼합 자동화)
-   - 로봇 공정(프레스·차체·도장): production 의 배정 스케줄러가 비어 있는 설비에 배정 → `production.step-dispatched` → 설비(simulator)가 `equipment.step-started`, `equipment.step-completed`(양품/불량) 보고
+   - 로봇 공정(프레스·차체·도장): mes 의 배정 스케줄러가 비어 있는 설비에 배정 → `mes.step-dispatched` → 설비(simulator)가 `equipment.step-started`, `equipment.step-completed`(양품/불량) 보고
    - 사람 공정(의장·검사): 라인 작업자가 작업자 API 로 시작·종료와 실적 입력
-   - 프레스 배정(또는 작업자의 프레스 시작) → 생산 건 IN_PROGRESS, 작업지시 IN_PROGRESS + `production.status-changed`(IN_PROGRESS)
+   - 프레스 배정(또는 작업자의 프레스 시작) → 작업지시 IN_PROGRESS + `mes.production-started` → production 이 생산 건 IN_PROGRESS + `production.status-changed`(IN_PROGRESS)
    - 양품이면 그 공정 DONE, 다음 공정으로. 불량이면 실적만 남기고 같은 공정을 다시 한다 (로봇 공정은 다시 배정)
-8. 검사 종료(양품) → VIN 발행 → 작업지시·생산 건 COMPLETED → `production.completed`
+8. 검사 종료(양품) → mes 가 VIN 발행, 작업지시 COMPLETED → `mes.vehicle-completed` → production 이 생산 건 COMPLETED → `production.completed`
 9. inventory: completed 수신 → 그 생산 건 줄 CONSUMED (reserved −, stock_history CONSUME), 완성차 재고 증가(VIN),
    소모한 부품 LOT ↔ VIN 연결 (먼저 들어온 LOT 부터, 상세: docs/specs/part-lot.md)
 10. order: status-changed / completed 수신 → 차량 상태 갱신 → 품목·주문 상태 요약 갱신 (같은 트랜잭션)
@@ -67,7 +67,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
 
 ### 2. 공정 진행 (MES, 혼합 자동화)
 - 공정은 라우팅 순서대로만 시작한다. 앞 공정이 DONE 이어야 다음 공정을 시작할 수 있다. 한 작업지시에서 동시에 하나만 DISPATCHED 또는 IN_PROGRESS
-- **로봇 공정 배정** (PRESS, BODY, PAINT): production 스케줄러가 주기적으로, 앞 공정이 모두 DONE 이고 이 공정이 PENDING 인 작업지시를 그 공정의 RUNNING 이고 비어 있는(배정·진행 중인 공정이 없는) 설비에 작업지시 id 순서(먼저 발행된 차)로 배정한다. 공정 DISPATCHED + `production.step-dispatched`
+- **로봇 공정 배정** (PRESS, BODY, PAINT): mes 스케줄러가 주기적으로, 앞 공정이 모두 DONE 이고 이 공정이 PENDING 인 작업지시를 그 공정의 RUNNING 이고 비어 있는(배정·진행 중인 공정이 없는) 설비에 작업지시 id 순서(먼저 발행된 차)로 배정한다. 공정 DISPATCHED + `mes.step-dispatched`
   - 프레스도 작업지시가 발행되자마자 배정한다 (기다리지 않는다)
   - 설비 보고: `equipment.step-started` → IN_PROGRESS, `equipment.step-completed` → 실적(작업자 없음, 설비) + 양품 DONE / 불량 PENDING(다시 배정). 배정 회차(dispatchSeq)가 다른 보고는 무시 (docs/specs/simulator-restart.md)
   - 공정·설비가 맞지 않거나 상태가 맞지 않는 보고는 무시한다 (INFO 로그)
@@ -145,7 +145,7 @@ CANCELLED 는 빼고 남은 것으로 계산한다. 위에서부터 먼저 맞�
 
 ### 멈춤 감시
 - WAITING_MATERIAL 은 입고까지 며칠 걸릴 수 있으므로 자동 보상하지 않는다
-- production 스케줄러가 WAITING_MATERIAL 로 설정 시간(기본 24시간) 넘게 머문 생산 건을 WARN 로그로 남긴다 (`SAGA_STUCK productionId=…`)
+- mes 스케줄러가 WAITING_MATERIAL 로 설정 시간(기본 24시간) 넘게 머문 생산 건을 WARN 로그로 남긴다 (`SAGA_STUCK productionId=…`)
 - order 스케줄러가 CANCEL_REQUESTED 로 10분 넘게 머문 차량을 WARN 로그로 남긴다
 - 로그는 CloudWatch 지표 필터로 알람을 걸 수 있다 (이후 작업)
 
@@ -181,7 +181,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 | inventory.reservation-pending | inventory | production | productionId, shortages[{partId, shortQty}] |
 | inventory.reservation-failed | inventory | production | productionId, reason (PART_NOT_FOUND), partIds |
 | purchase.received | purchase | inventory | purchaseId, partId, qty |
-| production.step-dispatched | production | simulator | workOrderId, process, equipmentCode, dispatchSeq |
+| mes.step-dispatched | production | simulator | workOrderId, process, equipmentCode, dispatchSeq |
 | equipment.step-started | simulator | production | equipmentCode, workOrderId, process, dispatchSeq |
 | equipment.step-completed | simulator | production | equipmentCode, workOrderId, process, result (GOOD, DEFECT), defectReason, dispatchSeq |
 | equipment.status-changed | simulator | production | equipmentCode, process, status (RUNNING, STOPPED, FAULT) |

@@ -3,7 +3,7 @@
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) "4. 취소 (보상)" 다 (#75).
 고객이 주문 취소를 요청하면 order 가 차량을 "취소 요청 중" 으로 바꾸고 production 에 알린다.
-production 은 차량(생산 건)마다 판단한다: 프레스 배정 전이면 취소하고 부품 예약을 풀게 하고, 이미 배정됐으면 거절한다.
+production 은 차량(생산 건)마다 판단한다: 프레스 배정 전이면 취소하고 부품 예약을 풀게 하고, 이미 배정됐으면 거절한다. 작업지시를 발행한 차는 시작 여부를 아는 mes 가 판단한다 (docs/specs/mes-split.md "4. 주문 취소").
 order 는 차량마다 답을 반영하고, 답이 다 오면 이번 요청으로 취소된 차가 있을 때 `order.cancelled` 를 보낸다.
 취소 결과를 볼 수 있도록 주문 상세 조회 API 도 함께 만든다 (지금은 주문 상태를 볼 API 가 없다).
 
@@ -38,10 +38,11 @@ order 가 가진 차량 상태는 늦을 수 있으므로 취소 가능 여부�
 2. 생산 건마다
    | 생산 건 상태 | 처리 |
    |---|---|
-   | PLANNED, WAITING_MATERIAL, READY (프레스 배정 전) | 생산 건 CANCELLED, 작업지시가 있으면 CANCELLED + `production.cancelled { orderId, productionId }` |
+   | PLANNED, WAITING_MATERIAL, 발행 전 READY | 생산 건 CANCELLED + `production.cancelled { orderId, productionId }` |
+   | 발행한 READY (`released_at` 있음) | 상태 그대로 + `production.release-cancel-requested` → mes 가 첫 공정 전이면 작업지시 CANCELLED + `mes.work-order-cancelled` (production 이 생산 건 CANCELLED + `production.cancelled`), 시작했으면 `mes.work-order-cancel-rejected` (production 이 `production.cancel-rejected`, status = 작업지시 상태) |
    | IN_PROGRESS, COMPLETED (프레스 배정 후) | 상태 그대로 + `production.cancel-rejected { orderId, productionId, reason: ALREADY_STARTED, status }` (status = 지금 생산 건 상태) |
    | CANCELLED (이미 취소됨) | `production.cancelled` 를 다시 보낸다 (order·inventory 는 여러 번 받아도 안전) |
-3. 프레스 배정과 동시에 오면 생산 건·작업지시 version 으로 한쪽만 반영된다. 리스너가 지면 재시도 때 최신 상태로 다시 판단한다 (배정이 이겼으면 거절)
+3. 발행한 차의 취소 요청과 프레스 배정이 mes 에서 동시에 오면 작업지시 version 으로 한쪽만 반영된다. 리스너가 지면 재시도 때 최신 상태로 다시 판단한다 (배정이 이겼으면 거절)
 4. 취소된 작업지시는 배정 대상이 아니고 작업자 API 는 409 `WORK_ORDER_CLOSED` (지금 규칙)
 
 ### 3. 예약 해제 (inventory ← production.cancelled)
@@ -104,7 +105,7 @@ order
 - [ ] 같은 답 두 번 → 한 번만, 실제 브로커 경유 수신
 - [ ] 주문 상세 조회: 품목·차량 상태와 VIN, 내부 id 없음, 404·400
 production
-- [ ] 프레스 배정 전 생산 건 → 생산 건·작업지시 CANCELLED + production.cancelled, 배정 후 → cancel-rejected(ALREADY_STARTED, status)
+- [ ] 발행 전 생산 건 → CANCELLED + production.cancelled, 발행한 차 → release-cancel-requested (mes 판단), 시작 후 → cancel-rejected(ALREADY_STARTED, status)
 - [ ] 이미 취소된 생산 건 → cancelled 재발행, 생산 건이 없으면 DLQ, 같은 메시지 두 번 → 한 번만
 - [ ] 취소된 작업지시는 배정되지 않는다
 inventory
