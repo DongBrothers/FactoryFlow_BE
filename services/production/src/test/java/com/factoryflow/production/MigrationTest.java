@@ -20,9 +20,13 @@ class MigrationTest extends MigrationTestSupport {
 
     static JdbcTemplate jdbc;
 
+    /** V10 까지만 적용한 DB. MES 테이블은 V11 에서 지우므로, V4~V10 이 만든 MES 테이블은 여기서 확인한다 (#136). */
+    static JdbcTemplate atV10;
+
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("10");
+        jdbc = migrateTo("11");
+        atV10 = new JdbcTemplate(migratedDatabase("production_at_v10", "10"));
     }
 
     @Test
@@ -51,6 +55,23 @@ class MigrationTest extends MigrationTestSupport {
                                 "SELECT COUNT(*) FROM bom WHERE part_id NOT BETWEEN 1001 AND 1018",
                                 Integer.class))
                 .isZero();
+    }
+
+    /** 빈 DB 를 하나 더 만들어 target 버전까지만 마이그레이션한다. */
+    static DriverManagerDataSource migratedDatabase(String name, String target) {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE " + name);
+        var dataSource =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/" + name),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure()
+                .dataSource(dataSource)
+                .target(MigrationVersion.fromVersion(target))
+                .load()
+                .migrate();
+        return dataSource;
     }
 
     /** 빈 DB(production_seed) 를 하나 더 만들어 마이그레이션과 dev 시드(db/seed-dev)를 적용한다. */
@@ -113,6 +134,21 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v11DropsTheMesTablesThatMovedToMes() {
+        // 작업지시·공정·실적·설비는 mes_db 로 옮겼다 (docs/specs/mes-split.md, #136)
+        var tables = jdbc.queryForList("SHOW TABLES", String.class);
+
+        assertThat(tables)
+                .doesNotContain(
+                        "equipment",
+                        "equipment_status_history",
+                        "work_order",
+                        "work_order_step",
+                        "production_result")
+                .contains("product", "bom", "production", "outbox", "processed_event");
+    }
+
+    @Test
     void createsProductionTables() {
         var tables = jdbc.queryForList("SHOW TABLES", String.class);
 
@@ -143,7 +179,7 @@ class MigrationTest extends MigrationTestSupport {
     @Test
     void v4AddsTwoRunningEquipmentsPerProcess() {
         assertThat(
-                        jdbc.queryForList(
+                        atV10.queryForList(
                                 "SELECT process, COUNT(*) AS n FROM equipment"
                                         + " WHERE status = 'RUNNING' GROUP BY process"))
                 .extracting(r -> r.get("process"), r -> ((Number) r.get("n")).intValue())
@@ -157,22 +193,22 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void oneWorkOrderPerProductionAndOneStepPerProcess() {
-        jdbc.update(
+        atV10.update(
                 "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
                         + " created_at, updated_at) VALUES (700, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
         assertThatThrownBy(
                         () ->
-                                jdbc.update(
+                                atV10.update(
                                         "INSERT INTO work_order (production_id, order_id, product_id, status,"
                                                 + " released_at, created_at, updated_at)"
                                                 + " VALUES (700, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_production");
         long workOrder =
-                jdbc.queryForObject(
+                atV10.queryForObject(
                         "SELECT id FROM work_order WHERE production_id = 700", Long.class);
-        insertStep(workOrder, "PRESS", 1);
-        assertThatThrownBy(() -> insertStep(workOrder, "PRESS", 1))
+        insertStepAtV10(workOrder, "PRESS", 1);
+        assertThatThrownBy(() -> insertStepAtV10(workOrder, "PRESS", 1))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_step_process");
     }
@@ -180,7 +216,7 @@ class MigrationTest extends MigrationTestSupport {
     @Test
     void v7AddsStepDispatchedAt() {
         assertThat(
-                        jdbc.queryForObject(
+                        atV10.queryForObject(
                                 "SELECT COUNT(*) FROM information_schema.COLUMNS"
                                         + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'work_order_step'"
                                         + " AND COLUMN_NAME = 'dispatched_at' AND IS_NULLABLE = 'YES'",
@@ -191,7 +227,7 @@ class MigrationTest extends MigrationTestSupport {
     @Test
     void v8AddsStepDispatchSeqStartingAtZero() {
         assertThat(
-                        jdbc.queryForMap(
+                        atV10.queryForMap(
                                 "SELECT IS_NULLABLE, COLUMN_DEFAULT FROM information_schema.COLUMNS"
                                         + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'work_order_step'"
                                         + " AND COLUMN_NAME = 'dispatch_seq'"))
@@ -204,7 +240,7 @@ class MigrationTest extends MigrationTestSupport {
         // 지울 수 있는 기준 데이터(제품, BOM, 설비)만 is_deleted 를 둔다. 생산 건의 시작·완료 시각은 작업지시에만,
         // 고치지 않는 실적은 updated_at 없이 둔다 (#123)
         var columns =
-                jdbc.queryForList(
+                atV10.queryForList(
                         "SELECT CONCAT(TABLE_NAME, '.', COLUMN_NAME) FROM information_schema.COLUMNS"
                                 + " WHERE TABLE_SCHEMA = DATABASE() AND (COLUMN_NAME = 'is_deleted'"
                                 + " OR (TABLE_NAME IN ('production', 'work_order')"
@@ -223,12 +259,12 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void v6CreatesEquipmentStatusHistory() {
-        jdbc.update(
+        atV10.update(
                 "INSERT INTO equipment_status_history (equipment_code, from_status, to_status,"
                         + " changed_at, created_at) VALUES ('PRESS-01', 'RUNNING', 'FAULT', NOW(6), NOW(6))");
 
         assertThat(
-                        jdbc.queryForObject(
+                        atV10.queryForObject(
                                 "SELECT COUNT(*) FROM information_schema.STATISTICS"
                                         + " WHERE TABLE_SCHEMA = DATABASE()"
                                         + " AND TABLE_NAME = 'equipment_status_history'"
@@ -239,13 +275,13 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void v5MakesWorkOrderVinUnique() {
-        jdbc.update(
+        atV10.update(
                 "INSERT INTO work_order (production_id, order_id, product_id, status, vin, released_at,"
                         + " created_at, updated_at)"
                         + " VALUES (800, 1, 1, 'COMPLETED', 'KMH000017TU000001', NOW(6), NOW(6), NOW(6))");
         assertThatThrownBy(
                         () ->
-                                jdbc.update(
+                                atV10.update(
                                         "INSERT INTO work_order (production_id, order_id, product_id, status,"
                                                 + " vin, released_at, created_at, updated_at)"
                                                 + " VALUES (801, 1, 1, 'COMPLETED', 'KMH000017TU000001',"
@@ -253,10 +289,10 @@ class MigrationTest extends MigrationTestSupport {
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_vin");
         // 완료 전 작업지시(vin NULL)는 여러 건이어도 된다
-        jdbc.update(
+        atV10.update(
                 "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
                         + " created_at, updated_at) VALUES (802, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
-        jdbc.update(
+        atV10.update(
                 "INSERT INTO work_order (production_id, order_id, product_id, status, released_at,"
                         + " created_at, updated_at) VALUES (803, 1, 1, 'RELEASED', NOW(6), NOW(6), NOW(6))");
     }
@@ -313,8 +349,8 @@ class MigrationTest extends MigrationTestSupport {
                 seq);
     }
 
-    private void insertStep(long workOrderId, String process, int seq) {
-        jdbc.update(
+    private void insertStepAtV10(long workOrderId, String process, int seq) {
+        atV10.update(
                 "INSERT INTO work_order_step (work_order_id, process, seq, status, created_at,"
                         + " updated_at) VALUES (?, ?, ?, 'PENDING', NOW(6), NOW(6))",
                 workOrderId,
