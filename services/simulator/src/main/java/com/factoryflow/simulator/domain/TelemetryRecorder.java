@@ -20,6 +20,19 @@ public final class TelemetryRecorder {
     /** 수집 간격 하한. 너무 짧으면 개수가 상한에 바로 닿는다. */
     public static final Duration MIN_INTERVAL = Duration.ofMillis(50);
 
+    /**
+     * 정상값은 범위의 10% ~ 90% 사이 (경계에 붙지 않게 양쪽 10% 를 남긴다). NORMAL_MARGIN * 2 + NORMAL_SPREAD 는 1 을 넘지
+     * 않는다.
+     */
+    private static final double NORMAL_MARGIN = 0.1;
+
+    private static final double NORMAL_SPREAD = 0.8;
+
+    /** 불량 대표 항목은 상한보다 범위 폭의 10% ~ 30% 위 (분명히 벗어나게). */
+    private static final double DEFECT_MARGIN = 0.1;
+
+    private static final double DEFECT_SPREAD = 0.2;
+
     private TelemetryRecorder() {}
 
     /** start 부터 work 동안 interval 마다 잰 값. 사람 공정이면 빈 목록. */
@@ -54,8 +67,10 @@ public final class TelemetryRecorder {
             double span = p.upper() - p.lower();
             double value =
                     outOfRange && p.defectSignal()
-                            ? p.upper() + span * (0.1 + 0.2 * random.nextDouble())
-                            : p.lower() + span * (0.1 + 0.8 * random.nextDouble());
+                            ? p.upper()
+                                    + span * (DEFECT_MARGIN + DEFECT_SPREAD * random.nextDouble())
+                            : p.lower()
+                                    + span * (NORMAL_MARGIN + NORMAL_SPREAD * random.nextDouble());
             values.put(p.key(), Math.round(value * 100) / 100.0);
         }
         return values;
