@@ -42,7 +42,7 @@ mes: 큐 mes.equipment-step-telemetry → MongoDB step_telemetry 에 샘플마�
   - timeField `measuredAt`, metaField `meta`, 단위 seconds, 보관 90일(`expireAfterSeconds`) 뒤 자동 삭제
   - 문서 = 샘플 1개: `{ measuredAt, meta: { equipmentCode, workOrderId, process, dispatchSeq }, values: { pressureTon: 812.4, strokeMm: 300.1 } }`
   - 한 메시지의 샘플을 한 번에 넣는다 (insertMany)
-- 컬렉션이 없으면 mes 가 뜰 때 시계열 컬렉션으로 만든다
+- 컬렉션이 없으면 처음 저장할 때 시계열 컬렉션으로 만든다. 뜰 때 만들면 MongoDB 가 멈췄을 때 mes 가 뜨지 못해 공정 진행까지 멈추므로, 센서값 저장 때로 미룬다. 두 메시지가 동시에 만들다 한쪽이 실패하면 이미 있는지 다시 보고 그대로 쓴다
 - 공정 상태(MySQL)와 같은 트랜잭션이 아니다. 작업지시가 없거나 끝났어도 받은 값은 저장한다 (늦게 온 값도 기록으로 의미가 있음)
 - MongoDB 에 저장하지 못하면 재시도 후 DLQ. 공정 진행 리스너(시작·완료 보고)와 큐가 달라 영향을 주지 않는다
 
