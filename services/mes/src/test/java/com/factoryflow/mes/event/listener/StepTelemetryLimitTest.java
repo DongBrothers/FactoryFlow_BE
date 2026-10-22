@@ -86,6 +86,24 @@ class StepTelemetryLimitTest {
     }
 
     @Test
+    void aMessageWithoutSamplesStoresNothingAndIsNotRejected() {
+        // samples 가 빠진 비정상 메시지: NPE 로 재시도·DLQ 에 가지 않고 경고만 남긴다
+        listener.onStepTelemetry(
+                envelope(
+                        Map.of(
+                                "equipmentCode",
+                                "PRESS-01",
+                                "workOrderId",
+                                workOrder,
+                                "process",
+                                "PRESS",
+                                "dispatchSeq",
+                                1)));
+
+        assertThat(storedCount()).isZero();
+    }
+
+    @Test
     void queriesReturnAtMostTheLimitAndSayTheyWereTruncated() throws Exception {
         listener.onStepTelemetry(telemetry(4));
 
@@ -126,23 +144,27 @@ class StepTelemetryLimitTest {
             Instant at = BASE.plusSeconds(i).atZone(ZoneId.systemDefault()).toInstant();
             samples.add(Map.of("at", at.toString(), "values", Map.of("pressureTon", 800.0 + i)));
         }
+        return envelope(
+                Map.of(
+                        "equipmentCode",
+                        "PRESS-01",
+                        "workOrderId",
+                        workOrder,
+                        "process",
+                        "PRESS",
+                        "dispatchSeq",
+                        1,
+                        "samples",
+                        samples));
+    }
+
+    private EventEnvelope envelope(Map<String, Object> payload) {
         return new EventEnvelope(
                 UUID.randomUUID(),
                 "equipment.step-telemetry",
                 UUID.randomUUID().toString(),
                 1,
                 Instant.now(),
-                objectMapper.valueToTree(
-                        Map.of(
-                                "equipmentCode",
-                                "PRESS-01",
-                                "workOrderId",
-                                workOrder,
-                                "process",
-                                "PRESS",
-                                "dispatchSeq",
-                                1,
-                                "samples",
-                                samples)));
+                objectMapper.valueToTree(payload));
     }
 }

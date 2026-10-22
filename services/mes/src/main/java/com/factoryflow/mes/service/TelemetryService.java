@@ -14,6 +14,7 @@ import com.factoryflow.mes.dto.response.TelemetryLimitResponse;
 import com.factoryflow.mes.dto.response.TelemetryRunResponse;
 import com.factoryflow.mes.dto.response.TelemetrySampleResponse;
 import com.factoryflow.mes.event.listener.payload.EquipmentStepTelemetry;
+import com.factoryflow.mes.event.listener.payload.TelemetrySample;
 import com.factoryflow.mes.exception.MesErrorCode;
 import com.factoryflow.mes.repository.EquipmentRepository;
 import com.factoryflow.mes.repository.StepTelemetryRepository;
@@ -49,10 +50,19 @@ public class TelemetryService {
 
     /**
      * equipment.step-telemetry: 센서값마다 문서 하나로 저장한다. 작업지시가 없거나 끝났어도 받은 값은 기록으로 남긴다. 공정 상태(MySQL)와 같은
-     * 트랜잭션이 아니다. 메시지당 상한을 넘으면 메모리에 올리지 않고 TELEMETRY_TOO_LARGE (재시도 후 DLQ).
+     * 트랜잭션이 아니다. 메시지당 상한을 넘으면 메모리에 올리지 않고 TELEMETRY_TOO_LARGE (재시도 후 DLQ). samples 가 없으면 저장할 게 없어
+     * 경고만 남긴다.
      */
     public void record(EquipmentStepTelemetry event) {
-        requireWithinLimit(event);
+        List<TelemetrySample> samples = samplesOf(event);
+        if (samples.isEmpty()) {
+            log.warn(
+                    "센서값이 없는 메시지라 저장하지 않음: equipment={} workOrderId={}",
+                    event.equipmentCode(),
+                    event.workOrderId());
+            return;
+        }
+        requireWithinLimit(event.equipmentCode(), event.workOrderId(), samples.size());
         ensureCollection();
         TelemetrySource source =
                 new TelemetrySource(
@@ -61,7 +71,7 @@ public class TelemetryService {
                         event.process(),
                         event.dispatchSeq());
         List<StepTelemetry> rows =
-                event.samples().stream()
+                samples.stream()
                         .map(s -> StepTelemetry.record(s.at(), source, s.values()))
                         .toList();
         stepTelemetryRepository.saveAll(rows);
@@ -111,14 +121,19 @@ public class TelemetryService {
         }
     }
 
+    /** payload 에 samples 가 빠진 비정상 메시지는 빈 목록으로 본다. */
+    private static List<TelemetrySample> samplesOf(EquipmentStepTelemetry event) {
+        return event.samples() == null ? List.of() : event.samples();
+    }
+
     /** 메시지당 센서값 수 상한 (OOM 방지). 비정상적으로 큰 메시지는 저장하지 않는다. */
-    private void requireWithinLimit(EquipmentStepTelemetry event) {
-        if (event.samples().size() > properties.maxSamplesPerMessage()) {
+    private void requireWithinLimit(String equipmentCode, Long workOrderId, int sampleCount) {
+        if (sampleCount > properties.maxSamplesPerMessage()) {
             log.warn(
                     "센서값 메시지가 너무 커 저장하지 않음: equipment={} workOrderId={} samples={} max={}",
-                    event.equipmentCode(),
-                    event.workOrderId(),
-                    event.samples().size(),
+                    equipmentCode,
+                    workOrderId,
+                    sampleCount,
                     properties.maxSamplesPerMessage());
             throw new CustomException(MesErrorCode.TELEMETRY_TOO_LARGE);
         }
