@@ -33,6 +33,9 @@ public final class TelemetryRecorder {
 
     private static final double DEFECT_SPREAD = 0.2;
 
+    /** 값은 소수 둘째 자리까지 남긴다. */
+    private static final double ROUNDING_SCALE = 100;
+
     private TelemetryRecorder() {}
 
     /** start 부터 work 동안 interval 마다 잰 값. 사람 공정이면 빈 목록. */
@@ -71,7 +74,7 @@ public final class TelemetryRecorder {
                                     + span * (DEFECT_MARGIN + DEFECT_SPREAD * random.nextDouble())
                             : p.lower()
                                     + span * (NORMAL_MARGIN + NORMAL_SPREAD * random.nextDouble());
-            values.put(p.key(), Math.round(value * 100) / 100.0);
+            values.put(p.key(), Math.round(value * ROUNDING_SCALE) / ROUNDING_SCALE);
         }
         return values;
     }
