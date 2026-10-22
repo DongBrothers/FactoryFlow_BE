@@ -29,14 +29,20 @@ class LinePropertiesTest {
     }
 
     @Test
-    void applicationYmlTurnsTheDispatcherOn() throws Exception {
-        PropertySource<?> yml =
-                new YamlPropertySourceLoader()
-                        .load("application", new ClassPathResource("application.yml"))
-                        .get(0);
+    void lineSettingsLiveInEachEnvironmentFileNotTheCommonOne() throws Exception {
+        // 환경마다 다른 값은 application-{local,dev,test}.yml 에 둔다. 공통 application.yml 에는 없다
+        PropertySource<?> common = load("application.yml");
+        assertThat(common.getProperty("factoryflow.line.dispatch-enabled")).isNull();
+        assertThat(common.getProperty("factoryflow.line.start-report-timeout")).isNull();
 
-        assertThat(yml.getProperty("factoryflow.line.dispatch-enabled")).isEqualTo(true);
-        assertThat(yml.getProperty("factoryflow.line.start-report-timeout")).isEqualTo("1m");
+        // 테스트 환경은 배정 스케줄러를 끄고, 배정은 테스트가 직접 부른다
+        PropertySource<?> test = load("application-test.yml");
+        assertThat(test.getProperty("factoryflow.line.dispatch-enabled")).isEqualTo(false);
+        assertThat(test.getProperty("factoryflow.line.start-report-timeout")).isEqualTo("1m");
+    }
+
+    private static PropertySource<?> load(String file) throws Exception {
+        return new YamlPropertySourceLoader().load(file, new ClassPathResource(file)).get(0);
     }
 
     @Test
