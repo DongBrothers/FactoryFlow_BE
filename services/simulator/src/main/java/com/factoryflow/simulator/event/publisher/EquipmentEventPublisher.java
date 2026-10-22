@@ -69,6 +69,21 @@ public class EquipmentEventPublisher {
         send(event);
     }
 
+    /**
+     * 확인 대기 목록에 넣지 않고 한 번만 보낸다. 잃어도 되는 데이터(센서값)용이다: 브로커가 오래 멈춰도 메모리에 쌓이지 않는다 (OOM 방지,
+     * docs/specs/process-telemetry.md). 보내기에 실패하면 버린다.
+     */
+    public void publishOnce(String traceId, EquipmentEvent payload) {
+        send(
+                new OutgoingEvent(
+                        UUID.randomUUID(),
+                        payload.eventName(),
+                        traceId,
+                        ENVELOPE_VERSION,
+                        clock.instant(),
+                        payload));
+    }
+
     /** 확인을 못 받은 지 resendInterval 이 지난 메시지를 같은 eventId 로 다시 보낸다. */
     public void resendPending(Duration resendInterval) {
         for (OutgoingEvent event : pending.dueForResend(clock.instant(), resendInterval)) {
