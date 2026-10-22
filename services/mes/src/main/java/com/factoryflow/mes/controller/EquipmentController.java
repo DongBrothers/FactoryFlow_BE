@@ -2,15 +2,22 @@ package com.factoryflow.mes.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.mes.domain.ProductionProcess;
+import com.factoryflow.mes.dto.request.TelemetryRangeRequest;
 import com.factoryflow.mes.dto.response.EquipmentResponse;
+import com.factoryflow.mes.dto.response.EquipmentTelemetryResponse;
 import com.factoryflow.mes.service.EquipmentService;
+import com.factoryflow.mes.service.TelemetryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,7 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class EquipmentController {
 
+    /** 설비 코드 형식: {공정}-{두 자리 번호} (예: PRESS-01). */
+    private static final String EQUIPMENT_CODE = "[A-Z]+-\\d{2}";
+
     private final EquipmentService equipmentService;
+    private final TelemetryService telemetryService;
 
     @Operation(
             summary = "공정의 설비 목록",
@@ -41,5 +52,33 @@ public class EquipmentController {
                     ProductionProcess process) {
         List<EquipmentResponse> equipments = equipmentService.findEquipments(process);
         return ApiResponse.ok(equipments);
+    }
+
+    @Operation(
+            summary = "설비 센서값",
+            description =
+                    "설비 하나가 잰 값을 시간 범위 [from, to) 로 본다 (최대 1시간). 값마다 그때 하던 작업지시와 배정 회차를 함께 준다. 항목마다 정상 범위(기준선)를 함께 준다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공. 값이 없으면 빈 목록"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description =
+                        "설비 코드 형식 오류, from·to 없음 또는 시각 형식 오류, from 이 to 보다 앞이 아님, 범위가 1시간 초과"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "설비 없음 (EQUIPMENT_NOT_FOUND)")
+    })
+    @GetMapping("/{equipmentCode}/telemetry")
+    public ApiResponse<EquipmentTelemetryResponse> findEquipmentTelemetry(
+            @Parameter(description = "설비 코드", example = "PRESS-01")
+                    @PathVariable("equipmentCode")
+                    @Pattern(regexp = EQUIPMENT_CODE)
+                    String equipmentCode,
+            @Valid @ModelAttribute TelemetryRangeRequest range) {
+        EquipmentTelemetryResponse telemetry =
+                telemetryService.findEquipmentTelemetry(equipmentCode, range.from(), range.to());
+        return ApiResponse.ok(telemetry);
     }
 }
