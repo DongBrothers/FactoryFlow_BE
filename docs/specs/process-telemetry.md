@@ -90,11 +90,18 @@ mes: 큐 mes.equipment-step-telemetry → MongoDB step_telemetry 에 샘플마�
 ## 인프라
 | 항목 | 내용 |
 |---|---|
-| MongoDB | 전용 EC2 `ff-mongo` (t4g.small, Amazon Linux 2023, 디스크 gp3 20GB, ff-rabbitmq 와 같은 VPC) 에 `mongo:7` 컨테이너. 데이터는 `/data/mongo`, WiredTiger 캐시 512MB, 재시작 자동 |
+| MongoDB | 전용 EC2 `ff-mongo` (t3.small, Amazon Linux 2023, ff-rabbitmq 와 같은 서브넷) 에 `mongo:7` 컨테이너. 데이터는 docker 볼륨 `mongo`, 재시작 자동(`--restart always`) |
 | 계정 | root 는 관리용, mes 는 `mes` 데이터베이스 readWrite 전용 계정 |
-| 네트워크 | 새 보안 그룹 `ff-mongo-sg`: 27017 인바운드는 서비스 보안 그룹 sg-0535230f2f50fab11 에서만, 22 는 관리자 IP 에서만 |
-| 설정 | APP_DEV_YML_MES 에 `spring.data.mongodb.uri` (ff-mongo 사설 IP). 로컬은 docker-compose 의 mongo |
-| 테스트 | Testcontainers MongoDB (common-test, 사람 적용) |
+| 네트워크 | 보안 그룹 `ff-sg-mongo`(27017 인바운드는 서비스 보안 그룹 sg-0535230f2f50fab11 에서만)와 `ff-sg-ssh`(22, 관리자 IP)를 인스턴스에 붙인다 |
+| 설정 | APP_DEV_YML_MES 에 `spring.mongodb.uri` (ff-mongo 사설 IP). 로컬은 docker-compose 의 mongo |
+| 테스트 | Testcontainers MongoDB (mes 테스트의 MongoContainerConfig) |
+
+## 설정 위치
+센서값 설정을 넣으면서, 환경마다 다른 값은 공통 `application.yml` 에서 환경별 파일로 옮긴다 (2026-10-22 결정).
+- mes: `factoryflow.line.*`(배정), `spring.mongodb.uri` → `application-{local,dev,test}.yml`
+- simulator: `factoryflow.simulator.*`(작업 시간, 불량 확률, 센서값 간격 등) → `application-{local,dev,test}.yml`
+- 테스트는 test 프로필로 돈다 (`src/test/resources/application-test.yml`, mes 는 배정 스케줄러를 끈다). 설정이 없으면 기본값(배정 켬, 5초 주기)이라 dev 시크릿에 값이 빠져도 배정은 돈다
+- `LinePropertiesTest` 는 "application.yml 에 배정 설정이 있다" 대신 "공통 파일에는 없고 test 파일은 배정을 끈다" 를 확인한다
 
 ## 관련 이벤트 (events.md 참조, 사람만 수정)
 | 이벤트 | 발행 → 수신 (큐) | payload |
