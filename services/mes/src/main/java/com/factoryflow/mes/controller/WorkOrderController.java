@@ -4,9 +4,12 @@ import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.mes.domain.ProductionProcess;
 import com.factoryflow.mes.dto.request.CompleteWorkOrderStepRequest;
+import com.factoryflow.mes.dto.request.RobotProcess;
 import com.factoryflow.mes.dto.request.StartWorkOrderStepRequest;
+import com.factoryflow.mes.dto.response.StepTelemetryResponse;
 import com.factoryflow.mes.dto.response.WorkOrderDetailResponse;
 import com.factoryflow.mes.dto.response.WorkOrderResponse;
+import com.factoryflow.mes.service.TelemetryService;
 import com.factoryflow.mes.service.WorkOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class WorkOrderController {
 
     private final WorkOrderService workOrderService;
+    private final TelemetryService telemetryService;
 
     @Operation(
             summary = "작업지시 목록",
@@ -165,5 +169,34 @@ public class WorkOrderController {
                 workOrderService.completeStep(
                         workOrderId, process, request.result(), request.defectReason(), workerId);
         return ApiResponse.ok(workOrder);
+    }
+
+    @Operation(
+            summary = "공정 센서값",
+            description =
+                    "로봇 공정(PRESS, BODY, PAINT)을 하는 동안 설비가 잰 값을 시간 순으로 본다. 재작업했으면 배정 회차별로 나눠 준다. 항목마다 정상 범위(기준선)를 함께 준다. 값은 90일 보관한다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공. 값이 없으면 runs 가 빈 목록"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "workOrderId 가 양수가 아님, process 가 로봇 공정(PRESS, BODY, PAINT)이 아님"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "작업지시 없음 (WORK_ORDER_NOT_FOUND)")
+    })
+    @GetMapping("/{workOrderId}/steps/{process}/telemetry")
+    public ApiResponse<StepTelemetryResponse> findStepTelemetry(
+            @Parameter(description = "작업지시 번호", example = "12")
+                    @PathVariable("workOrderId")
+                    @Positive
+                    Long workOrderId,
+            @Parameter(description = "로봇 공정", example = "PRESS")
+                    @PathVariable("process")
+                    @RobotProcess
+                    ProductionProcess process) {
+        StepTelemetryResponse telemetry = telemetryService.findStepTelemetry(workOrderId, process);
+        return ApiResponse.ok(telemetry);
     }
 }

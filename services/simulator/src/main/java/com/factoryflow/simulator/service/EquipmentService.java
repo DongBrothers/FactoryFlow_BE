@@ -7,6 +7,7 @@ import com.factoryflow.simulator.domain.Job;
 import com.factoryflow.simulator.domain.LineProcess;
 import com.factoryflow.simulator.domain.SeenEvents;
 import com.factoryflow.simulator.domain.StepResult;
+import com.factoryflow.simulator.domain.TelemetryRecorder;
 import com.factoryflow.simulator.domain.VirtualEquipment;
 import com.factoryflow.simulator.dto.response.InternalEquipmentResponse;
 import com.factoryflow.simulator.event.listener.payload.StepDispatched;
@@ -14,6 +15,8 @@ import com.factoryflow.simulator.event.publisher.EquipmentEventPublisher;
 import com.factoryflow.simulator.event.publisher.payload.EquipmentStatusChanged;
 import com.factoryflow.simulator.event.publisher.payload.EquipmentStepCompleted;
 import com.factoryflow.simulator.event.publisher.payload.EquipmentStepStarted;
+import com.factoryflow.simulator.event.publisher.payload.EquipmentStepTelemetry;
+import com.factoryflow.simulator.event.publisher.payload.TelemetrySample;
 import com.factoryflow.simulator.exception.SimulatorErrorCode;
 import java.time.Clock;
 import java.time.Duration;
@@ -98,7 +101,9 @@ public class EquipmentService {
         later(properties.workTimeOf(job.process()), () -> reportCompleted(equipment, job));
     }
 
-    /** 작업 시간이 지났다. 고장·정지로 작업을 버렸으면 보고하지 않는다. 불량 확률로 DEFECT. */
+    /**
+     * 작업 시간이 지났다. 고장·정지로 작업을 버렸으면 보고하지 않는다. 불량 확률로 DEFECT. 완료 보고 뒤 그 공정 동안의 센서값을 한 번 보낸다 (재전송 없음).
+     */
     private synchronized void reportCompleted(VirtualEquipment equipment, Job job) {
         if (!equipment.isWorkingOn(job)) {
             return;
@@ -114,6 +119,34 @@ public class EquipmentService {
                         defect ? StepResult.DEFECT : StepResult.GOOD,
                         defect ? job.process().defectReason() : null,
                         job.dispatchSeq()));
+        publishTelemetry(equipment, job, defect);
+    }
+
+    /** 공정 시간 동안 sampleInterval 마다 잰 값 (지금부터 거꾸로 공정 시간만큼). 잃어도 되는 데이터라 한 번만 보낸다. */
+    private void publishTelemetry(VirtualEquipment equipment, Job job, boolean defect) {
+        Duration work = properties.workTimeOf(job.process());
+        List<TelemetrySample> samples =
+                TelemetryRecorder.record(
+                                job.process(),
+                                clock.instant().minus(work),
+                                work,
+                                properties.sampleInterval(),
+                                defect,
+                                random)
+                        .stream()
+                        .map(r -> new TelemetrySample(r.at(), r.values()))
+                        .toList();
+        if (samples.isEmpty()) {
+            return;
+        }
+        publisher.publishOnce(
+                job.traceId(),
+                new EquipmentStepTelemetry(
+                        equipment.getCode(),
+                        job.workOrderId(),
+                        job.process(),
+                        job.dispatchSeq(),
+                        samples));
     }
 
     /** 설비 상태를 바꾼다 (내부 API, 자동 고장). 같은 상태면 그대로. 멈추면 하던 작업을 버린다 (보고 안 함). */

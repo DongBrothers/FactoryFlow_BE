@@ -3,6 +3,7 @@ package com.factoryflow.simulator;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.amqp.core.AmqpAdmin;
@@ -22,17 +23,33 @@ public class SimulatorTestSupport {
     private final ObjectMapper objectMapper;
     private final String captureQueue;
 
+    /** 설비 보고 세 가지. 완료 보고 뒤 따로 오는 센서값과 섞이지 않게 나눠 받는다. */
+    public static final List<String> REPORTS =
+            List.of(
+                    "equipment.step-started",
+                    "equipment.step-completed",
+                    "equipment.status-changed");
+
+    /** 설비 보고(시작·완료·상태)를 받는다. 센서값(equipment.step-telemetry)은 받지 않는다. */
     public SimulatorTestSupport(
             RabbitTemplate rabbitTemplate, ObjectMapper objectMapper, AmqpAdmin amqpAdmin) {
+        this(rabbitTemplate, objectMapper, amqpAdmin, REPORTS);
+    }
+
+    /** 지정한 이벤트만 받는다 (예: 센서값 테스트는 equipment.step-telemetry). */
+    public SimulatorTestSupport(
+            RabbitTemplate rabbitTemplate,
+            ObjectMapper objectMapper,
+            AmqpAdmin amqpAdmin,
+            List<String> eventNames) {
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
         // 연결 전용(exclusive) 임시 큐는 다른 채널에서 받을 때 사라질 수 있어 일반 큐로 만든다 (테스트 컨테이너와 함께 사라짐)
         Queue queue = new Queue("test.simulator-capture." + UUID.randomUUID(), false, false, false);
         amqpAdmin.declareQueue(queue);
-        amqpAdmin.declareBinding(
-                BindingBuilder.bind(queue)
-                        .to(new TopicExchange("factoryflow.events", true, false))
-                        .with("equipment.#"));
+        TopicExchange events = new TopicExchange("factoryflow.events", true, false);
+        eventNames.forEach(
+                name -> amqpAdmin.declareBinding(BindingBuilder.bind(queue).to(events).with(name)));
         this.captureQueue = queue.getName();
     }
 

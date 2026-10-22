@@ -45,6 +45,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # mes 의 공정 센서값 (docs/specs/process-telemetry.md). 로컬은 인증 없이 쓴다 (mes 기본 주소 mongodb://localhost:27017/mes)
+  mongo:
+    image: mongo:7
+    container_name: ff-mongo
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
   # 로컬 메일 확인용 가짜 SMTP 서버. auth 가 보낸 활성화 메일을 http://localhost:8025 에서 본다
   mailpit:
     image: axllent/mailpit:v1.31.3
@@ -56,3 +66,4 @@ services:
 volumes:
   mysql-data:
   rabbitmq-data:
+  mongo-data:

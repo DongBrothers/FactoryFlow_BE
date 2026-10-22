@@ -1,0 +1,11 @@
+# 테스트 환경 설정 (build.gradle 이 test 프로필로 돌린다). 환경마다 다른 값은 application-{local,dev,test}.yml 에 둔다
+# DB·RabbitMQ·MongoDB 주소는 Testcontainers 가 넣는다 (TestContainersConfig, MongoContainerConfig)
+
+# 로봇 공정 배정 (docs/specs/production-work-order.md "3. 로봇 공정 자동 진행")
+# 테스트에서는 스케줄러를 끈다. 배정은 테스트가 LineDispatcher 를 직접 불러 확인한다
+factoryflow:
+  line:
+    dispatch-enabled: false
+    dispatch-interval: 5s
+    start-report-timeout: 1m
+    completion-report-timeout: 5m

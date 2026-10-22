@@ -28,6 +28,7 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | equipment.step-started | simulator | mes | equipmentCode, workOrderId, process, dispatchSeq |
 | equipment.step-completed | simulator | mes | equipmentCode, workOrderId, process, result, defectReason, dispatchSeq |
 | equipment.status-changed | simulator | mes | equipmentCode, process, status |
+| equipment.step-telemetry | simulator | mes | equipmentCode, workOrderId, process, dispatchSeq, samples[{at, values{이름: 값}}] (공정당 최대 300개, 잃어도 되는 데이터라 재전송 없음, docs/specs/process-telemetry.md) |
 | shipment.completed | inventory | order | orderId, productionId, productId, vin |
 
 ## 흐름

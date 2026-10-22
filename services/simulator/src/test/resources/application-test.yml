@@ -1,0 +1,20 @@
+# 테스트 환경 설정 (build.gradle 이 test 프로필로 돌린다). 환경마다 다른 값은 application-{local,dev,test}.yml 에 둔다
+# RabbitMQ 주소는 Testcontainers 가 넣는다 (TestContainersConfig). 테스트마다 다른 값은 @SpringBootTest(properties) 로 바꾼다
+
+# 가상 설비 (docs/specs/simulator.md)
+factoryflow:
+  simulator:
+    start-delay: 1s
+    work-time:
+      PRESS: 3s
+      BODY: 4s
+      PAINT: 5s
+    defect-rate: 0.05
+    fault-check-interval: 30s
+    # 0 이면 자동 고장 없음. 시연할 때는 내부 API 로 고장을 낸다
+    fault-rate: 0
+    repair-time: 60s
+    resend-interval: 1s
+    seen-event-limit: 10000
+    # 로봇 공정 중 센서값을 재는 간격 (공정당 최대 300개, docs/specs/process-telemetry.md)
+    sample-interval: 200ms

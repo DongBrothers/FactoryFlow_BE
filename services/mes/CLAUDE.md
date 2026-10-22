@@ -3,6 +3,7 @@
 - DB: mes_db (Flyway: src/main/resources/db/migration)
   - work_order 1 : N work_order_step (공정 5개) 1 : N production_result, equipment (+ 상태 이력 equipment_status_history)
   - 생산 건·제품은 id 로만 가리킨다 (production_id, product_id)
+- MongoDB (spring.mongodb.uri, 데이터베이스 mes): 공정 센서값 시계열 컬렉션 step_telemetry (timeField measuredAt, metaField meta, 90일 보관). 컬렉션은 처음 저장할 때 만든다. 업무 상태·이벤트는 MySQL, MongoDB 는 기록성 데이터에만 (docs/specs/process-telemetry.md, docs/planning/erp-mes-boundary.md)
 - 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
 - 작업지시 생성: production.released 수신 시 작업지시 RELEASED + 공정 5개 PENDING. 같은 생산 건이 이미 있으면 건너뜀
 - 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + mes.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API(/mes/work-orders/{id}/steps/{process}/start·complete)로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
@@ -12,7 +13,9 @@
 - 완료: 검사 양품 → VIN 발행 → 작업지시 COMPLETED + mes.vehicle-completed (production 이 생산 건 완료와 production.completed)
 - 취소 판단: production.release-cancel-requested 수신 시 작업지시가 RELEASED(첫 공정 전)면 CANCELLED + mes.work-order-cancelled, 시작했으면 mes.work-order-cancel-rejected(작업지시 상태). 작업지시가 아직 없으면(발행보다 먼저 옴) CANCELLED 작업지시를 남기고 cancelled
 - 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
+- 센서값: equipment.step-telemetry 수신 → step_telemetry 에 샘플마다 문서 1개. 메시지당 300개 넘으면 저장하지 않고 DLQ, 조회는 한 번에 5,000개까지(truncated). 조회 GET /mes/work-orders/{id}/steps/{process}/telemetry(로봇 공정만, 회차별), GET /mes/equipments/{code}/telemetry?from=&to=(최대 1시간). 테스트는 MongoContainerConfig 를 함께 가져온다
 - 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected
-- 수신: production.released, production.release-cancel-requested, equipment.step-started, equipment.step-completed, equipment.status-changed
+- 수신: production.released, production.release-cancel-requested, equipment.step-started, equipment.step-completed, equipment.status-changed, equipment.step-telemetry
 - API: GET /mes/work-orders, /mes/work-orders/{id}, POST 공정 시작·종료, GET /mes/equipments?process= (gateway /api/mes/**)
+- 설정: factoryflow.line.*, spring.mongodb.uri 는 공통 application.yml 이 아니라 환경별 application-{local,dev,test}.yml 에 둔다. 테스트는 test 프로필 (src/test/resources/application-test.yml)
 - 동시 변경: 작업지시·설비는 @Version (공정이 바뀔 때마다 작업지시 step_changed_at 을 바꿔 version 을 올린다)

@@ -26,6 +26,7 @@ public class EventQueueConfig {
     public static final String EQUIPMENT_STEP_STARTED_QUEUE = "mes.equipment-step-started";
     public static final String EQUIPMENT_STEP_COMPLETED_QUEUE = "mes.equipment-step-completed";
     public static final String EQUIPMENT_STATUS_CHANGED_QUEUE = "mes.equipment-status-changed";
+    public static final String EQUIPMENT_STEP_TELEMETRY_QUEUE = "mes.equipment-step-telemetry";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -63,6 +64,14 @@ public class EventQueueConfig {
                 factoryFlowEventsExchange,
                 EQUIPMENT_STATUS_CHANGED_QUEUE,
                 "equipment.status-changed");
+    }
+
+    @Bean
+    Declarables equipmentStepTelemetryQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange,
+                EQUIPMENT_STEP_TELEMETRY_QUEUE,
+                "equipment.step-telemetry");
     }
 
     // ---- 실패 처리 ----
