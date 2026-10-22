@@ -14,3 +14,8 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-rabbitmq'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 }
+
+// 테스트는 test 프로필로 돈다 (src/test/resources/application-test.yml)
+tasks.named('test') {
+    systemProperty 'spring.profiles.active', 'test'
+}
