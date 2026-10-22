@@ -78,13 +78,14 @@ mes: 큐 mes.equipment-step-telemetry → MongoDB step_telemetry 에 샘플마�
 | 같은 telemetry 메시지 두 번 | Guard 로 한 번만 저장 |
 | 고장·정지로 버린 작업 | simulator 가 보내지 않는다 |
 | MongoDB 장애 | 재시도 후 DLQ, 공정 진행은 그대로 |
+| mes 수신: samples 가 없음 | 저장하지 않고 경고 로그 (재시도·DLQ 없음) |
 | 조회: process 가 사람 공정이거나 모르는 값 | 400 |
 | 조회: workOrderId 가 양수가 아님, 설비 코드 형식 오류 | 400 |
 | 조회: from 이 to 보다 늦음, 범위가 1시간 초과, from·to 형식 오류 | 400 |
 | 조회: 작업지시 없음 | 404 `WORK_ORDER_NOT_FOUND` |
 | 조회: 설비 없음 | 404 `EQUIPMENT_NOT_FOUND` |
 
-- 새 오류 코드 없음
+- 새 오류 코드 `TELEMETRY_TOO_LARGE`: 메시지당 상한을 넘은 센서값 메시지를 저장하지 않을 때 리스너가 던진다 (재시도 후 DLQ). API 응답으로는 나가지 않는다
 
 ## 인프라
 | 항목 | 내용 |
