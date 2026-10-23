@@ -75,6 +75,18 @@ class ProductionClientTest {
     }
 
     @Test
+    void otherConflictIsProductionUnavailable() {
+        // 동시 변경 충돌 같은 다른 409 는 재고 부족이 아니다 (PR #172 리뷰)
+        server.expect(requestTo(URL))
+                .andRespond(
+                        withStatus(HttpStatus.CONFLICT)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body("{\"code\":\"PRODUCTION_CONFLICT\",\"message\":\"x\"}"));
+
+        assertError(InventoryErrorCode.PRODUCTION_UNAVAILABLE);
+    }
+
+    @Test
     void missingDataIsProductionUnavailable() {
         server.expect(requestTo(URL))
                 .andRespond(
