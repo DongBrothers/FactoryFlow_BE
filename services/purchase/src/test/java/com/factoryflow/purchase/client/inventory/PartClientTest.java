@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.purchase.client.inventory.dto.response.PartResponse;
+import com.factoryflow.purchase.client.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.purchase.exception.PurchaseErrorCode;
 import java.net.SocketTimeoutException;
 import java.util.List;
@@ -95,6 +96,44 @@ class PartClientTest {
                 .andRespond(withException(new SocketTimeoutException("Read timed out")));
 
         assertUnavailable();
+    }
+
+    @Test
+    void mapsShortagesFromResponse() {
+        server.expect(requestTo("http://inventory/internal/parts/shortages"))
+                .andRespond(
+                        withSuccess(
+                                """
+                                {"data":[{"partId":1012,"code":"TIRE-18","name":"타이어 18인치","unit":"EA",
+                                 "available":3,"waitingQty":20,"shortQty":17,"waitingProductions":2}],
+                                 "status":200,"message":"OK"}
+                                """,
+                                MediaType.APPLICATION_JSON));
+
+        assertThat(partClient.findShortages())
+                .containsExactly(
+                        new PartShortageResponse(1012L, "TIRE-18", "타이어 18인치", "EA", 3, 20, 17));
+        server.verify();
+    }
+
+    @Test
+    void shortageFailuresAreInventoryUnavailable() {
+        server.expect(requestTo("http://inventory/internal/parts/shortages"))
+                .andRespond(withServerError());
+        server.expect(requestTo("http://inventory/internal/parts/shortages"))
+                .andRespond(
+                        withSuccess(
+                                """
+                                {"status":200,"message":"OK"}
+                                """,
+                                MediaType.APPLICATION_JSON));
+
+        for (int i = 0; i < 2; i++) {
+            assertThatThrownBy(() -> partClient.findShortages())
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode")
+                    .isEqualTo(PurchaseErrorCode.INVENTORY_UNAVAILABLE);
+        }
     }
 
     private void assertUnavailable() {

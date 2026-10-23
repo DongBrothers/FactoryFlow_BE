@@ -2,6 +2,8 @@ package com.factoryflow.purchase.client.inventory;
 
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.purchase.client.inventory.dto.response.PartResponse;
+import com.factoryflow.purchase.client.inventory.dto.response.PartShortageResponse;
+import com.factoryflow.purchase.client.inventory.dto.response.PartShortagesResponse;
 import com.factoryflow.purchase.client.inventory.dto.response.PartsResponse;
 import com.factoryflow.purchase.exception.PurchaseErrorCode;
 import java.util.Collection;
@@ -35,6 +37,28 @@ public interface PartClient {
         }
         if (response == null || response.data() == null) {
             log.warn("[Purchase] inventory 부품 조회 응답에 data 가 없음");
+            throw new CustomException(PurchaseErrorCode.INVENTORY_UNAVAILABLE);
+        }
+        return response.data();
+    }
+
+    @GetExchange("/shortages")
+    PartShortagesResponse getShortages();
+
+    /**
+     * 부족 부품 (docs/specs/purchase-suggestion.md). 실패, 시간 초과, 본문이나 data 가 없는 비정상 응답은
+     * INVENTORY_UNAVAILABLE(503).
+     */
+    default List<PartShortageResponse> findShortages() {
+        PartShortagesResponse response;
+        try {
+            response = getShortages();
+        } catch (RestClientException e) {
+            log.warn("[Purchase] inventory 부족 부품 조회 실패: {}", e.getMessage());
+            throw new CustomException(PurchaseErrorCode.INVENTORY_UNAVAILABLE);
+        }
+        if (response == null || response.data() == null) {
+            log.warn("[Purchase] inventory 부족 부품 응답에 data 가 없음");
             throw new CustomException(PurchaseErrorCode.INVENTORY_UNAVAILABLE);
         }
         return response.data();
