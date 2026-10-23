@@ -87,6 +87,18 @@ class ProductionClientTest {
     }
 
     @Test
+    void unreadableConflictBodyIsProductionUnavailable() {
+        // 본문을 읽지 못한 409 는 재고 부족이라고 단정하지 않는다 (PR #172 리뷰)
+        server.expect(requestTo(URL))
+                .andRespond(
+                        withStatus(HttpStatus.CONFLICT)
+                                .contentType(MediaType.TEXT_PLAIN)
+                                .body("conflict"));
+
+        assertError(InventoryErrorCode.PRODUCTION_UNAVAILABLE);
+    }
+
+    @Test
     void missingDataIsProductionUnavailable() {
         server.expect(requestTo(URL))
                 .andRespond(

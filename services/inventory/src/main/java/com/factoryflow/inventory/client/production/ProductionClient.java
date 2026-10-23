@@ -57,7 +57,9 @@ public interface ProductionClient {
         try {
             ProductionErrorResponse body = e.getResponseBodyAs(ProductionErrorResponse.class);
             return body != null && NOT_ENOUGH_UNRELEASED.equals(body.code());
-        } catch (RuntimeException parseFailure) {
+        } catch (RestClientException | IllegalStateException parseFailure) {
+            // 본문을 읽지 못하면 재고 부족이라고 단정하지 않는다 (PRODUCTION_UNAVAILABLE 로 처리, PR #172 리뷰)
+            log.warn("[Inventory] production 409 본문을 읽지 못함: {}", parseFailure.getMessage());
             return false;
         }
     }
