@@ -6,6 +6,7 @@ import com.factoryflow.production.config.EventQueueConfig;
 import com.factoryflow.production.domain.ProductionStatus;
 import com.factoryflow.production.event.listener.payload.MesProductionStarted;
 import com.factoryflow.production.event.listener.payload.MesVehicleCompleted;
+import com.factoryflow.production.event.listener.payload.MesVehicleScrapped;
 import com.factoryflow.production.event.listener.payload.MesWorkOrderCancelRejected;
 import com.factoryflow.production.event.listener.payload.MesWorkOrderCancelled;
 import com.factoryflow.production.event.publisher.payload.CompletedPartLot;
@@ -45,6 +46,14 @@ public class MesEventListener {
                                 event.scannedLotsOrEmpty().stream()
                                         .map(lot -> new CompletedPartLot(lot.partId(), lot.lotNo()))
                                         .toList()));
+    }
+
+    @RabbitListener(queues = EventQueueConfig.MES_VEHICLE_SCRAPPED_QUEUE)
+    public void onVehicleScrapped(EventEnvelope envelope) {
+        MesVehicleScrapped event =
+                objectMapper.treeToValue(envelope.payload(), MesVehicleScrapped.class);
+        processedEventGuard.runOnce(
+                envelope, () -> productionService.scrapProduction(event.productionId()));
     }
 
     @RabbitListener(queues = EventQueueConfig.MES_WORK_ORDER_CANCELLED_QUEUE)

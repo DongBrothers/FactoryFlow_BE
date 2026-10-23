@@ -32,6 +32,7 @@ public class EventQueueConfig {
             "production.mes-work-order-cancelled";
     public static final String MES_WORK_ORDER_CANCEL_REJECTED_QUEUE =
             "production.mes-work-order-cancel-rejected";
+    public static final String MES_VEHICLE_SCRAPPED_QUEUE = "production.mes-vehicle-scrapped";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -78,6 +79,12 @@ public class EventQueueConfig {
     Declarables mesVehicleCompletedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
                 factoryFlowEventsExchange, MES_VEHICLE_COMPLETED_QUEUE, "mes.vehicle-completed");
+    }
+
+    @Bean
+    Declarables mesVehicleScrappedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(
+                factoryFlowEventsExchange, MES_VEHICLE_SCRAPPED_QUEUE, "mes.vehicle-scrapped");
     }
 
     @Bean

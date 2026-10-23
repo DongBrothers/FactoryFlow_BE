@@ -13,5 +13,7 @@ public enum ProductionStatus {
     /** 검사 완료, VIN 발행 (completed_at 기록) */
     COMPLETED,
     /** 첫 공정 시작 전에 주문이 취소된 상태. 예약한 부품은 해제된다 */
-    CANCELLED
+    CANCELLED,
+    /** 공정 불량으로 폐기된 상태. 잡아 둔 부품은 폐기 소모되고 같은 주문으로 대체 차가 만들어진다 (docs/specs/defect-scrap.md) */
+    SCRAPPED
 }

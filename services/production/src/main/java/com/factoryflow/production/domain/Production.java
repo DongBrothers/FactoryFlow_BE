@@ -120,6 +120,18 @@ public class Production extends BaseTimeEntity {
      * mes 가 검사 양품으로 차를 완성했다. IN_PROGRESS 에서 바뀌고, 시작 알림보다 완성 알림이 먼저 오면 READY 에서도 바뀐다 (큐가 다르다). 바뀌었으면
      * true. 완료 시각은 mes 작업지시가 갖는다.
      */
+    /**
+     * mes 가 공정 불량으로 차를 폐기했다. IN_PROGRESS 에서 바뀌고, 시작 알림보다 폐기 알림이 먼저 오면 READY 에서도 바뀐다 (큐가 다르다). 바뀌었으면
+     * true.
+     */
+    public boolean scrap() {
+        if (status != ProductionStatus.IN_PROGRESS && status != ProductionStatus.READY) {
+            return false;
+        }
+        this.status = ProductionStatus.SCRAPPED;
+        return true;
+    }
+
     public boolean complete() {
         if (status != ProductionStatus.IN_PROGRESS && status != ProductionStatus.READY) {
             return false;

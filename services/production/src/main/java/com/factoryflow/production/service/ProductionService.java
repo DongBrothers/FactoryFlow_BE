@@ -17,6 +17,7 @@ import com.factoryflow.production.event.publisher.payload.ProductionCancelReject
 import com.factoryflow.production.event.publisher.payload.ProductionCancelled;
 import com.factoryflow.production.event.publisher.payload.ProductionCompleted;
 import com.factoryflow.production.event.publisher.payload.ProductionReleased;
+import com.factoryflow.production.event.publisher.payload.ProductionScrapped;
 import com.factoryflow.production.event.publisher.payload.ProductionStatusChanged;
 import com.factoryflow.production.event.publisher.payload.ReleaseCancelRequested;
 import com.factoryflow.production.exception.ProductionErrorCode;
@@ -67,9 +68,9 @@ public class ProductionService {
                     if (planned.contains(productId)) {
                         log.info("생산 건이 이미 있어 건너뜀: orderId={} productId={}", orderId, productId);
                     } else if (rejectReason != null) {
-                        rejectVehicles(orderId, productId, qty, rejectReason);
+                        rejectVehicles(orderId, productId, 1, qty, rejectReason);
                     } else {
-                        planVehicles(orderId, productId, qty, boms);
+                        planVehicles(orderId, productId, 1, qty, boms);
                     }
                 });
     }
@@ -110,12 +111,14 @@ public class ProductionService {
     }
 
     /**
-     * 만들 수 없는 제품: 수량만큼 생산 건을 바로 CANCELLED 로 만들고 production.status-changed(CANCELLED) 로 order 에 알린다.
-     * 부품은 요청하지 않는다 (docs/specs/stalled-flows.md S8).
+     * 만들 수 없는 제품: 차 번호 firstSeq 부터 qty 대의 생산 건을 바로 CANCELLED 로 만들고
+     * production.status-changed(CANCELLED) 로 order 에 알린다. 부품은 요청하지 않는다 (docs/specs/stalled-flows.md
+     * S8).
      */
-    private void rejectVehicles(Long orderId, Long productId, int qty, String reason) {
+    private void rejectVehicles(
+            Long orderId, Long productId, int firstSeq, int qty, String reason) {
         log.error("SAGA_REJECTED orderId={} productId={} reason={}", orderId, productId, reason);
-        for (int seq = 1; seq <= qty; seq++) {
+        for (int seq = firstSeq; seq < firstSeq + qty; seq++) {
             Production production =
                     productionRepository.save(Production.reject(orderId, productId, seq));
             publishStatusChanged(production);
@@ -129,13 +132,13 @@ public class ProductionService {
         }
     }
 
-    /** 차량 1대마다 생산 건을 만들고, 차량 1대분 부품을 요청하고, order 에 생산 건을 알린다. */
-    private void planVehicles(Long orderId, Long productId, int qty, List<Bom> boms) {
+    /** 차 번호 firstSeq 부터 qty 대: 차량 1대마다 생산 건을 만들고, 차량 1대분 부품을 요청하고, order 에 생산 건을 알린다. */
+    private void planVehicles(Long orderId, Long productId, int firstSeq, int qty, List<Bom> boms) {
         List<MaterialRequestedPart> partsPerVehicle =
                 boms.stream()
                         .map(b -> new MaterialRequestedPart(b.getPartId(), b.getQtyPerUnit()))
                         .toList();
-        for (int seq = 1; seq <= qty; seq++) {
+        for (int seq = firstSeq; seq < firstSeq + qty; seq++) {
             Production production =
                     productionRepository.save(Production.plan(orderId, productId, seq));
             publishMaterialRequested(production, partsPerVehicle);
@@ -270,6 +273,48 @@ public class ProductionService {
                         production.getProductId(),
                         vin,
                         scannedLots));
+    }
+
+    /**
+     * mes.vehicle-scrapped: 공정 불량으로 폐기된 차. 생산 건 IN_PROGRESS(시작 알림보다 먼저 왔으면 READY) → SCRAPPED 후
+     * status-changed(SCRAPPED) 와 production.scrapped(inventory 가 잡아 둔 부품을 폐기 소모), 같은 주문·제품의 다음 차
+     * 번호로 대체 생산 건을 만든다 (주문 때와 같은 규칙: 제품·BOM 이 없으면 CANCELLED). 다른 상태면 무시
+     * (docs/specs/defect-scrap.md).
+     */
+    @Transactional
+    public void scrapProduction(Long productionId) {
+        Production production = findProduction(productionId);
+        if (!production.scrap()) {
+            log.info(
+                    "IN_PROGRESS·READY 가 아니라 폐기 알림 무시: productionId={} status={}",
+                    productionId,
+                    production.getStatus());
+            return;
+        }
+        flushOrConflict(productionId);
+        publishStatusChanged(production);
+        eventPublisher.publish(new ProductionScrapped(production.getOrderId(), productionId));
+        planReplacement(production);
+    }
+
+    /** 폐기된 차 대신 같은 주문·제품의 다음 차 번호로 생산 건을 하나 만든다. */
+    private void planReplacement(Production scrapped) {
+        Long productId = scrapped.getProductId();
+        int nextSeq = lastSeq(scrapped.getOrderId(), productId) + 1;
+        List<Bom> boms = bomsByProductId(Set.of(productId)).getOrDefault(productId, List.of());
+        String rejectReason = rejectReason(productId, existingProductIds(Set.of(productId)), boms);
+        if (rejectReason != null) {
+            rejectVehicles(scrapped.getOrderId(), productId, nextSeq, 1, rejectReason);
+        } else {
+            planVehicles(scrapped.getOrderId(), productId, nextSeq, 1, boms);
+        }
+    }
+
+    private int lastSeq(Long orderId, Long productId) {
+        return productionRepository
+                .findTopByOrderIdAndProductIdOrderBySeqDesc(orderId, productId)
+                .map(Production::getSeq)
+                .orElse(0);
     }
 
     /**
