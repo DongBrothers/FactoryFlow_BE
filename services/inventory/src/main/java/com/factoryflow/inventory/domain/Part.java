@@ -80,7 +80,7 @@ public class Part extends BaseEntity {
         this.available -= qty;
     }
 
-    /** 생산 취소로 잡아 둔 qty 를 풀었다. 바로 쓸 수 있는 수량으로 돌아간다. */
+    /** 생산 취소나 재고 조정 거둬들이기로 잡아 둔 qty 를 풀었다. 바로 쓸 수 있는 수량으로 돌아간다. */
     public void release(int qty) {
         this.reserved -= qty;
         this.available += qty;

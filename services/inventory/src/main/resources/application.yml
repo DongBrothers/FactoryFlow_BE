@@ -19,6 +19,13 @@ spring:
     hibernate:
       ddl-auto: validate
 
+# 서비스 간 호출 주소. 환경별 파일이나 환경 변수로 바꾼다. 기본값은 local 프로필의 production 포트(8084)
+# 재고 조정이 찜한 부품을 거둘 때 발행 전 차를 부품 대기로 되돌린다 (docs/specs/stock-adjustment.md)
+clients:
+  production:
+    url: ${PRODUCTION_URL:http://localhost:8084}
+    timeout: 3s
+
 server:
   port: 8080
 

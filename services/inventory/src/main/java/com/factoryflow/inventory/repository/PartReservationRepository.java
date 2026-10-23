@@ -25,4 +25,10 @@ public interface PartReservationRepository
 
     List<PartReservation> findAllByPartIdInAndStatus(
             Collection<Long> partIds, ReservationStatus status);
+
+    List<PartReservation> findAllByPartIdAndStatusOrderByIdDesc(
+            Long partId, ReservationStatus status);
+
+    List<PartReservation> findAllByPartIdAndProductionIdInAndStatus(
+            Long partId, Collection<Long> productionIds, ReservationStatus status);
 }

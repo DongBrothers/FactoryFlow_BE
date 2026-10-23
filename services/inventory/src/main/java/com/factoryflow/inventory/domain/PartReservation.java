@@ -60,6 +60,11 @@ public class PartReservation extends BaseTimeEntity {
         this.status = ReservationStatus.RESERVED;
     }
 
+    /** 재고 조정이 잡아 둔 부품을 거둬 다시 기다린다 (RESERVED → WAITING). id 가 그대로라 대기 줄에서 원래 순서 자리에 선다. */
+    public void waitAgain() {
+        this.status = ReservationStatus.WAITING;
+    }
+
     public boolean isReserved() {
         return status == ReservationStatus.RESERVED;
     }

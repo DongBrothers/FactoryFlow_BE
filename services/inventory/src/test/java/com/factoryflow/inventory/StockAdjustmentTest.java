@@ -1,11 +1,20 @@
 package com.factoryflow.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.inventory.client.production.ProductionClient;
+import com.factoryflow.inventory.client.production.dto.request.HoldMaterialCandidateRequest;
+import com.factoryflow.inventory.client.production.dto.request.HoldMaterialRequest;
+import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.test.container.TestContainersConfig;
 import com.jayway.jsonpath.JsonPath;
 import java.sql.Timestamp;
@@ -24,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -38,6 +48,7 @@ class StockAdjustmentTest {
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
+    @MockitoBean ProductionClient productionClient;
 
     MockMvc mockMvc;
 
@@ -151,9 +162,106 @@ class StockAdjustmentTest {
     }
 
     @Test
-    void decreaseCannotTouchReservedStock() throws Exception {
+    void decreaseWithinAvailableDoesNotAskProduction() throws Exception {
+        long tire = insertPart("TIRE-18", 3, 4);
+        insertReservation(9, tire, 4, "RESERVED");
+        insertLot(tire, "LOT-261001-000001", 7, "2026-10-01 09:00:00");
+
+        adjust(tire, "{\"qty\":-3,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.available").value(0))
+                .andExpect(jsonPath("$.data.reserved").value(4))
+                .andExpect(jsonPath("$.data.reclaimedProductionIds.length()").value(0));
+
+        verifyNoInteractions(productionClient);
+    }
+
+    @Test
+    void decreaseBeyondAvailableReclaimsTheLatestUnreleasedReservation() throws Exception {
+        // available 1 + 차 7·9 가 4개씩 잡음. 2개 파손 → 1개 모자라 늦게 잡은 차 9 를 거둔다 (#170)
+        long tire = insertPart("TIRE-18", 1, 8);
+        insertReservation(7, tire, 4, "RESERVED");
+        insertReservation(9, tire, 4, "RESERVED");
+        long lot = insertLot(tire, "LOT-261001-000001", 9, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(9L));
+
+        adjust(tire, "{\"qty\":-2,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.available").value(3))
+                .andExpect(jsonPath("$.data.reserved").value(4))
+                .andExpect(jsonPath("$.data.reclaimedProductionIds[0]").value(9));
+
+        verify(productionClient)
+                .holdForMaterial(
+                        new HoldMaterialRequest(
+                                tire,
+                                1,
+                                List.of(
+                                        new HoldMaterialCandidateRequest(9L, 4),
+                                        new HoldMaterialCandidateRequest(7L, 4))));
+        assertThat(reservationStatus(9, tire)).isEqualTo("WAITING");
+        assertThat(reservationStatus(7, tire)).isEqualTo("RESERVED");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(type, ':', ref_type, ':', ref_id, ':', qty)"
+                                        + " FROM stock_history ORDER BY id",
+                                String.class))
+                .containsExactly(
+                        "RELEASE:PRODUCTION:9:4",
+                        "ADJUST_OUT:ADJUSTMENT:%d:2"
+                                .formatted(
+                                        jdbc.queryForObject(
+                                                "SELECT id FROM stock_adjustment", Long.class)));
+        assertThat(remaining(lot)).isEqualTo(7);
+        // 거둔 차가 줄의 앞에 서고 4개가 안 되므로 아무 차도 채우지 않는다
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
+    }
+
+    @Test
+    void reclaimedCarGetsItsPartsBackWhenStockReturns() throws Exception {
+        long tire = insertPart("TIRE-18", 1, 4);
+        insertReservation(9, tire, 4, "RESERVED");
+        insertLot(tire, "LOT-261001-000001", 5, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(9L));
+        adjust(tire, "{\"qty\":-2,\"reason\":\"운반 중 파손\"}").andExpect(status().isCreated());
+
+        adjust(tire, "{\"qty\":1,\"reason\":\"실사에서 더 나옴\"}").andExpect(status().isCreated());
+
+        assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
+        assertThat(jdbc.queryForList("SELECT event_name FROM outbox", String.class))
+                .containsExactly("inventory.reserved");
+    }
+
+    @Test
+    void heldCarWhoseReservationChangedMeanwhileIsSentBackToReady() throws Exception {
+        // production 이 차 9 를 부품 대기로 바꿨는데 그 사이 inventory 의 예약이 풀렸으면(취소 등) 거두지 않고 READY 로 되돌린다
+        long tire = insertPart("TIRE-18", 5, 0);
+        insertReservation(9, tire, 4, "RELEASED");
+        insertLot(tire, "LOT-261001-000001", 5, "2026-10-01 09:00:00");
+        insertReservation(7, tire, 1, "RESERVED");
+        jdbc.update("UPDATE part SET available = 0, reserved = 1 WHERE id = ?", tire);
+        jdbc.update("UPDATE part_lot SET remaining_qty = 1 WHERE part_id = ?", tire);
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(7L, 9L));
+
+        adjust(tire, "{\"qty\":-1,\"reason\":\"분실\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.reclaimedProductionIds.length()").value(1))
+                .andExpect(jsonPath("$.data.reclaimedProductionIds[0]").value(7));
+
+        String reserved =
+                jdbc.queryForObject(
+                        "SELECT payload FROM outbox WHERE event_name = 'inventory.reserved'",
+                        String.class);
+        assertThat(JsonPath.<Integer>read(reserved, "$.payload.productionId")).isEqualTo(9);
+    }
+
+    @Test
+    void notEnoughUnreleasedCarsIs409AndNothingChanges() throws Exception {
         long tire = insertPart("TIRE-18", 2, 6);
+        insertReservation(9, tire, 6, "RESERVED");
         long lot = insertLot(tire, "LOT-261001-000001", 8, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any()))
+                .thenThrow(new CustomException(InventoryErrorCode.INSUFFICIENT_AVAILABLE));
 
         adjust(tire, "{\"qty\":-3,\"reason\":\"운반 중 파손\"}")
                 .andExpect(status().isConflict())
@@ -161,7 +269,60 @@ class StockAdjustmentTest {
 
         assertThat(jdbc.queryForMap("SELECT available, reserved FROM part WHERE id = ?", tire))
                 .containsAllEntriesOf(Map.of("available", 2, "reserved", 6));
+        assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
         assertThat(remaining(lot)).isEqualTo(8);
+        assertNothingRecorded();
+    }
+
+    @Test
+    void decreaseBeyondStockWithNoReservationIs409WithoutAskingProduction() throws Exception {
+        long tire = insertPart("TIRE-18", 2, 0);
+        insertLot(tire, "LOT-261001-000001", 2, "2026-10-01 09:00:00");
+
+        adjust(tire, "{\"qty\":-3,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INSUFFICIENT_AVAILABLE"));
+
+        verifyNoInteractions(productionClient);
+        assertNothingRecorded();
+    }
+
+    @Test
+    void productionUnavailableIs503AndNothingChanges() throws Exception {
+        long tire = insertPart("TIRE-18", 1, 4);
+        insertReservation(9, tire, 4, "RESERVED");
+        insertLot(tire, "LOT-261001-000001", 5, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any()))
+                .thenThrow(new CustomException(InventoryErrorCode.PRODUCTION_UNAVAILABLE));
+
+        adjust(tire, "{\"qty\":-2,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("PRODUCTION_UNAVAILABLE"));
+
+        assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
+        assertNothingRecorded();
+    }
+
+    @Test
+    void failedSaveAfterTheHoldPutsTheHeldCarsBack() throws Exception {
+        // production 은 차 9 를 부품 대기로 바꿨는데 inventory 저장이 실패하면(LOT 이 어긋난 데이터) 차 9 를 READY 로 되돌린다
+        long tire = insertPart("TIRE-18", 1, 4);
+        insertReservation(9, tire, 4, "RESERVED");
+        insertLot(tire, "LOT-261001-000001", 1, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(9L));
+
+        adjust(tire, "{\"qty\":-2,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("PART_LOT_SHORTAGE"));
+
+        assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
+        assertThat(jdbc.queryForMap("SELECT available, reserved FROM part WHERE id = ?", tire))
+                .containsAllEntriesOf(Map.of("available", 1, "reserved", 4));
+        String reserved =
+                jdbc.queryForObject(
+                        "SELECT payload FROM outbox WHERE event_name = 'inventory.reserved'",
+                        String.class);
+        assertThat(JsonPath.<Integer>read(reserved, "$.payload.productionId")).isEqualTo(9);
         assertNothingRecorded();
     }
 
@@ -295,6 +456,14 @@ class StockAdjustmentTest {
                 .isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM stock_history", Integer.class))
                 .isZero();
+    }
+
+    private String reservationStatus(long productionId, long partId) {
+        return jdbc.queryForObject(
+                "SELECT status FROM part_reservation WHERE production_id = ? AND part_id = ?",
+                String.class,
+                productionId,
+                partId);
     }
 
     private int remaining(long lotId) {
