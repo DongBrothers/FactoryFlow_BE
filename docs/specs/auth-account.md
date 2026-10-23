@@ -210,8 +210,9 @@
 - **로그에 남기지 않는 것**: 비밀번호(평문·해시), 활성화·Refresh 토큰, 이메일 (개인정보, 기획서 10.1)
 - springdoc OpenAPI 로 문서화한다. auth 는 `/v3/api-docs` 와 Swagger UI 를 연다. 응답 코드는 API 마다 `@ApiResponse` 로
   위 표의 코드를 전부 적고, 공통 예외 핸들러 응답을 자동으로 붙이지 않는다 (`springdoc.override-with-generic-response: false`)
-- **권한 확인과 헤더 신뢰 전제 (보안)**: JWT 는 gateway 만 검증한다. ADMIN 확인도 gateway 가 JWT 의 role 로 하고,
-  role 은 헤더로 넘기지 않는다 (헤더 role 과 JWT role 을 따로 맞출 필요가 없게. 2026-10-14 리뷰). 뒤 서비스가 믿는
+- **권한 확인과 헤더 신뢰 전제 (보안)**: JWT 는 gateway 만 검증한다. 권한 확인(ACCOUNT_ADMIN 포함)도 gateway 가 JWT 의
+  `permissions` 로 하고, role·permissions 는 헤더로 넘기지 않는다 (헤더와 JWT 를 따로 맞출 필요가 없게. 2026-10-14 리뷰,
+  2026-10-23 권한으로 바꿈). 그래서 업무 서비스는 역할·권한을 모르고, 권한 방식을 바꿔도 auth·gateway 만 고친다. 뒤 서비스가 믿는
   `X-User-Id` 같은 헤더는 다음 두 가지가 모두 성립할 때만 유효하다.
   1. 서비스는 gateway 를 통해서만 접근 가능(네트워크 격리: ECS 보안그룹에서 인터넷 직접 접속 차단).
   2. gateway 가 클라이언트가 보낸 `X-User-*` 헤더를 **버리고(strip), 검증된 JWT 로 다시 채운다**.
