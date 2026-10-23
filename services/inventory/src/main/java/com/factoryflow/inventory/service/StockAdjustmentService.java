@@ -14,9 +14,11 @@ import com.factoryflow.inventory.repository.PartRepository;
 import com.factoryflow.inventory.repository.PartReservationRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /** 재고 조정 (docs/specs/stock-adjustment.md). 저장은 StockAdjustmentWriter 가 한다. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StockAdjustmentService {
@@ -36,7 +38,7 @@ public class StockAdjustmentService {
             return stockAdjustmentWriter.adjust(partId, request, adjustedBy, held);
         } catch (RuntimeException e) {
             if (!held.isEmpty()) {
-                stockAdjustmentWriter.restoreHeld(held);
+                restoreHeldKeeping(e, held);
             }
             throw e;
         }
@@ -73,12 +75,29 @@ public class StockAdjustmentService {
             return productionClient.holdForMaterial(request);
         } catch (CustomException e) {
             if (e.getErrorCode() == InventoryErrorCode.PRODUCTION_UNAVAILABLE) {
-                stockAdjustmentWriter.restoreHeld(
+                restoreHeldKeeping(
+                        e,
                         request.candidates().stream()
                                 .map(HoldMaterialCandidateRequest::productionId)
                                 .toList());
             }
             throw e;
+        }
+    }
+
+    /**
+     * 생산 건을 READY 로 되돌린다. 되돌리기가 실패해도 원래 오류(cause)를 그대로 응답하도록, 그 실패는 로그와 suppressed 로만 남긴다 (PR #172
+     * 리뷰).
+     */
+    private void restoreHeldKeeping(RuntimeException cause, List<Long> productionIds) {
+        try {
+            stockAdjustmentWriter.restoreHeld(productionIds);
+        } catch (RuntimeException restoreFailure) {
+            log.error(
+                    "HOLD_RESTORE_FAILED productionIds={} (WAITING_MATERIAL 로 남았을 수 있음)",
+                    productionIds,
+                    restoreFailure);
+            cause.addSuppressed(restoreFailure);
         }
     }
 
