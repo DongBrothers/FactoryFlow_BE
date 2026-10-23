@@ -25,6 +25,22 @@ mes 가 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 이력�
    - 생산 건·주문: 그대로. 이벤트를 보내지 않는다
 7. 되돌린 공정은 다음 배정 주기에 같은 공정의 다른 RUNNING 설비로 다시 배정된다 (로봇 공정). 사람 공정은 작업자가 다른 설비로 다시 시작한다
 
+## 설비 목록 (mes·simulator 기준)
+mes 의 기본 설비 데이터(V2)와 simulator 의 가상 설비가 이 표와 같아야 한다. 두 서비스는 코드를 공유하지 않으므로 각자 테스트(`SpecTablesTest`)가 이 표와 맞춰 본다 (#179). 설비를 더하거나 바꾸면 이 표, mes 마이그레이션, simulator 를 함께 바꾼다.
+
+| 코드 | 공정 | 이름 |
+|---|---|---|
+| PRESS-01 | PRESS | 프레스기 1호 |
+| PRESS-02 | PRESS | 프레스기 2호 |
+| BODY-01 | BODY | 용접 로봇 1호 |
+| BODY-02 | BODY | 용접 로봇 2호 |
+| PAINT-01 | PAINT | 도장 로봇 1호 |
+| PAINT-02 | PAINT | 도장 로봇 2호 |
+| ASSEMBLY-01 | ASSEMBLY | 의장 라인 1호 |
+| ASSEMBLY-02 | ASSEMBLY | 의장 라인 2호 |
+| INSPECTION-01 | INSPECTION | 검사 라인 1호 |
+| INSPECTION-02 | INSPECTION | 검사 라인 2호 |
+
 ## 규칙 / 예외
 | 상황 | 처리 |
 |---|---|
