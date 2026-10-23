@@ -3,12 +3,14 @@ package com.factoryflow.auth.service;
 import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.AccountStatus;
 import com.factoryflow.auth.domain.PendingAccount;
+import com.factoryflow.auth.domain.Role;
 import com.factoryflow.auth.domain.UserAccount;
 import com.factoryflow.auth.dto.request.ActivateAccountRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
 import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.exception.AuthErrorCode;
+import com.factoryflow.auth.repository.RoleRepository;
 import com.factoryflow.auth.repository.UserAccountRepository;
 import com.factoryflow.auth.service.jwt.JwtProvider;
 import com.factoryflow.auth.service.mail.ActivationNotifier;
@@ -30,6 +32,7 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final UserAccountRepository repository;
+    private final RoleRepository roleRepository;
     private final ActivationTokenStore activationTokenStore;
     private final ActivationNotifier notifier;
     private final PasswordEncoder passwordEncoder;
@@ -42,6 +45,9 @@ public class AuthService {
     public IssueAccountResponse issue(IssueAccountRequest request) {
         String email = normalize(request.email());
         validateEmailDomain(email);
+        if (!roleRepository.existsByCode(request.role())) {
+            throw new CustomException(AuthErrorCode.INVALID_ROLE);
+        }
         if (repository.existsByEmail(email)) {
             throw new CustomException(AuthErrorCode.DUPLICATE_EMAIL);
         }
@@ -74,7 +80,7 @@ public class AuthService {
                     UserAccount.create(
                             pending.email(),
                             pending.name(),
-                            pending.role(),
+                            findRoleByCode(pending.role()).getId(),
                             passwordEncoder.encode(request.password())));
         } catch (CustomException e) {
             throw e;
@@ -156,8 +162,21 @@ public class AuthService {
                 .orElseThrow(() -> new CustomException(AuthErrorCode.INVALID_REFRESH_TOKEN));
     }
 
+    /** 발급 대기의 역할 코드로 역할을 찾는다. 역할은 마이그레이션으로만 넣고 지우지 않으므로 발급 때 확인한 코드는 있다. */
+    private Role findRoleByCode(String code) {
+        return roleRepository
+                .findByCode(code)
+                .orElseThrow(() -> new CustomException(AuthErrorCode.INVALID_ROLE));
+    }
+
+    /** 계정의 역할. role_id 는 FK 라 항상 있다. */
+    private Role findRoleById(Long id) {
+        return roleRepository.findById(id).orElseThrow();
+    }
+
     private IssuedTokens issueTokens(UserAccount account) {
-        String accessToken = jwtProvider.createAccessToken(account);
+        String role = findRoleById(account.getRoleId()).getCode();
+        String accessToken = jwtProvider.createAccessToken(account, role);
         String refreshToken = refreshTokenStore.issue(account.getPublicId());
         return new IssuedTokens(accessToken, refreshToken);
     }

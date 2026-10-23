@@ -74,6 +74,24 @@ class AuthAccountTest {
         }
     }
 
+    // --- 역할 ---
+
+    @Test
+    void listsRolesFromTableInDisplayOrder() throws Exception {
+        // 계정 발급 화면의 역할 선택지 (V5 role 테이블)
+        mockMvc.perform(get("/auth/admin/roles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(4))
+                .andExpect(jsonPath("$.data[0].code").value("SALES"))
+                .andExpect(jsonPath("$.data[0].name").value("영업"))
+                .andExpect(jsonPath("$.data[1].code").value("PURCHASE"))
+                .andExpect(jsonPath("$.data[1].name").value("구매"))
+                .andExpect(jsonPath("$.data[2].code").value("PRODUCTION"))
+                .andExpect(jsonPath("$.data[2].name").value("생산"))
+                .andExpect(jsonPath("$.data[3].code").value("ADMIN"))
+                .andExpect(jsonPath("$.data[3].name").value("관리자"));
+    }
+
     // --- 발급 ---
 
     @Test
@@ -149,7 +167,8 @@ class AuthAccountTest {
                                         "{\"email\":\""
                                                 + EMAIL
                                                 + "\",\"name\":\"김철수\",\"role\":\"WORKER\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUTH-013"));
 
         assertThat(redis.keys("auth:*")).isEmpty();
     }
@@ -208,7 +227,8 @@ class AuthAccountTest {
 
         var row =
                 jdbc.queryForMap(
-                        "SELECT public_id, email, password, name, role, status FROM user_account");
+                        "SELECT u.public_id, u.email, u.password, u.name, r.code AS role, u.status"
+                                + " FROM user_account u JOIN role r ON r.id = u.role_id");
         assertThat(row)
                 .containsEntry("email", EMAIL)
                 .containsEntry("name", "김철수")
@@ -242,9 +262,10 @@ class AuthAccountTest {
         String token = pendingToken(EMAIL);
         // 같은 이메일이 다른 경로(거의 동시의 두 번째 발급)로 먼저 저장된 상황
         jdbc.update(
-                "INSERT INTO user_account (public_id, email, password, name, role, status,"
+                "INSERT INTO user_account (public_id, email, password, name, role_id, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (UUID(), ?, 'hash', '다른사람', 'PRODUCTION', 'ACTIVE', NOW(6), NOW(6))",
+                        + " SELECT UUID(), ?, 'hash', '다른사람', id, 'ACTIVE', NOW(6), NOW(6)"
+                        + " FROM role WHERE code = 'PRODUCTION'",
                 EMAIL);
 
         activate(token)

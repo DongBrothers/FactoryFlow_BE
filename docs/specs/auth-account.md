@@ -15,6 +15,7 @@
 ### 이번 범위
 
 - 관리자 계정 발급 (이메일·이름·역할 입력) → Redis 대기
+- 역할 목록 (발급 화면의 역할 선택지, `role` 테이블)
 - 활성화: 이메일로 받은 **일회용 링크**로 비밀번호 설정 → 이때 DB 저장
 - 로그인(이메일 + 비밀번호)·토큰: JWT Access(RS256) + Refresh(Redis, 회전)
 - 역할 기반 접근 제어 (admin 전용 API)
@@ -42,7 +43,7 @@
 
 1. 요청 형식은 Bean Validation 으로 확인한다 (아래 규칙)
 2. 이메일을 정규화한다 (앞뒤 공백 제거 + 소문자)
-3. 검증: 허용 도메인인가 / 이미 `user_account` 에 있는 이메일인가 (있으면 409)
+3. 검증: 허용 도메인인가 / `role` 테이블에 있는 역할인가 (없으면 400) / 이미 `user_account` 에 있는 이메일인가 (있으면 409)
 4. 같은 이메일의 대기 건이 이미 있으면 **덮어쓴다** — 옛 토큰 키를 지워 옛 링크를 무효로 만든다
 5. 새 활성화 토큰(랜덤 UUID) 발급 → Redis 에 두 키를 같은 TTL(24시간)로 저장 (아래 "Redis 키")
 6. 그 이메일로 활성화 메일을 보낸다 (아래 "활성화 메일"). 보내지 못하면 5번에서 만든 두 키를 지우고 503
@@ -51,6 +52,22 @@
 ```json
 { "email": "kim@gmail.com", "name": "김철수", "role": "SALES" }
 ```
+
+### 1-1. 역할 목록 (관리자) — `GET /api/auth/admin/roles`
+
+발급 화면의 역할 선택지. `role` 테이블을 `sort_order` 순서로 한 번에 준다 (4개뿐인 기준 정보라 페이지 없음).
+
+```json
+[
+  { "code": "SALES", "name": "영업" },
+  { "code": "PURCHASE", "name": "구매" },
+  { "code": "PRODUCTION", "name": "생산" },
+  { "code": "ADMIN", "name": "관리자" }
+]
+```
+
+- 발급의 `role` 에는 `code` 를 보낸다. 화면에는 `name` 을 보인다
+- 역할은 V5 마이그레이션으로만 넣는다. 추가·수정 API 는 없다
 
 ### 2. 활성화 (직원) — `POST /api/auth/activation`
 
@@ -134,10 +151,12 @@
 | API | 상황 | 응답 |
 |---|---|---|
 | 발급 | 성공 (같은 이메일 대기 건이 있으면 덮어쓰고 성공) | 201 |
-| 발급 | 형식 오류 (이메일 형식·빈 값·role 없음), 허용 도메인 아님 (INVALID_EMAIL_DOMAIN) | 400 |
+| 발급 | 형식 오류 (이메일 형식·빈 값·role 없음), 허용 도메인 아님 (INVALID_EMAIL_DOMAIN), `role` 테이블에 없는 역할 (INVALID_ROLE) | 400 |
 | 발급 | ADMIN 이 아님 (gateway 가 JWT role 로 막음, auth 까지 오지 않음) | 403 |
 | 발급 | 이미 활성화된 이메일 (DUPLICATE_EMAIL) | 409 |
 | 발급 | 활성화 메일을 보내지 못함 (MAIL_UNAVAILABLE). 대기 정보는 남지 않으므로 다시 발급하면 된다 | 503 |
+| 역할 목록 | 성공 | 200 |
+| 역할 목록 | ADMIN 이 아님 (gateway 가 JWT role 로 막음) | 403 |
 | 활성화 | 성공 | 204 |
 | 활성화 | 형식 오류, 없거나 만료·재사용된 토큰 (INVALID_ACTIVATION_TOKEN) | 400 |
 | 활성화 | 저장 순간 같은 이메일이 이미 있음 (같은 이메일을 거의 동시에 두 번 발급한 경우, DUPLICATE_EMAIL). 계정은 이미 있으므로 재시도가 아니라 로그인하면 된다 | 409 |
@@ -169,7 +188,15 @@
 - **허용 도메인**: 설정값(`auth.allowed-email-domain`). 로컬·데모는 `gmail.com`, 운영은 회사 도메인.
   gmail 제한은 데모용 placeholder 이며 실제 직원 증명이 아니다
 - **로그인 실패 잠금**: N회 연속 실패 시 일시 잠금 (Redis 카운터, 이메일 기준). 무차별 대입 차단
-- **역할**: 1인 1역할. 값 집합 `SALES, PURCHASE, PRODUCTION, ADMIN`. enum 컬럼으로 저장. WORKER 는 #118 에서 PRODUCTION 으로 합쳤다 (V3). ADMIN 은 계정 발급만 한다 (docs/specs/role-permissions.md)
+- **역할**: 1인 1역할. `role` 테이블(`id` PK, `code` UNIQUE, `name` 화면 이름, `sort_order` 선택지 순서)에
+  `SALES 영업, PURCHASE 구매, PRODUCTION 생산, ADMIN 관리자` (V5). `user_account.role_id` 가 `role(id)` 를 FK 로 가리킨다
+  (`fk_user_account_role`). V5 가 옛 `user_account.role` 코드 글자를 `role_id` 로 옮기고 `role` 컬럼을 지운다.
+  API(발급 요청·응답·역할 목록)·JWT `role` 클레임·발급 대기(Redis)의 `role` 은 코드 글자다. 활성화 때 코드로 역할을 찾아 `role_id` 로 저장하고,
+  로그인·재발급 때 `role_id` 로 코드를 찾아 클레임에 넣는다.
+  WORKER 는 #118 에서 PRODUCTION 으로 합쳤다 (V3). 발급 대기의 WORKER 를 PRODUCTION 으로 읽던 변환은 대기 TTL(24시간)이 지나 남은 건이 없어 지웠다 (2026-10-23).
+  ADMIN 은 계정 발급만 한다 (docs/specs/role-permissions.md)
+- **역할을 새로 넣을 때**: 테이블에 행만 넣으면 발급은 되지만 권한이 하나도 없다 (gateway 역할 표에 없어 GET 도 403).
+  gateway `SecurityConfig`·`role-permissions.md` 의 표와 프론트 `menu.ts`(메뉴·첫 화면)를 함께 고친다
 
 ### 검증·로그·문서
 
@@ -221,7 +248,11 @@ gateway 는 WebFlux 라 common-web 을 쓰지 않고 같은 형식을 따로 만
 
 1. **공개키 전달**: JWKS 엔드포인트. (키 회전 용이)
 2. **로그인 ID**: 이메일. 사번은 로그인 말고 쓰는 곳이 없어 삭제했다 (2026-10-12).
-3. **role 저장**: enum 컬럼. 기획서는 `role` 테이블이나, 고정 5역할·1인1역할이라 단순화.
+3. **role 저장**: `role` 테이블 + `user_account.role_id` 숫자 FK (2026-10-23 바꿈). 처음에는 고정 역할·1인1역할이라
+   enum 컬럼으로 단순화했지만, 프론트 계정 발급 화면이 역할 선택지(코드와 한국어 이름)를 DB 에서 가져오기로 해서 테이블로 뺐다.
+   코드 글자를 FK 로 두는 안도 봤지만, 기획서대로 숫자 id 로 가리켜 코드를 바꿔도 `role` 한 곳만 고치게 했다.
+   JWT 클레임·gateway 권한 검사·프론트는 그대로 코드 글자를 쓰므로, 로그인 때 id 로 코드를 찾는 조회가 하나 는다.
+   역할별 권한은 그대로 gateway 코드의 표에 있다 (역할 테이블에 권한을 두지 않음).
 4. **토큰 만료**: Access 15분 / Refresh 14일 / 활성화 24시간.
 5. **발급 시 DB 에 저장하지 않음**: 활성화하지 않는 사람이 DB 에 남지 않도록 Redis 에 대기시키고
    활성화 때 저장한다 (2026-10-12).
@@ -293,7 +324,8 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] gateway 가 직접 만든 오류(401·403·404·5xx)의 본문이 `{"code","message"}` 이고 상태 코드는 그대로, 서비스가 낸 오류는 그대로 전달된다
 - [ ] 비번은 해시로 저장되고, 비번·토큰·이메일이 로그에 남지 않는다
 - [ ] `user_account` 에 `employee_no` 컬럼이 없고, `email` 은 UNIQUE, `password` 는 NOT NULL
-- [ ] `/v3/api-docs` 에 5개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 `/internal/jwks` 내부 API 로 나온다
+- [ ] `role` 테이블에 4개 역할이 순서대로 있고, 역할 목록 API 가 그 순서로 `{code, name}` 을 준다. 없는 역할로 발급하면 400 `AUTH-013`, 없는 `role_id` 는 `user_account` 에 저장되지 않는다(FK). V5 전에 있던 계정은 같은 역할의 `role_id` 로 옮겨지고 `role` 컬럼은 없다
+- [ ] `/v3/api-docs` 에 6개 API 의 summary, 위 표의 응답 코드, 요청·응답 필드 설명이 나오고, JWKS 는 `/internal/jwks` 내부 API 로 나온다
 - [ ] 발급하면 활성화 메일이 발급한 이메일로 가고, 링크에 토큰이 들어 있다
 - [ ] 메일 발송이 실패하면 503 이고, Redis 에 이번 발급의 대기 정보가 남지 않는다
 - [ ] 메일 발송 로그에 이메일·토큰·링크가 남지 않는다

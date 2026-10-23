@@ -26,6 +26,11 @@
 
 ## 끝난 것
 
+### 역할 목록 `GET /api/auth/admin/roles` (2026-10-23, 브랜치 `feat/role-table`)
+- 계정 발급 화면의 역할 선택지를 DB 에서 가져온다. 응답 `[{ code, name }]` (`SALES 영업, PURCHASE 구매, PRODUCTION 생산, ADMIN 관리자` 순), 페이지 없음. ADMIN 전용 (gateway `/api/auth/admin/**` 규칙 그대로)
+- 발급 `role` 에는 `code` 를 보낸다. 없는 역할이면 400 `AUTH-013`
+- 역할별 메뉴·첫 화면은 프론트 `menu.ts`, 권한은 gateway 표에 그대로 있다. 역할을 새로 넣으면 둘 다 고친다
+
 ### 고객을 order 에 만들기 → #126 (#125) 로 구현됨
 - order V9 `customer` (name, contact), 고객 등록 `POST /orders/customers` (SALES), 고객 목록 `GET /orders/customers` (페이지 없이 전체, 등록 순), 등록되지 않은 고객으로 주문하면 404 `CUSTOMER_NOT_FOUND` (production 을 부르기 전에 확인). 명세 `docs/specs/customer.md`
 - 처음 이 파일에 적은 안과 다른 점

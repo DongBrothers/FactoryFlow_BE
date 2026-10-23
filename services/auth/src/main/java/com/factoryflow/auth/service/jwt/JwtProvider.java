@@ -30,13 +30,13 @@ public class JwtProvider {
     private final AuthProperties properties;
     private final RSAKey rsaKey;
 
-    /** claim 은 sub(public_id), role 만 넣는다. 이메일 같은 개인정보는 넣지 않는다. */
-    public String createAccessToken(UserAccount account) {
+    /** claim 은 sub(public_id), role(역할 코드) 만 넣는다. 이메일 같은 개인정보는 넣지 않는다. */
+    public String createAccessToken(UserAccount account, String role) {
         Instant now = Instant.now();
         JWTClaimsSet claims =
                 new JWTClaimsSet.Builder()
                         .subject(account.getPublicId())
-                        .claim("role", account.getRole().name())
+                        .claim("role", role)
                         .issueTime(Date.from(now))
                         .expirationTime(Date.from(now.plus(properties.accessTokenTtl())))
                         .build();

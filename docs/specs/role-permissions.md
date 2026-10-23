@@ -10,7 +10,7 @@
 - **쓰기는 역할 표에 있는 역할만.** 표에 없는 요청은 아무도 못 한다 (새 API 를 만들면 표에 넣어야 열린다)
 - **ADMIN 은 계정 발급만** (`/api/auth/admin/**`)
 - 확인은 지금처럼 gateway 한 곳에서 JWT 의 `role` 로 한다. 뒤 서비스는 다시 확인하지 않는다 (docs/specs/auth-account.md "권한 확인과 헤더 신뢰 전제")
-- 역할: `SALES, PURCHASE, PRODUCTION, ADMIN` (WORKER 는 #118 에서 PRODUCTION 으로 합침. 이미 있던 WORKER 계정은 auth V3 마이그레이션으로 PRODUCTION, 발급 대기의 WORKER 는 활성화 때 PRODUCTION 으로 읽는다. 합치기 전에 받은 WORKER 토큰은 권한이 없어 다시 로그인해야 한다)
+- 역할: `SALES, PURCHASE, PRODUCTION, ADMIN` (WORKER 는 #118 에서 PRODUCTION 으로 합침. 이미 있던 WORKER 계정은 auth V3 마이그레이션으로 PRODUCTION. 발급 대기의 WORKER 를 PRODUCTION 으로 읽던 변환은 대기 TTL(24시간)이 지나 2026-10-23 에 지웠다. 합치기 전에 받은 WORKER 토큰은 권한이 없어 다시 로그인해야 한다)
 
 ## 흐름
 
@@ -30,7 +30,7 @@
 | `POST /api/inventory/parts`, `PUT /api/inventory/parts/{id}` | 부품 등록·수정 (#127) | PURCHASE |
 | `POST /api/inventory/parts/{id}/adjustments` | 재고 조정 (#129) | PURCHASE |
 | `POST /api/purchases/suppliers`, `PUT /api/purchases/suppliers/{id}` | 공급업체 등록·수정 (#127) | PURCHASE |
-| `/api/auth/admin/**` | 계정 발급 (지금 규칙) | ADMIN |
+| `/api/auth/admin/**` | 계정 발급, 역할 목록 `GET /api/auth/admin/roles` (지금 규칙) | ADMIN |
 | 그 밖의 GET | 조회 | SALES, PURCHASE, PRODUCTION |
 | 그 밖의 요청 (표에 없는 POST, PUT, PATCH, DELETE …) | — | 아무도 못 함 (403) |
 | 공개 경로 (로그인·활성화·재발급·로그아웃, health) | 지금 규칙 | 누구나 |
@@ -44,6 +44,7 @@
 |---|---|
 | role 클레임 없는 토큰, 없어진 WORKER 토큰 | 권한 없음 → 모두 403 |
 | 표에 없는 새 API | 아무도 못 한다. 열려면 이 표와 SecurityConfig 에 더한다 |
+| auth `role` 테이블에 새 역할을 넣음 | 발급은 되지만 이 표에 없어 모두 403 (GET 포함). 이 표, SecurityConfig, 프론트 `menu.ts` 를 함께 고친다 |
 | 내부 API (`/internal/**`) | gateway 에 노출하지 않는다 (지금 규칙, 라우트 없음) |
 | CORS preflight (OPTIONS) | 지금처럼 인증 전에 응답 |
 
@@ -61,5 +62,5 @@ gateway (SecurityConfigTest, 토큰은 RoleTokenDecoder)
 - [ ] GET 은 SALES·PURCHASE·PRODUCTION 통과, 토큰 없으면 401
 - [ ] WORKER 토큰은 모두 403 (#118)
 auth (#118)
-- [ ] V3: WORKER 계정 → PRODUCTION, WORKER 로 발급하면 400, 발급 대기의 WORKER 는 PRODUCTION 으로 활성화
+- [ ] V3: WORKER 계정 → PRODUCTION, WORKER 로 발급하면 400
 - [ ] 공개 경로는 지금처럼 토큰 없이 통과

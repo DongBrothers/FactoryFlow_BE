@@ -3,7 +3,6 @@ package com.factoryflow.auth.service.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.factoryflow.auth.config.AuthProperties;
-import com.factoryflow.auth.domain.Role;
 import com.factoryflow.auth.domain.UserAccount;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -35,9 +34,9 @@ class JwtProviderTest {
 
     @Test
     void accessTokenIsSignedWithPublicKeyAndCarriesClaims() throws Exception {
-        var account = UserAccount.create("a@gmail.com", "홍길동", Role.PRODUCTION, "hash");
+        var account = UserAccount.create("a@gmail.com", "홍길동", 3L, "hash");
 
-        String token = provider.createAccessToken(account);
+        String token = provider.createAccessToken(account, "PRODUCTION");
 
         SignedJWT jwt = SignedJWT.parse(token);
         RSAKey publicKey = provider.publicJwkSet().getKeys().get(0).toRSAKey();
