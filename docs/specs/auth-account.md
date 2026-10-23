@@ -323,10 +323,9 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 
 ### 그 밖의 후속 변경
 
-- `customer` 는 로그인하지 않으므로 auth_db 에 비밀번호 없이 남아 있다. 제자리는 order 소유 데이터다.
-- purchase `requested_by` 의 논리 참조를 `auth_db.admin.id` → **`auth_db.user_account.id`** 로 변경.
-  현재 주석: `services/purchase/.../V2__create_purchase_tables.sql`
-- 위 참조들은 실제 FK 가 아니라 ID 만 보관하는 논리 참조라 auth 변경으로 구조가 깨지지는 않는다.
+- (끝남) `customer` 는 로그인하지 않으므로 auth 에서 뺐다. auth V4(#124)에서 테이블을 지웠고, order V9(#126)에 고객을 새로 만들었다 (docs/specs/customer.md)
+- (끝남) purchase `requested_by`(옛 `auth_db.admin.id` 참조)는 purchase V5 에서 지웠다. 발주한 직원은 `ordered_by`(직원 public_id) 다
+- 다른 서비스가 직원을 가리킬 때는 실제 FK 가 아니라 public_id 만 보관하는 논리 참조라 auth 변경으로 구조가 깨지지는 않는다.
 
 ## 완료 조건 (테스트로 확인할 것)
 
@@ -336,7 +335,7 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] 유효 토큰으로 활성화하면 `user_account` 에 ACTIVE + 비번 해시로 저장되고, Redis 두 키가 모두 사라진다
 - [ ] 없는·만료·이미 쓴 토큰으로 활성화하면 400
 - [ ] 이메일은 대소문자와 상관없이 같은 계정으로 다룬다 (발급·로그인). 로그인은 앞뒤 공백도 무시하고, 발급은 앞뒤 공백이 있으면 400
-- [ ] 올바른 이메일+비번 로그인 시 Access(RS256)+Refresh 발급, Access claim 에 `sub`(public_id)·`role`·`permissions`(그 역할의 권한) 가 있고 이메일은 없다
+- [ ] 올바른 이메일+비번 로그인 시 Access(RS256)+Refresh 발급, Access claim 에 `sub`(public_id)·`role` 이 있고 `permissions`·이메일은 없다 (권한은 내 정보 API, docs/specs/role-permission-admin.md)
 - [ ] 틀린 비번·없는 이메일 401, `DISABLED` 403, N회 실패 시 429
 - [ ] Refresh 재발급 시 새 쌍 발급 + 옛 Refresh 무효(회전), 로그아웃 시 Refresh 무효
 - [ ] 공개키로 Access 서명 검증 성공
