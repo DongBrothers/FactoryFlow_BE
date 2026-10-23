@@ -218,6 +218,37 @@ class StockAdjustmentTest {
     }
 
     @Test
+    void reclaimedCarKeepsItsPlaceAheadOfLaterWaitingCars() throws Exception {
+        // 차 9 가 4개를 잡고, 뒤에 차 11 이 1개를 기다린다. 2개 파손으로 차 9 를 거두면 available 3 이 남지만
+        // 차 9 가 줄 앞(작은 예약 id)에 서므로 차 11 은 새치기하지 않는다 (PR #172 리뷰)
+        long tire = insertPart("TIRE-18", 1, 4);
+        insertReservation(9, tire, 4, "RESERVED");
+        insertReservation(11, tire, 1, "WAITING");
+        insertLot(tire, "LOT-261001-000001", 5, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(9L));
+
+        adjust(tire, "{\"qty\":-2,\"reason\":\"운반 중 파손\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.available").value(3));
+
+        assertThat(reservationStatus(9, tire)).isEqualTo("WAITING");
+        assertThat(reservationStatus(11, tire)).isEqualTo("WAITING");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isZero();
+
+        // 1개가 다시 들어오면 앞에 선 차 9 가 먼저 4개를 받고, 남은 0개라 차 11 은 계속 기다린다
+        adjust(tire, "{\"qty\":1,\"reason\":\"실사에서 더 나옴\"}").andExpect(status().isCreated());
+
+        assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
+        assertThat(reservationStatus(11, tire)).isEqualTo("WAITING");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT payload FROM outbox WHERE event_name = 'inventory.reserved'",
+                                String.class))
+                .extracting(p -> JsonPath.<Integer>read(p, "$.payload.productionId"))
+                .containsExactly(9);
+    }
+
+    @Test
     void reclaimedCarGetsItsPartsBackWhenStockReturns() throws Exception {
         long tire = insertPart("TIRE-18", 1, 4);
         insertReservation(9, tire, 4, "RESERVED");
