@@ -23,6 +23,7 @@ import com.factoryflow.mes.event.publisher.payload.ProductionStarted;
 import com.factoryflow.mes.event.publisher.payload.ScannedLot;
 import com.factoryflow.mes.event.publisher.payload.StepDispatched;
 import com.factoryflow.mes.event.publisher.payload.VehicleCompleted;
+import com.factoryflow.mes.event.publisher.payload.VehicleScrapped;
 import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelRejected;
 import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelled;
 import com.factoryflow.mes.exception.MesErrorCode;
@@ -140,7 +141,7 @@ public class WorkOrderService {
 
     /**
      * 설비에서 공정을 시작한다. 앞 공정이 모두 DONE 이고 이 공정이 PENDING 이며, 설비가 이 공정의 것이고 RUNNING 일 때만 된다. 작업지시의 첫
-     * 시작(프레스)이면 production 에 생산 시작을 알린다 (이후 취소 불가). 프레스 불량 재작업으로 다시 시작할 때는 알리지 않는다.
+     * 시작(프레스)이면 production 에 생산 시작을 알린다 (이후 취소 불가). 시간 초과로 되돌린 공정을 다시 시작할 때는 알리지 않는다.
      */
     @Transactional
     public WorkOrderDetailResponse startStep(
@@ -234,7 +235,7 @@ public class WorkOrderService {
                         });
     }
 
-    /** 설비의 완료 보고: 그 설비에서 이번 회차로 진행 중인 공정이면 실적(작업자 없음)을 남기고 양품 DONE, 불량 PENDING(다시 배정). 아니면 무시한다. */
+    /** 설비의 완료 보고: 그 설비에서 이번 회차로 진행 중인 공정이면 실적(작업자 없음)을 남기고 공정을 끝낸다(불량이면 차 폐기). 아니면 무시한다. */
     @Transactional
     public void reportStepCompleted(
             Long workOrderId,
@@ -355,8 +356,8 @@ public class WorkOrderService {
     }
 
     /**
-     * 진행 중인 공정을 끝내고 실적을 남긴다. 양품이면 DONE, 불량이면 실적만 남기고 재작업(PENDING). 의장 양품이면 찍은 부품 LOT 을 이번 것으로 바꿔
-     * 남긴다 (docs/specs/part-lot-scan.md). 의장 양품이 아닌데 찍은 LOT 이 있으면 SCAN_NOT_ALLOWED.
+     * 진행 중인 공정을 끝내고 실적을 남긴다 (DONE). 불량이면 차를 폐기한다 (mes.vehicle-scrapped). 의장 양품이면 찍은 부품 LOT 을 남긴다
+     * (docs/specs/part-lot-scan.md). 의장 양품이 아닌데 찍은 LOT 이 있으면 SCAN_NOT_ALLOWED.
      */
     @Transactional
     public WorkOrderDetailResponse completeStep(
@@ -378,17 +379,14 @@ public class WorkOrderService {
         }
         finishStep(workOrder, step, result, defectReason, workerId);
         if (assemblyGood) {
-            replaceScans(workOrderId, scannedLots, workerId);
+            saveScans(workOrderId, scannedLots, workerId);
         }
         flushOrConflict(workOrderId);
         return detail(workOrder, steps);
     }
 
-    /** 작업지시의 찍은 LOT 을 이번 것으로 바꾼다 (재작업 뒤 다시 양품이면 마지막 것만 남는다). */
-    private void replaceScans(
-            Long workOrderId, List<ScannedLotRequest> scannedLots, String workerId) {
-        workOrderPartScanRepository.deleteAllByWorkOrderId(workOrderId);
-        workOrderPartScanRepository.flush();
+    /** 의장에서 찍은 LOT 을 남긴다. 의장 양품은 작업지시마다 한 번이다 (불량이면 폐기). */
+    private void saveScans(Long workOrderId, List<ScannedLotRequest> scannedLots, String workerId) {
         LocalDateTime now = LocalDateTime.now();
         workOrderPartScanRepository.saveAll(
                 scannedLots.stream()
@@ -404,9 +402,8 @@ public class WorkOrderService {
     }
 
     /**
-     * 공정 종료(작업자)와 설비 완료 보고의 공통: 실적을 남기고(불량 사유는 DEFECT 일 때만), 설비를 놓고, 공정을 마무리하고(양품 DONE, 불량
-     * PENDING), 작업지시 변경을 기록한다. 검사 양품이면 차를 완성한다. 두 경로가 같은 완료 규칙을 쓰게 하려고 한곳에 둔다. workerId 는 설비 보고면
-     * null.
+     * 공정 종료(작업자)와 설비 완료 보고의 공통: 실적을 남기고(불량 사유는 DEFECT 일 때만), 설비를 놓고, 공정을 끝내고(DONE), 작업지시 변경을 기록한다.
+     * 불량이면 차를 폐기하고, 검사 양품이면 차를 완성한다. 두 경로가 같은 완료 규칙을 쓰게 하려고 한곳에 둔다. workerId 는 설비 보고면 null.
      */
     private void finishStep(
             WorkOrder workOrder,
@@ -419,11 +416,27 @@ public class WorkOrderService {
         productionResultRepository.save(
                 ProductionResult.record(step, result, reason, workerId, now));
         findEquipment(step.getEquipmentCode()).release();
-        step.finish(result, now);
+        step.finish(now);
         workOrder.recordStepChange(now);
-        if (result == StepResult.GOOD && step.getProcess().isLast()) {
+        if (result == StepResult.DEFECT) {
+            scrapWorkOrder(workOrder, step, reason, now);
+        } else if (step.getProcess().isLast()) {
             completeWorkOrder(workOrder, now);
         }
+    }
+
+    /**
+     * 불량이 난 차를 폐기하고 production 에 알린다. production 이 같은 주문으로 대체 차를 만든다 (docs/specs/defect-scrap.md).
+     */
+    private void scrapWorkOrder(
+            WorkOrder workOrder, WorkOrderStep step, String defectReason, LocalDateTime now) {
+        workOrder.scrap(now);
+        eventPublisher.publish(
+                new VehicleScrapped(
+                        workOrder.getProductionId(),
+                        workOrder.getId(),
+                        step.getProcess(),
+                        defectReason));
     }
 
     /**
@@ -555,7 +568,7 @@ public class WorkOrderService {
                 .collect(Collectors.groupingBy(WorkOrderStep::getWorkOrderId));
     }
 
-    /** 공정을 바꿀 작업지시. 취소됐으면 WORK_ORDER_CLOSED. */
+    /** 공정을 바꿀 작업지시. 취소·폐기됐으면 WORK_ORDER_CLOSED. */
     private WorkOrder findOpenWorkOrder(Long workOrderId) {
         WorkOrder workOrder = findWorkOrderById(workOrderId);
         if (workOrder.isClosed()) {

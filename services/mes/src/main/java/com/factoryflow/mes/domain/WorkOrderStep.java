@@ -138,15 +138,9 @@ public class WorkOrderStep extends BaseTimeEntity {
         this.startedAt = null;
     }
 
-    /** 양품이면 끝(DONE), 불량이면 재작업을 위해 시작 전(PENDING)으로 돌아간다. */
-    public void finish(StepResult result, LocalDateTime now) {
-        if (result == StepResult.GOOD) {
-            this.status = StepStatus.DONE;
-            this.endedAt = now;
-            return;
-        }
-        this.status = StepStatus.PENDING;
-        this.equipmentCode = null;
-        this.startedAt = null;
+    /** 공정을 끝낸다 (DONE). 불량이어도 같은 공정을 다시 하지 않는다 — 차는 폐기된다 (docs/specs/defect-scrap.md). */
+    public void finish(LocalDateTime now) {
+        this.status = StepStatus.DONE;
+        this.endedAt = now;
     }
 }

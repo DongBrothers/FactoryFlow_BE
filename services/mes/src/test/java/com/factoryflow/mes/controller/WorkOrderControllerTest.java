@@ -142,7 +142,7 @@ class WorkOrderControllerTest {
         start(first, "PRESS", "PRESS-01");
         assertThat(occupiedStepOf("PRESS-01")).isNotNull();
 
-        // 불량이면 재작업으로 돌아가면서 설비를 놓는다
+        // 불량이면 차를 폐기하면서 설비를 놓는다
         complete(first, "PRESS", "{\"result\":\"DEFECT\",\"defectReason\":\"찍힘\"}");
         assertThat(occupiedStepOf("PRESS-01")).isNull();
         start(second, "PRESS", "PRESS-01").andExpect(status().isOk());
@@ -150,7 +150,8 @@ class WorkOrderControllerTest {
         // 양품으로 끝나도 설비를 놓는다
         complete(second, "PRESS", "{\"result\":\"GOOD\"}");
         assertThat(occupiedStepOf("PRESS-01")).isNull();
-        start(first, "PRESS", "PRESS-01").andExpect(status().isOk());
+        long third = releasedWorkOrder(42L, 3L);
+        start(third, "PRESS", "PRESS-01").andExpect(status().isOk());
     }
 
     /**
@@ -198,21 +199,26 @@ class WorkOrderControllerTest {
     }
 
     @Test
-    void defectRecordsResultAndSendsStepBackForRework() throws Exception {
+    void defectRecordsResultAndScrapsTheCar() throws Exception {
+        // 불량이면 같은 공정을 다시 하지 않고 차를 폐기한다 (docs/specs/defect-scrap.md)
         long workOrder = releasedWorkOrder(42L, 1L);
         start(workOrder, "PRESS", "PRESS-01");
-        int eventsBefore = outbox("mes.production-started").size();
 
         complete(workOrder, "PRESS", "{\"result\":\"DEFECT\",\"defectReason\":\"찍힘\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.steps[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.data.status").value("SCRAPPED"))
+                .andExpect(jsonPath("$.data.steps[0].status").value("DONE"))
                 .andExpect(jsonPath("$.data.steps[0].results[0].defectReason").value("찍힘"));
 
-        assertThat(stepStatus(workOrder, "PRESS")).isEqualTo("PENDING");
-        assertThat(outbox("mes.production-started")).hasSize(eventsBefore);
-        // 같은 공정을 다시 한다
-        start(workOrder, "PRESS", "PRESS-02").andExpect(status().isOk());
-        complete(workOrder, "PRESS", "{\"result\":\"GOOD\"}").andExpect(status().isOk());
+        assertThat(workOrderStatus(workOrder)).isEqualTo("SCRAPPED");
+        String scrapped = outbox("mes.vehicle-scrapped").get(0);
+        assertThat(((Number) JsonPath.read(scrapped, "$.payload.workOrderId")).longValue())
+                .isEqualTo(workOrder);
+        assertThat(JsonPath.<String>read(scrapped, "$.payload.process")).isEqualTo("PRESS");
+        // 폐기된 차는 더 진행하지 않는다
+        start(workOrder, "BODY", "BODY-01")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WORK_ORDER_CLOSED"));
         assertThat(
                         jdbc.queryForList(
                                 "SELECT r.result FROM production_result r"
@@ -220,7 +226,7 @@ class WorkOrderControllerTest {
                                         + " WHERE s.work_order_id = ? ORDER BY r.id",
                                 String.class,
                                 workOrder))
-                .containsExactly("DEFECT", "GOOD");
+                .containsExactly("DEFECT");
     }
 
     @Test

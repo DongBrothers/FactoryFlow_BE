@@ -6,18 +6,18 @@
 - MongoDB (spring.mongodb.uri, 데이터베이스 mes): 공정 센서값 시계열 컬렉션 step_telemetry (timeField measuredAt, metaField meta, 90일 보관). 컬렉션은 처음 저장할 때 만든다. 업무 상태·이벤트는 MySQL, MongoDB 는 기록성 데이터에만 (docs/specs/process-telemetry.md, docs/planning/erp-mes-boundary.md)
 - 라우팅: 모든 차종 공통 PRESS → BODY → PAINT → ASSEMBLY → INSPECTION (docs/planning/production-flow.md)
 - 작업지시 생성: production.released 수신 시 작업지시 RELEASED + 공정 5개 PENDING. 같은 생산 건이 이미 있으면 건너뜀
-- 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + mes.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API(/mes/work-orders/{id}/steps/{process}/start·complete)로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량은 실적만 남기고 같은 공정 재작업
-- 생산 시작: 작업지시의 첫 시작(배정 또는 작업자 시작)에서 mes.production-started (이후 취소 불가). 불량 재작업 재시작은 보내지 않음
+- 공정 진행 (혼합 자동화): 로봇 공정(PRESS, BODY, PAINT)은 배정 스케줄러가 앞 공정이 끝난 차를 비어 있는 RUNNING 설비에 배정(DISPATCHED + mes.step-dispatched)하고, 설비 보고(equipment.step-started / step-completed)로 진행한다. 사람 공정(ASSEMBLY, INSPECTION)은 작업자 API(/mes/work-orders/{id}/steps/{process}/start·complete)로 시작·종료와 실적(양품/불량). 작업자 API 는 로봇 공정 수동 개입에도 쓴다. 순서대로만, 설비가 RUNNING 일 때만. 불량이면 실적을 남기고 차 폐기: 작업지시 SCRAPPED + mes.vehicle-scrapped, 폐기된 작업지시는 배정·시작·보고에서 빠진다 (docs/specs/defect-scrap.md)
+- 생산 시작: 작업지시의 첫 시작(배정 또는 작업자 시작)에서 mes.production-started (이후 취소 불가). 되돌린 공정의 재시작은 보내지 않음
 - 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
 - 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
 - 완료: 검사 양품 → VIN 발행 → 작업지시 COMPLETED + mes.vehicle-completed (production 이 생산 건 완료와 production.completed)
-- LOT 스캔: 의장(ASSEMBLY) 양품 완료 요청의 scannedLots(부품마다 LOT 하나, 선택)를 work_order_part_scan 에 남긴다(재작업 뒤 다시 양품이면 바꿈). 다른 공정·불량이면 400 SCAN_NOT_ALLOWED. 완료 때 mes.vehicle-completed 의 scannedLots 로 보낸다 (docs/specs/part-lot-scan.md)
+- LOT 스캔: 의장(ASSEMBLY) 양품 완료 요청의 scannedLots(부품마다 LOT 하나, 선택)를 work_order_part_scan 에 남긴다. 다른 공정·불량이면 400 SCAN_NOT_ALLOWED. 완료 때 mes.vehicle-completed 의 scannedLots 로 보낸다 (docs/specs/part-lot-scan.md)
 - 부품 계보(VIN ↔ LOT)의 주인: 찍은 LOT 으로 GET /mes/vehicles/{vin}/part-lots(부품 id 순), GET /mes/part-lots/{lotNo}/vehicles(리콜, 찍은 시각 순, 검사 전 차는 vin null). 부품 이름·출고 여부는 inventory 조회로 붙인다 (PartScanService, docs/specs/part-genealogy.md)
 - 취소 판단: production.release-cancel-requested 수신 시 작업지시가 RELEASED(첫 공정 전)면 CANCELLED + mes.work-order-cancelled, 시작했으면 mes.work-order-cancel-rejected(작업지시 상태). 작업지시가 아직 없으면(발행보다 먼저 옴) CANCELLED 작업지시를 남기고 cancelled
 - 설비 목록(V2 시드)과 센서 항목·범위(TelemetryParameter)는 simulator 에도 있다. 명세 표(equipment-status.md "설비 목록", process-telemetry.md)가 기준이고 SpecTablesTest 가 맞춰 본다 (#179)
 - 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
 - 센서값: equipment.step-telemetry 수신 → step_telemetry 에 샘플마다 문서 1개. 메시지당 300개 넘으면 저장하지 않고 DLQ, 조회는 한 번에 5,000개까지(truncated). 조회 GET /mes/work-orders/{id}/steps/{process}/telemetry(로봇 공정만, 회차별), GET /mes/equipments/{code}/telemetry?from=&to=(최대 1시간). 테스트는 MongoContainerConfig 를 함께 가져온다
-- 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected
+- 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.vehicle-scrapped, mes.work-order-cancelled, mes.work-order-cancel-rejected
 - 수신: production.released, production.release-cancel-requested, equipment.step-started, equipment.step-completed, equipment.status-changed, equipment.step-telemetry
 - API: GET /mes/work-orders, /mes/work-orders/{id}, POST 공정 시작·종료, GET /mes/equipments?process=, 부품 계보 GET /mes/vehicles/{vin}/part-lots·/mes/part-lots/{lotNo}/vehicles (gateway /api/mes/**)
 - 설정: factoryflow.line.*, spring.mongodb.uri 는 공통 application.yml 이 아니라 환경별 application-{local,dev,test}.yml 에 둔다. 테스트는 test 프로필 (src/test/resources/application-test.yml)

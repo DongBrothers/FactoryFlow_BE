@@ -166,7 +166,8 @@ class LineDispatchTest {
     }
 
     @Test
-    void defectReportSendsStepBackAndItIsDispatchedAgain() {
+    void defectReportScrapsTheCarAndItIsNotDispatchedAgain() {
+        // 불량이면 같은 공정을 다시 하지 않고 차를 폐기한다 (docs/specs/defect-scrap.md)
         long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
         String press = (String) step(workOrder, "PRESS").get("equipment_code");
@@ -174,11 +175,16 @@ class LineDispatchTest {
 
         listener.onStepCompleted(completed(workOrder, "PRESS", press, "DEFECT", "찍힘"));
 
-        assertThat(step(workOrder, "PRESS")).containsEntry("status", "PENDING");
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DONE");
+        assertThat(workOrderStatus(workOrder)).isEqualTo("SCRAPPED");
+        List<String> scrapped = outbox("mes.vehicle-scrapped");
+        assertThat(scrapped).hasSize(1);
+        assertThat(JsonPath.<String>read(scrapped.get(0), "$.payload.process")).isEqualTo("PRESS");
+        assertThat(JsonPath.<String>read(scrapped.get(0), "$.payload.defectReason"))
+                .isEqualTo("찍힘");
         dispatcher.dispatchAll();
-        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DISPATCHED");
-        // 재작업으로 다시 배정해도 생산 시작 알림은 처음 한 번뿐이다
-        assertThat(outbox("mes.production-started")).hasSize(1);
+        assertThat(step(workOrder, "BODY")).containsEntry("status", "PENDING");
+        assertThat(outbox("mes.step-dispatched")).hasSize(1);
     }
 
     @Test
