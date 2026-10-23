@@ -81,6 +81,40 @@ class MesEventListenerTest {
     }
 
     @Test
+    void scannedLotsArePassedOnToInventoryAsTheyCame() {
+        // 의장 공정에서 찍은 LOT 을 production.completed 에 그대로 싣는다 (docs/specs/part-lot-scan.md)
+        long production = releasedProduction(1);
+        List<Map<String, Object>> scans =
+                List.of(
+                        Map.of("partId", 1001, "lotNo", "LOT-261017-000012"),
+                        Map.of("partId", 1018, "lotNo", "LOT-INIT-1018"));
+
+        listener.onVehicleCompleted(
+                event(
+                        "mes.vehicle-completed",
+                        Map.of(
+                                "productionId", production,
+                                "workOrderId", 12L,
+                                "vin", VIN,
+                                "scannedLots", scans)));
+
+        String completed = outbox("production.completed").get(0);
+        assertThat(JsonPath.<List<Map<String, Object>>>read(completed, "$.payload.scannedLots"))
+                .containsExactlyElementsOf(scans);
+    }
+
+    @Test
+    void vehicleCompletedWithoutScannedLotsSendsAnEmptyList() {
+        // 이 변경 전에 보낸 mes.vehicle-completed 에는 scannedLots 가 없다
+        long production = releasedProduction(1);
+
+        listener.onVehicleCompleted(vehicleCompleted(production));
+
+        String completed = outbox("production.completed").get(0);
+        assertThat(JsonPath.<List<Object>>read(completed, "$.payload.scannedLots")).isEmpty();
+    }
+
+    @Test
     void completionArrivingBeforeTheStartStillCompletesAndTheLateStartIsIgnored() {
         // 큐가 달라 완성 알림이 시작 알림보다 먼저 올 수 있다
         long production = releasedProduction(1);

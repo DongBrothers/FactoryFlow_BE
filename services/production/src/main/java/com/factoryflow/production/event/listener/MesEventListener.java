@@ -8,6 +8,7 @@ import com.factoryflow.production.event.listener.payload.MesProductionStarted;
 import com.factoryflow.production.event.listener.payload.MesVehicleCompleted;
 import com.factoryflow.production.event.listener.payload.MesWorkOrderCancelRejected;
 import com.factoryflow.production.event.listener.payload.MesWorkOrderCancelled;
+import com.factoryflow.production.event.publisher.payload.CompletedPartLot;
 import com.factoryflow.production.service.ProductionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -37,7 +38,13 @@ public class MesEventListener {
                 objectMapper.treeToValue(envelope.payload(), MesVehicleCompleted.class);
         processedEventGuard.runOnce(
                 envelope,
-                () -> productionService.completeProduction(event.productionId(), event.vin()));
+                () ->
+                        productionService.completeProduction(
+                                event.productionId(),
+                                event.vin(),
+                                event.scannedLotsOrEmpty().stream()
+                                        .map(lot -> new CompletedPartLot(lot.partId(), lot.lotNo()))
+                                        .toList()));
     }
 
     @RabbitListener(queues = EventQueueConfig.MES_WORK_ORDER_CANCELLED_QUEUE)
