@@ -29,7 +29,7 @@ class MigrationTest extends MigrationTestSupport {
                                 + " created_at, updated_at) VALUES (?, 'worker@gmail.com', 'hash',"
                                 + " '작업자', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
                         UUID.randomUUID().toString());
-        jdbc = migrateTo("5");
+        jdbc = migrateTo("6");
     }
 
     @Test
@@ -100,11 +100,57 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void v5SeedsFourRoles() {
+        // 뒤 마이그레이션이 역할을 더할 수 있어, V5 의 4개가 이 순서로 있는지만 본다
         assertThat(
                         jdbc.queryForList(
                                 "SELECT CONCAT(code, ':', name) FROM role ORDER BY sort_order",
                                 String.class))
-                .containsExactly("SALES:영업", "PURCHASE:구매", "PRODUCTION:생산", "ADMIN:관리자");
+                .containsSubsequence("SALES:영업", "PURCHASE:구매", "PRODUCTION:생산", "ADMIN:관리자");
+    }
+
+    @Test
+    void v6SeedsPermissions() {
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(code, ':', name) FROM permission", String.class))
+                .contains(
+                        "READ:조회",
+                        "ORDER_WRITE:주문 쓰기",
+                        "PRODUCTION_WRITE:생산 쓰기",
+                        "PURCHASE_WRITE:구매 쓰기",
+                        "ACCOUNT_ADMIN:계정 관리");
+    }
+
+    @Test
+    void v6GrantsSamePermissionsAsTheOldGatewayTable() {
+        // docs/specs/role-permissions.md "V6 이 처음 넣는 역할별 권한"
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(r.code, ':', p.code) FROM role_permission rp"
+                                        + " JOIN role r ON r.id = rp.role_id"
+                                        + " JOIN permission p ON p.id = rp.permission_id"
+                                        + " WHERE r.code IN ('SALES', 'PURCHASE', 'PRODUCTION', 'ADMIN')",
+                                String.class))
+                .containsExactlyInAnyOrder(
+                        "SALES:READ",
+                        "SALES:ORDER_WRITE",
+                        "PURCHASE:READ",
+                        "PURCHASE:PURCHASE_WRITE",
+                        "PRODUCTION:READ",
+                        "PRODUCTION:PRODUCTION_WRITE",
+                        "ADMIN:ACCOUNT_ADMIN");
+    }
+
+    @Test
+    void rejectsDuplicateRolePermission() {
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO role_permission (role_id, permission_id)"
+                                                + " SELECT r.id, p.id FROM role r, permission p"
+                                                + " WHERE r.code = 'SALES' AND p.code = 'READ'"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_role_permission");
     }
 
     @Test

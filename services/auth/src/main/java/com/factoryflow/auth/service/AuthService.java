@@ -3,13 +3,17 @@ package com.factoryflow.auth.service;
 import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.AccountStatus;
 import com.factoryflow.auth.domain.PendingAccount;
+import com.factoryflow.auth.domain.Permission;
 import com.factoryflow.auth.domain.Role;
+import com.factoryflow.auth.domain.RolePermission;
 import com.factoryflow.auth.domain.UserAccount;
 import com.factoryflow.auth.dto.request.ActivateAccountRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
 import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.exception.AuthErrorCode;
+import com.factoryflow.auth.repository.PermissionRepository;
+import com.factoryflow.auth.repository.RolePermissionRepository;
 import com.factoryflow.auth.repository.RoleRepository;
 import com.factoryflow.auth.repository.UserAccountRepository;
 import com.factoryflow.auth.service.jwt.JwtProvider;
@@ -18,6 +22,7 @@ import com.factoryflow.auth.service.redis.ActivationTokenStore;
 import com.factoryflow.auth.service.redis.LoginAttemptGuard;
 import com.factoryflow.auth.service.redis.RefreshTokenStore;
 import com.factoryflow.common.web.exception.CustomException;
+import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +38,8 @@ public class AuthService {
 
     private final UserAccountRepository repository;
     private final RoleRepository roleRepository;
+    private final RolePermissionRepository rolePermissionRepository;
+    private final PermissionRepository permissionRepository;
     private final ActivationTokenStore activationTokenStore;
     private final ActivationNotifier notifier;
     private final PasswordEncoder passwordEncoder;
@@ -174,9 +181,21 @@ public class AuthService {
         return roleRepository.findById(id).orElseThrow();
     }
 
+    /** 역할이 가진 권한 코드 (role_permission). 권한이 없는 역할이면 빈 목록이다. */
+    private List<String> findPermissionCodes(Long roleId) {
+        List<Long> permissionIds =
+                rolePermissionRepository.findAllByRoleId(roleId).stream()
+                        .map(RolePermission::getPermissionId)
+                        .toList();
+        return permissionRepository.findAllById(permissionIds).stream()
+                .map(Permission::getCode)
+                .toList();
+    }
+
     private IssuedTokens issueTokens(UserAccount account) {
         String role = findRoleById(account.getRoleId()).getCode();
-        String accessToken = jwtProvider.createAccessToken(account, role);
+        List<String> permissions = findPermissionCodes(account.getRoleId());
+        String accessToken = jwtProvider.createAccessToken(account, role, permissions);
         String refreshToken = refreshTokenStore.issue(account.getPublicId());
         return new IssuedTokens(accessToken, refreshToken);
     }
