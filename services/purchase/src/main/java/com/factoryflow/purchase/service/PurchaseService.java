@@ -8,24 +8,15 @@ import com.factoryflow.purchase.client.inventory.dto.response.PartResponse;
 import com.factoryflow.purchase.client.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.purchase.domain.Purchase;
 import com.factoryflow.purchase.domain.PurchaseStatus;
-import com.factoryflow.purchase.domain.Supplier;
 import com.factoryflow.purchase.dto.request.CreatePurchaseRequest;
 import com.factoryflow.purchase.dto.response.PurchaseResponse;
 import com.factoryflow.purchase.dto.response.PurchaseSuggestionResponse;
 import com.factoryflow.purchase.event.publisher.payload.PurchaseReceived;
 import com.factoryflow.purchase.exception.PurchaseErrorCode;
-import com.factoryflow.purchase.repository.OrderedTotal;
 import com.factoryflow.purchase.repository.PurchaseRepository;
-import com.factoryflow.purchase.repository.SupplierRepository;
 import java.time.LocalDateTime;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -40,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PurchaseService {
 
     private final PurchaseRepository purchaseRepository;
-    private final SupplierRepository supplierRepository;
+    private final PurchaseSuggestionReader purchaseSuggestionReader;
     private final PurchaseWriter purchaseWriter;
     private final PartClient partClient;
     private final EventPublisher eventPublisher;
@@ -117,58 +108,29 @@ public class PurchaseService {
     }
 
     /**
-     * 발주 제안: inventory 의 부족 부품마다 발주 중(ORDERED) 수량을 빼 더 살 수량을 정하고, 가장 최근 구매 건의 공급업체를 붙인다. 더 살 수량 큰
-     * 순, 같으면 부품 코드 순 (docs/specs/purchase-suggestion.md). inventory 호출은 트랜잭션 밖이다.
+     * 발주 제안: inventory 의 부족 부품마다 발주 중(ORDERED) 수량을 빼 더 살 수량을 정하고, 가장 최근 구매 건의 공급업체를 붙인다
+     * (docs/specs/purchase-suggestion.md). inventory 호출은 트랜잭션 밖이고, DB 읽기는 PurchaseSuggestionReader
+     * 가 한 트랜잭션에서 한다.
      */
     public List<PurchaseSuggestionResponse> findSuggestions() {
         List<PartShortageResponse> shortages = partClient.findShortages();
         if (shortages.isEmpty()) {
             return List.of();
         }
-        List<Long> partIds = shortages.stream().map(PartShortageResponse::partId).toList();
-        Map<Long, Long> orderedQtyByPart = orderedQtyByPart(partIds);
-        Map<Long, Supplier> lastSupplierByPart = lastSupplierByPart(partIds);
+        PurchaseHistory history =
+                purchaseSuggestionReader.read(
+                        shortages.stream().map(PartShortageResponse::partId).toList());
         return shortages.stream()
                 .map(
                         shortage ->
                                 PurchaseSuggestionResponse.of(
                                         shortage,
-                                        orderedQtyByPart.getOrDefault(shortage.partId(), 0L),
-                                        lastSupplierByPart.get(shortage.partId())))
+                                        history.orderedQtyOf(shortage.partId()),
+                                        history.lastSupplierOf(shortage.partId())))
                 .sorted(
                         Comparator.comparingLong(PurchaseSuggestionResponse::suggestedQty)
                                 .reversed()
                                 .thenComparing(PurchaseSuggestionResponse::partCode))
                 .toList();
-    }
-
-    private Map<Long, Long> orderedQtyByPart(List<Long> partIds) {
-        return purchaseRepository.sumOrderedQtyByPart(partIds).stream()
-                .collect(Collectors.toMap(OrderedTotal::partId, OrderedTotal::qty));
-    }
-
-    /** 부품마다 가장 최근 구매 건의 공급업체. 지운 공급업체도 이름을 보여 준다. */
-    private Map<Long, Supplier> lastSupplierByPart(List<Long> partIds) {
-        List<Purchase> latest = findLatestPurchases(partIds);
-        Map<Long, Supplier> suppliers =
-                findSuppliers(
-                        latest.stream()
-                                .map(Purchase::getSupplierId)
-                                .filter(Objects::nonNull)
-                                .collect(Collectors.toSet()));
-        Map<Long, Supplier> byPart = new HashMap<>();
-        latest.stream()
-                .filter(p -> suppliers.containsKey(p.getSupplierId()))
-                .forEach(p -> byPart.put(p.getPartId(), suppliers.get(p.getSupplierId())));
-        return byPart;
-    }
-
-    private List<Purchase> findLatestPurchases(List<Long> partIds) {
-        return purchaseRepository.findAllById(purchaseRepository.findLatestIdsByPart(partIds));
-    }
-
-    private Map<Long, Supplier> findSuppliers(Set<Long> supplierIds) {
-        return supplierRepository.findAllById(supplierIds).stream()
-                .collect(Collectors.toMap(Supplier::getId, Function.identity()));
     }
 }
