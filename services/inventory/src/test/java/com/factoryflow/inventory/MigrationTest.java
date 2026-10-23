@@ -22,7 +22,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("9");
+        jdbc = migrateTo("10");
     }
 
     @Test
@@ -399,6 +399,24 @@ class MigrationTest extends MigrationTestSupport {
                 purchaseId,
                 receivedQty,
                 remainingQty);
+    }
+
+    @Test
+    void v10LotUsageSourceDefaultsToFifo() {
+        // 의장 공정 LOT 스캔 전 기록은 모두 입고 순 배정이다 (docs/specs/part-lot-scan.md)
+        jdbc.update(
+                "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at)"
+                        + " VALUES ('KMH000017TU001001', 1, 1, NOW(6))");
+        jdbc.update(
+                "INSERT INTO part_lot_usage (vin, lot_id, qty, source, created_at)"
+                        + " VALUES ('KMH000017TU001002', 1, 1, 'SCANNED', NOW(6))");
+
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT source FROM part_lot_usage WHERE vin IN"
+                                        + " ('KMH000017TU001001', 'KMH000017TU001002') ORDER BY vin",
+                                String.class))
+                .containsExactly("FIFO", "SCANNED");
     }
 
     @Test
