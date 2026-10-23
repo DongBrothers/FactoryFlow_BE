@@ -1,5 +1,7 @@
 # 부품 LOT ↔ VIN (입고 때 LOT 부여 → 생산 완료 때 소모 LOT 기록 → VIN 으로 조회)
 
+> **#176 에서 바뀜:** 차 ↔ LOT 계보는 mes 가 갖는다 (의장에서 찍은 LOT, docs/specs/part-genealogy.md). 아래 "2. 생산 완료" 의 `part_lot_usage` 기록과 "3. VIN 조회", "4. LOT 조회" API 는 없앴다 (inventory V11 에서 테이블 삭제). inventory 는 LOT 부여(입고·조정·초기 재고)와 LOT 남은 수량 차감, LOT 별 재고 조회만 한다.
+
 ## 목적
 주문 이행 SAGA(docs/specs/saga-order-fulfillment.md) 성공 흐름 9번의 "소모한 부품 LOT ↔ VIN 연결"이다 (#76).
 입고 한 번에 LOT 하나를 붙이고, 차가 완성될 때 그 차에 들어간 부품이 어느 LOT 에서 나왔는지 남긴다.

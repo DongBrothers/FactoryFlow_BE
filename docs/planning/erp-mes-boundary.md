@@ -33,7 +33,7 @@ ERP (production)  ── production.released ───────────�
 |---|---|---|
 | 작업지시 발행 결정 | production (ERP) | 계획의 마지막 단계. 발행 대기 목록을 보고 사람이 정한다 |
 | VIN 발급 | mes | 검사를 통과하는 현장 시점에 정해진다 |
-| 부품 LOT ↔ VIN 추적 | inventory (ERP) | 원래는 MES 의 제품 계보 기능이지만, 완성 때 부품 사용 처리·LOT 차감과 한 트랜잭션이라 inventory 에 둔다 |
+| 부품 LOT ↔ VIN 추적 (제품 계보) | mes | 의장 현장에서 찍은 LOT 이 계보다 (`work_order_part_scan`, 조회 `/mes/vehicles/{vin}/part-lots`, `/mes/part-lots/{lotNo}/vehicles`). inventory 는 LOT 재고 수량만 줄인다 (찍은 LOT 부터, 안 찍은 부품은 입고 순). 안 찍은 부품은 계보가 없다 (#174, #176, docs/specs/part-genealogy.md) |
 | 완성차 보관 위치·출고 | inventory (ERP) | 창고 물류 |
 | 공정 센서값 | mes (MongoDB) | 현장 데이터 이력. 업무 상태가 아니라 기록이라 MongoDB 에 둔다 |
 
