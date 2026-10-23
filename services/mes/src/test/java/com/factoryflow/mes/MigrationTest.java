@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("3");
+        jdbc = migrateTo("4");
     }
 
     @Test
@@ -117,6 +117,18 @@ class MigrationTest extends MigrationTestSupport {
         assertThatThrownBy(() -> insertScan(1, 1001, "LOT-261017-000013"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("uk_work_order_part_scan");
+    }
+
+    @Test
+    void v4FindsScansByLotNo() {
+        // 부품 계보: LOT 으로 차를 찾는다 (docs/specs/part-genealogy.md)
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT COLUMN_NAME FROM information_schema.STATISTICS"
+                                        + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'work_order_part_scan'"
+                                        + " AND INDEX_NAME = 'idx_work_order_part_scan_lot'",
+                                String.class))
+                .containsExactly("lot_no");
     }
 
     @Test
