@@ -13,6 +13,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    // 역할 → 권한 표를 auth 가 Redis 로 보낸다 (docs/specs/role-permission-admin.md). WebFlux 라 reactive
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
 
     testImplementation project(':common:common-test')
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -21,10 +23,9 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-mysql'
     testImplementation 'org.testcontainers:testcontainers-rabbitmq'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    // gateway 는 DB, MQ, Redis 를 쓰지 않는다. 통합 테스트가 TestContainersConfig 를 import 해야 하는데(ArchUnit),
+    // gateway 는 DB, MQ 를 쓰지 않는다. 통합 테스트가 TestContainersConfig 를 import 해야 하는데(ArchUnit),
     // 그 컨테이너의 @ServiceConnection 이 연결 대상을 찾도록 테스트에만 둔다
     testImplementation 'org.springframework.boot:spring-boot-starter-jdbc'
     testImplementation 'org.springframework.boot:spring-boot-starter-amqp'
-    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis'
     testRuntimeOnly 'com.mysql:mysql-connector-j'
 }

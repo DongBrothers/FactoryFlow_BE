@@ -10,8 +10,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
@@ -27,10 +25,11 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
 /**
- * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 permissions 클레임으로 접근을 제어한다 (역할 이름은 보지 않는다).
- * 로그인·활성화·재발급·로그아웃은 공개(토큰을 검증하지 않음), /api/auth/admin/** 은 ACCOUNT_ADMIN, 조회(GET)는 READ, 쓰기는 권한 표의
- * 권한만, 표에 없는 요청은 아무도 못 한다 (docs/specs/role-permissions.md). 새 API 를 열려면 표와 여기에 더한다. 경로는 브라우저가 부르는 밖
- * 주소 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
+ * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, 토큰의 role 로 역할 → 권한 표(RolePermissionTable, Redis 로
+ * 받음)에서 권한을 찾아 접근을 제어한다. 역할 이름은 코드에 두지 않는다. 로그인·활성화·재발급·로그아웃은 공개(토큰을 검증하지 않음), 내 정보는 로그인한 직원 모두,
+ * /api/auth/admin/** 은 ACCOUNT_ADMIN, 조회(GET)는 READ, 쓰기는 권한 표의 권한만, 표에 없는 요청은 아무도 못 한다
+ * (docs/specs/role-permissions.md, role-permission-admin.md). 새 API 를 열려면 표와 여기에 더한다. 경로는 브라우저가 부르는
+ * 밖 주소 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
  * (docs/specs/auth-account.md)
  */
 @Configuration
@@ -38,8 +37,8 @@ import reactor.core.publisher.Mono;
 public class SecurityConfig {
 
     /**
-     * 권한 코드 (docs/specs/role-permissions.md). 역할이 어떤 권한을 갖는지는 auth DB(role_permission)가 정하고 JWT
-     * permissions 클레임으로 온다. 여기는 API 마다 필요한 권한만 둔다.
+     * 권한 코드 (docs/specs/role-permissions.md). 역할이 어떤 권한을 갖는지는 auth DB(role_permission)가 정하고 Redis 로
+     * 온다 (RolePermissionTable). 여기는 API 마다 필요한 권한만 둔다.
      */
     private static final String READ = "READ";
 
@@ -63,7 +62,9 @@ public class SecurityConfig {
 
     @Bean
     SecurityWebFilterChain securityWebFilterChain(
-            ServerHttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
+            ServerHttpSecurity http,
+            CorsConfigurationSource corsConfigurationSource,
+            RolePermissionTable rolePermissionTable) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .authorizeExchange(SecurityConfig::authorizeByPermission)
@@ -78,17 +79,22 @@ public class SecurityConfig {
                         oauth ->
                                 oauth.bearerTokenConverter(bearerTokenOutsidePublicPaths())
                                         .authenticationEntryPoint(GatewayErrors::unauthorized)
-                                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter())))
+                                        .jwt(
+                                                jwt ->
+                                                        jwt.jwtAuthenticationConverter(
+                                                                jwtConverter(rolePermissionTable))))
                 .build();
     }
 
     /**
-     * 권한 표 (docs/specs/role-permissions.md): 공개 경로, 계정 관리는 ACCOUNT_ADMIN, 쓰기는 표의 권한만, 조회는 READ, 표에
-     * 없는 요청은 아무도 못 한다. 역할 이름은 보지 않는다.
+     * 권한 표 (docs/specs/role-permissions.md): 공개 경로, 내 정보는 로그인만(권한 없이), 계정 관리는 ACCOUNT_ADMIN, 쓰기는 표의
+     * 권한만, 조회는 READ, 표에 없는 요청은 아무도 못 한다. 역할 이름은 보지 않는다.
      */
     private static void authorizeByPermission(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
         exchange.matchers(PUBLIC_PATHS)
                 .permitAll()
+                .pathMatchers(HttpMethod.GET, "/api/auth/me")
+                .authenticated()
                 .pathMatchers("/api/auth/admin/**")
                 .hasAuthority(ACCOUNT_ADMIN);
         authorizeWrites(exchange);
@@ -157,21 +163,14 @@ public class SecurityConfig {
     }
 
     /**
-     * JWT 의 permissions 클레임(["READ", "ORDER_WRITE"])을 그대로 권한으로 쓴다. 클레임이 없는 토큰(permissions 전에 받은
-     * 토큰)은 권한이 없다. role 클레임은 보지 않는다.
+     * 토큰의 role 클레임으로 역할 → 권한 표에서 권한을 찾는다. 표에 없는 역할이나 role 이 없는 토큰은 권한이 없다
+     * (docs/specs/role-permission-admin.md).
      */
-    private Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtConverter() {
+    private Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtConverter(
+            RolePermissionTable rolePermissionTable) {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(
-                jwt -> {
-                    List<String> permissions = jwt.getClaimAsStringList("permissions");
-                    if (permissions == null) {
-                        return List.<GrantedAuthority>of();
-                    }
-                    return permissions.stream()
-                            .<GrantedAuthority>map(SimpleGrantedAuthority::new)
-                            .toList();
-                });
+                jwt -> rolePermissionTable.authorities(jwt.getClaimAsString("role")));
         return new ReactiveJwtAuthenticationConverterAdapter(converter);
     }
 }

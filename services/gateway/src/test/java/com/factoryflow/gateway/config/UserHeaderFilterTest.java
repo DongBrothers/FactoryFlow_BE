@@ -58,7 +58,7 @@ class UserHeaderFilterTest extends GatewayTestSupport {
     void expiredTokenOnPublicPathReachesBackendWithoutUserId() {
         client.post()
                 .uri("/api/auth/token/refresh")
-                .header("Authorization", "Bearer " + PermissionTokenDecoder.EXPIRED)
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
                 .header("X-User-Id", "forged-user")
                 .exchange()
                 .expectStatus()

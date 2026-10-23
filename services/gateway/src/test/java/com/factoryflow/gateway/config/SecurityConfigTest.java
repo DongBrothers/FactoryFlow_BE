@@ -15,12 +15,12 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
- * gateway 의 권한 확인. admin API 는 JWT 의 permissions 에 ACCOUNT_ADMIN 이 있을 때만 통과한다 (auth 는 다시 확인하지 않는다).
- * 라우트가 없으므로 통과하면 404, 막히면 401·403 이다. 토큰 해석만 PermissionTokenDecoder 로 바꾸고, 클레임 → 권한 변환은
+ * gateway 의 권한 확인. admin API 는 토큰의 role 이 역할 → 권한 표에서 ACCOUNT_ADMIN 을 가질 때만 통과한다 (auth 는 다시 확인하지
+ * 않는다). 라우트가 없으므로 통과하면 404, 막히면 401·403 이다. 토큰 해석만 RoleTokenDecoder 로 바꾸고, 클레임 → 권한 변환은
  * SecurityConfig 그대로 쓴다. (docs/specs/auth-account.md)
  */
 @WebFluxTest
-@Import({SecurityConfig.class, PermissionTokenDecoder.class})
+@Import({SecurityConfig.class, RoleTokenDecoder.class, TestRolePermissions.class})
 class SecurityConfigTest {
 
     private static final String UNAUTHORIZED_BODY =
@@ -80,7 +80,7 @@ class SecurityConfigTest {
     void publicPathIgnoresExpiredToken(String path) {
         client.post()
                 .uri(path)
-                .header("Authorization", "Bearer " + PermissionTokenDecoder.EXPIRED)
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
                 .exchange()
                 .expectStatus()
                 .isNotFound();
@@ -90,7 +90,7 @@ class SecurityConfigTest {
     void protectedPathRejectsExpiredToken() {
         client.get()
                 .uri("/api/orders/1")
-                .header("Authorization", "Bearer " + PermissionTokenDecoder.EXPIRED)
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
                 .exchange()
                 .expectStatus()
                 .isUnauthorized();
@@ -129,7 +129,7 @@ class SecurityConfigTest {
     void expiredTokenBodyIsCommonFormat() {
         client.get()
                 .uri("/api/orders/1")
-                .header("Authorization", "Bearer " + PermissionTokenDecoder.EXPIRED)
+                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
                 .exchange()
                 .expectStatus()
                 .isUnauthorized()
