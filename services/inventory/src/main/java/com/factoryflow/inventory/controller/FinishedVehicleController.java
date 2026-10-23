@@ -3,9 +3,7 @@ package com.factoryflow.inventory.controller;
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.inventory.dto.response.FinishedVehicleListResponse;
 import com.factoryflow.inventory.dto.response.ShipFinishedVehicleResponse;
-import com.factoryflow.inventory.dto.response.VehiclePartLotResponse;
 import com.factoryflow.inventory.service.FinishedVehicleService;
-import com.factoryflow.inventory.service.PartLotService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -13,7 +11,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +29,6 @@ public class FinishedVehicleController {
     private static final String VIN = "[A-HJ-NPR-Z0-9]{17}";
 
     private final FinishedVehicleService finishedVehicleService;
-    private final PartLotService partLotService;
 
     @Operation(
             summary = "완성차 목록",
@@ -97,30 +93,5 @@ public class FinishedVehicleController {
                     String vin) {
         ShipFinishedVehicleResponse vehicle = finishedVehicleService.ship(vin);
         return ApiResponse.ok(vehicle);
-    }
-
-    @Operation(
-            summary = "차에 쓰인 부품 LOT",
-            description =
-                    "완성차 한 대에 들어간 부품이 어느 LOT 에서 나왔는지 본다. 부품 코드 순이고, LOT 번호가 없으면 LOT 을 붙이기 전부터 있던 재고에서 썼다는 뜻이다.")
-    @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "200",
-                description = "조회 성공. 이 기능 전에 완성된 차는 빈 목록"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "400",
-                description = "vin 이 차대번호 형식이 아님 (17자, 영문 대문자·숫자, I·O·Q 없음)"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                responseCode = "404",
-                description = "완성차 없음 (FINISHED_VEHICLE_NOT_FOUND)")
-    })
-    @GetMapping("/{vin}/part-lots")
-    public ApiResponse<List<VehiclePartLotResponse>> findPartLots(
-            @Parameter(description = "차대번호", example = "KMH000017TU000012")
-                    @PathVariable("vin")
-                    @Pattern(regexp = VIN)
-                    String vin) {
-        List<VehiclePartLotResponse> partLots = partLotService.findPartLotsOfVehicle(vin);
-        return ApiResponse.ok(partLots);
     }
 }

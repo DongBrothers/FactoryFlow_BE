@@ -1,5 +1,7 @@
 # 의장 공정 LOT 스캔 (부품 LOT ↔ VIN 을 현장에서 기록)
 
+> **#176 에서 바뀜:** inventory 의 VIN 별 기록(`part_lot_usage`, source)과 조회 API 를 없애고, 계보 조회는 mes 로 옮겼다 (docs/specs/part-genealogy.md). 아래 "3. 재고 차감" 의 LOT 고르기는 그대로이고 기록만 남기지 않는다. "4. 조회에 스캔 여부를 보인다" 는 없어졌다.
+
 ## 목적
 지금 차에 들어간 부품 LOT(`part_lot_usage`)은 생산 완료 때 inventory 가 **먼저 들어온 LOT 부터 배정한 추정값**이다 (docs/specs/part-lot.md). 실제로 어느 LOT 을 달았는지는 모른다.
 현업은 의장 라인에서 작업자가 중요 부품(엔진, ECU 등)의 LOT 바코드를 찍고, MES 가 "이 차에 이 LOT" 을 기록한다(제품 계보). ERP 는 그 LOT 으로 재고를 뺀다. 리콜 때 이 기록으로 대상 차를 찾는다 (#170 3번, docs/planning/erp-mes-boundary.md "회색 지대").

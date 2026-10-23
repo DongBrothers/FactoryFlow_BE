@@ -34,7 +34,6 @@ class PartMasterTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM part");
     }

@@ -2,16 +2,13 @@ package com.factoryflow.inventory.event.listener;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.groups.Tuple.tuple;
 
 import com.factoryflow.common.event.EventEnvelope;
 import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.test.container.TestContainersConfig;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,7 +39,6 @@ class PartLotAllocationTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM stock_history");
@@ -96,12 +92,7 @@ class PartLotAllocationTest {
     void completedTakesLotsInReceiptOrderStartingWithInitialStock() {
         productionListener.onProductionCompleted(completed(100L, VIN_1));
 
-        // 타이어 4 = 초기 재고 LOT 2 + LOT1 2, 엔진 1 = 초기 재고 LOT 1
-        assertThat(usages(VIN_1))
-                .containsExactlyInAnyOrder(
-                        tuple(engine, engineInit, 1),
-                        tuple(tire, tireInit, 2),
-                        tuple(tire, lot1, 2));
+        // 타이어 4 = 초기 재고 LOT 2 + LOT1 2, 엔진 1 = 초기 재고 LOT 1 (어느 차에 들어갔는지는 mes 가 갖는다, #176)
         assertThat(remaining(engineInit)).isEqualTo(9);
         assertThat(remaining(tireInit)).isZero();
         assertThat(remaining(lot1)).isEqualTo(1);
@@ -110,18 +101,19 @@ class PartLotAllocationTest {
         productionListener.onProductionCompleted(completed(101L, VIN_2));
 
         // 초기 재고 LOT 을 다 써서 LOT1 의 남은 1, 그다음 LOT2 에서 3 (한 부품이 LOT 두 개에 걸친다)
-        assertThat(usages(VIN_2)).containsExactly(tuple(tire, lot1, 1), tuple(tire, lot2, 3));
         assertThat(remaining(lot1)).isZero();
         assertThat(remaining(lot2)).isEqualTo(2);
         assertLotsWithinStock();
     }
 
     @Test
-    void sameCompletedTwiceRecordsUsageOnce() {
+    void sameCompletedTwiceTakesLotsOnce() {
         productionListener.onProductionCompleted(completed(100L, VIN_1));
         productionListener.onProductionCompleted(completed(100L, VIN_1));
 
-        assertThat(usages(VIN_1)).hasSize(3);
+        assertThat(consumeHistories()).isEqualTo(2);
+        assertThat(remaining(engineInit)).isEqualTo(9);
+        assertThat(remaining(tireInit)).isZero();
         assertThat(remaining(lot1)).isEqualTo(1);
     }
 
@@ -136,13 +128,12 @@ class PartLotAllocationTest {
 
         productionListener.onProductionCompleted(completed(100L, VIN_1));
 
-        assertThat(usages(VIN_1)).contains(tuple(engine, initial, 1));
         assertThat(remaining(initial)).isEqualTo(4);
         assertThat(remaining(purchased)).isEqualTo(5);
     }
 
     @Test
-    void lotsShortOfReservedStockFailWithoutRecordingUsage() {
+    void lotsShortOfReservedStockFailWithoutTakingAnything() {
         // 실물과 LOT 이 어긋난 데이터: 타이어 LOT 남은 수량 합이 잡아 둔 4 보다 적다
         jdbc.update("UPDATE part_lot SET remaining_qty = 0 WHERE part_id = ?", tire);
         jdbc.update("UPDATE part_lot SET remaining_qty = 1 WHERE id = ?", lot2);
@@ -150,8 +141,7 @@ class PartLotAllocationTest {
         assertThatThrownBy(() -> productionListener.onProductionCompleted(completed(100L, VIN_1)))
                 .isInstanceOf(CustomException.class)
                 .hasMessageContaining("LOT 남은 수량");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM part_lot_usage", Integer.class))
-                .isZero();
+        assertThat(consumeHistories()).isZero();
         assertThat(remaining(lot2)).isEqualTo(1);
         assertThat(
                         jdbc.queryForObject(
@@ -168,8 +158,7 @@ class PartLotAllocationTest {
 
         assertThat(remaining(lot1)).isEqualTo(3);
         assertThat(remaining(lot2)).isEqualTo(5);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM part_lot_usage", Integer.class))
-                .isZero();
+        assertThat(consumeHistories()).isZero();
     }
 
     private void assertLotsWithinStock() {
@@ -203,15 +192,10 @@ class PartLotAllocationTest {
                 objectMapper.valueToTree(payload));
     }
 
-    private List<Tuple> usages(String vin) {
-        return jdbc
-                .queryForList(
-                        "SELECT l.part_id, u.lot_id, u.qty FROM part_lot_usage u"
-                                + " JOIN part_lot l ON l.id = u.lot_id WHERE u.vin = ? ORDER BY u.id",
-                        vin)
-                .stream()
-                .map(u -> tuple(u.get("part_id"), u.get("lot_id"), u.get("qty")))
-                .toList();
+    /** 부품을 생산에 쓴 재고 이력 수 (생산 건 기준, CONSUME). */
+    private int consumeHistories() {
+        return jdbc.queryForObject(
+                "SELECT COUNT(*) FROM stock_history WHERE type = 'CONSUME'", Integer.class);
     }
 
     private int remaining(long lotId) {

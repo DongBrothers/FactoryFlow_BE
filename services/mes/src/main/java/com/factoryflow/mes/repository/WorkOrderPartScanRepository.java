@@ -8,5 +8,7 @@ public interface WorkOrderPartScanRepository extends JpaRepository<WorkOrderPart
 
     List<WorkOrderPartScan> findAllByWorkOrderIdOrderByPartIdAsc(Long workOrderId);
 
+    List<WorkOrderPartScan> findAllByLotNoOrderByScannedAtAscIdAsc(String lotNo);
+
     void deleteAllByWorkOrderId(Long workOrderId);
 }

@@ -15,150 +15,72 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-/** VIN 으로 부품 LOT, LOT 으로 차 조회 (docs/specs/part-lot.md "3. VIN 조회", "4. LOT 조회"). */
+/**
+ * inventory 는 LOT 재고 수량만 갖고, 차 ↔ LOT 계보는 mes 가 갖는다 (docs/specs/part-genealogy.md, #176). 계보 조회는 mes
+ * PartGenealogyTest 가 본다.
+ */
 @SpringBootTest
 @Import(TestContainersConfig.class)
 class PartLotTest {
 
-    static final String VIN_1 = "KMH000017TU000100";
-    static final String VIN_2 = "KMH000017TU000101";
+    static final String VIN = "KMH000017TU000100";
     static final String LOT_1 = "LOT-261001-000001";
-    static final String LOT_2 = "LOT-261002-000002";
 
     @Autowired WebApplicationContext context;
     @Autowired JdbcTemplate jdbc;
 
     MockMvc mockMvc;
-    String engineInitNo;
-    String tireInitNo;
+    long tire;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM part");
-        long engine = insertPart("ENG-T", "엔진");
-        long tire = insertPart("TIRE-T", "타이어");
-        long engineInit = insertLot(engine, "LOT-INIT-" + engine, null);
-        long tireInit = insertLot(tire, "LOT-INIT-" + tire, null);
-        long lot1 = insertLot(tire, LOT_1, 1L);
-        engineInitNo = "LOT-INIT-" + engine;
-        tireInitNo = "LOT-INIT-" + tire;
-        insertLot(tire, LOT_2, 2L);
-        insertFinishedVehicle(VIN_1, 100L, "IN_STOCK");
-        insertFinishedVehicle(VIN_2, 101L, "SHIPPED");
-        insertFinishedVehicle("KMH000017TU000102", 102L, "IN_STOCK");
-        // VIN_1: 타이어 LOT1 2, 타이어 초기 재고 2, 엔진 초기 재고 1. VIN_2: 타이어 LOT1 1
-        insertUsage(VIN_1, lot1, 2);
-        insertUsage(VIN_1, tireInit, 2);
-        insertUsage(VIN_1, engineInit, 1);
-        insertUsage(VIN_2, lot1, 1);
+        tire = insertPart("TIRE-T", "타이어");
+        insertLot(tire, "LOT-INIT-" + tire, null);
+        insertLot(tire, LOT_1, 1L);
+        insertFinishedVehicle(VIN);
     }
 
     @Test
-    void partLotsOfAVehicleAreByPartCodeThenLotInReceiptOrder() throws Exception {
-        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN_1))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(3))
-                .andExpect(jsonPath("$.data[0].partCode").value("ENG-T"))
-                .andExpect(jsonPath("$.data[0].partName").value("엔진"))
-                .andExpect(jsonPath("$.data[0].lotNo").value(engineInitNo))
-                .andExpect(jsonPath("$.data[0].qty").value(1))
-                .andExpect(jsonPath("$.data[1].partCode").value("TIRE-T"))
-                .andExpect(jsonPath("$.data[1].lotNo").value(tireInitNo))
-                .andExpect(jsonPath("$.data[1].qty").value(2))
-                .andExpect(jsonPath("$.data[2].lotNo").value(LOT_1))
-                .andExpect(jsonPath("$.data[2].qty").value(2))
-                .andExpect(jsonPath("$.data[2].receivedAt").exists())
-                .andExpect(jsonPath("$.data[2].partId").doesNotExist())
-                .andExpect(jsonPath("$.data[2].lotId").doesNotExist())
-                .andExpect(jsonPath("$.data[2].productionId").doesNotExist());
+    void partLotsOfAVehicleAreNoLongerAnsweredByInventory() throws Exception {
+        // 차에 들어간 LOT 은 mes GET /mes/vehicles/{vin}/part-lots 로 본다
+        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN))
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    void partLotsOfAVehicleAreRejectedOrEmpty() throws Exception {
-        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", "KMH000017TU00010O"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", "KMH000017TU000999"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("FINISHED_VEHICLE_NOT_FOUND"));
-        // 이 기능 전에 완성된 차는 사용 기록이 없다
-        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", "KMH000017TU000102"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-    }
-
-    @Test
-    void vehiclesOfALotAreInUsageOrderWithTheirStatus() throws Exception {
+    void vehiclesOfALotAreNoLongerAnsweredByInventory() throws Exception {
+        // LOT 이 들어간 차(리콜)는 mes GET /mes/part-lots/{lotNo}/vehicles 로 본다
         mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", LOT_1))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[0].vin").value(VIN_1))
-                .andExpect(jsonPath("$.data[0].productId").value(1))
-                .andExpect(jsonPath("$.data[0].status").value("IN_STOCK"))
-                .andExpect(jsonPath("$.data[0].partCode").value("TIRE-T"))
-                .andExpect(jsonPath("$.data[0].qty").value(2))
-                .andExpect(jsonPath("$.data[1].vin").value(VIN_2))
-                .andExpect(jsonPath("$.data[1].status").value("SHIPPED"))
-                .andExpect(jsonPath("$.data[1].qty").value(1))
-                .andExpect(jsonPath("$.data[0].productionId").doesNotExist())
-                .andExpect(jsonPath("$.data[0].orderId").doesNotExist());
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    void partLotsOfAVehicleFollowReceiptTimeNotId() throws Exception {
-        // 초기 재고 LOT 의 입고 시각을 LOT1 뒤로 옮기면 VIN_1 의 타이어는 LOT1 이 먼저 보인다
-        jdbc.update(
-                "UPDATE part_lot SET received_at = NOW(6) + INTERVAL 1 DAY WHERE lot_no = ?",
-                tireInitNo);
-
-        mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN_1))
+    void lotStockOfAPartStaysInInventory() throws Exception {
+        // LOT 별 남은 수량은 재고라 inventory 가 그대로 답한다
+        mockMvc.perform(get("/inventory/parts/{partId}/lots", tire))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[1].lotNo").value(LOT_1))
-                .andExpect(jsonPath("$.data[2].lotNo").value(tireInitNo));
+                .andExpect(jsonPath("$.data.partCode").value("TIRE-T"))
+                .andExpect(jsonPath("$.data.lots.length()").value(2))
+                .andExpect(jsonPath("$.data.lots[0].lotNo").value("LOT-INIT-" + tire))
+                .andExpect(jsonPath("$.data.lots[1].lotNo").value(LOT_1))
+                .andExpect(jsonPath("$.data.lots[1].remainingQty").value(7));
     }
 
     @Test
-    void vehiclesOfAnInitialStockLot() throws Exception {
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", tireInitNo))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].vin").value(VIN_1))
-                .andExpect(jsonPath("$.data[0].qty").value(2));
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-INIT-x"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void vehiclesOfALotAreRejectedOrEmpty() throws Exception {
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-26101-000001"))
-                .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-261017-999999"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PART_LOT_NOT_FOUND"));
-        // 구매 건 id 가 999999 를 넘으면 끝자리가 7자리 이상이다. 형식 오류가 아니라 조회 대상이다
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-261017-1000000"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PART_LOT_NOT_FOUND"));
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", LOT_2))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
-    }
-
-    @Test
-    void lotApisAreDocumented() throws Exception {
-        String byVin = "$.paths['/inventory/finished-vehicles/{vin}/part-lots'].get";
-        String byLot = "$.paths['/inventory/part-lots/{lotNo}/vehicles'].get";
+    void lotApisInTheDocsAreStockOnly() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath(byVin + ".summary").value("차에 쓰인 부품 LOT"))
-                .andExpect(jsonPath(byVin + ".responses['400']").exists())
-                .andExpect(jsonPath(byVin + ".responses['404']").exists())
-                .andExpect(jsonPath(byLot + ".summary").value("LOT 이 쓰인 차"))
-                .andExpect(jsonPath(byLot + ".responses['400']").exists())
-                .andExpect(jsonPath(byLot + ".responses['404']").exists());
+                .andExpect(jsonPath("$.paths['/inventory/parts/{partId}/lots'].get").exists())
+                .andExpect(
+                        jsonPath("$.paths['/inventory/finished-vehicles/{vin}/part-lots']")
+                                .doesNotExist())
+                .andExpect(
+                        jsonPath("$.paths['/inventory/part-lots/{lotNo}/vehicles']")
+                                .doesNotExist());
     }
 
     private long insertPart(String code, String name) {
@@ -170,7 +92,7 @@ class PartLotTest {
         return jdbc.queryForObject("SELECT id FROM part WHERE code = ?", Long.class, code);
     }
 
-    private long insertLot(long partId, String lotNo, Long purchaseId) {
+    private void insertLot(long partId, String lotNo, Long purchaseId) {
         jdbc.update(
                 "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
                         + " received_at, created_at, updated_at)"
@@ -178,23 +100,12 @@ class PartLotTest {
                 partId,
                 lotNo,
                 purchaseId);
-        return jdbc.queryForObject("SELECT id FROM part_lot WHERE lot_no = ?", Long.class, lotNo);
     }
 
-    private void insertFinishedVehicle(String vin, long productionId, String status) {
+    private void insertFinishedVehicle(String vin) {
         jdbc.update(
                 "INSERT INTO finished_vehicle (vin, production_id, order_id, product_id, status,"
-                        + " created_at, updated_at) VALUES (?, ?, 42, 1, ?, NOW(6), NOW(6))",
-                vin,
-                productionId,
-                status);
-    }
-
-    private void insertUsage(String vin, Long lotId, int qty) {
-        jdbc.update(
-                "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at) VALUES (?, ?, ?, NOW(6))",
-                vin,
-                lotId,
-                qty);
+                        + " created_at, updated_at) VALUES (?, 100, 42, 1, 'IN_STOCK', NOW(6), NOW(6))",
+                vin);
     }
 }

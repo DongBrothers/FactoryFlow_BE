@@ -6,8 +6,6 @@ import com.factoryflow.inventory.domain.FinishedVehicle;
 import com.factoryflow.inventory.domain.FinishedVehicleStatus;
 import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.domain.PartLot;
-import com.factoryflow.inventory.domain.PartLotUsage;
-import com.factoryflow.inventory.domain.PartLotUsageSource;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
@@ -20,7 +18,6 @@ import com.factoryflow.inventory.event.publisher.payload.ShipmentCompleted;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
 import com.factoryflow.inventory.repository.FinishedVehicleRepository;
 import com.factoryflow.inventory.repository.PartLotRepository;
-import com.factoryflow.inventory.repository.PartLotUsageRepository;
 import com.factoryflow.inventory.repository.PartRepository;
 import com.factoryflow.inventory.repository.PartReservationRepository;
 import com.factoryflow.inventory.repository.StockHistoryRepository;
@@ -50,7 +47,6 @@ public class FinishedVehicleService {
     private final PartRepository partRepository;
     private final StockHistoryRepository stockHistoryRepository;
     private final PartLotRepository partLotRepository;
-    private final PartLotUsageRepository partLotUsageRepository;
     private final StorageSlotService storageSlotService;
     private final EventPublisher eventPublisher;
 
@@ -145,8 +141,9 @@ public class FinishedVehicleService {
     }
 
     /**
-     * 예약 줄마다 쓴 부품 LOT 을 기록하고, 부품의 잡은 수량을 줄이고 사용 이력을 남긴다. 찍은 LOT 을 쓸 수 있으면 그 LOT 에서, 아니면 입고 순으로 뺀다.
-     * 부품과 LOT 은 한 번에 읽는다 (동시 예약·입고와 부품 version 으로 부딪힌다).
+     * 예약 줄마다 LOT 남은 수량을 줄이고, 부품의 잡은 수량을 줄이고 사용 이력을 남긴다. 찍은 LOT 을 쓸 수 있으면 그 LOT 에서, 아니면 입고 순으로 뺀다.
+     * 어느 차에 어느 LOT 이 들어갔는지(계보)는 mes 가 갖는다 (docs/specs/part-genealogy.md). 부품과 LOT 은 한 번에 읽는다 (동시
+     * 예약·입고와 부품 version 으로 부딪힌다).
      */
     private void consume(
             Long productionId,
@@ -160,8 +157,7 @@ public class FinishedVehicleService {
         for (PartReservation reservation : reservations) {
             Part part = partsById.get(reservation.getPartId());
             if (!takeScanned(vin, scannedByPartId.get(part.getId()), reservation.getQty())) {
-                recordLots(
-                        vin,
+                takeInReceiptOrder(
                         productionId,
                         part,
                         reservation.getQty(),
@@ -209,7 +205,7 @@ public class FinishedVehicleService {
         return lot.getPartId().equals(scan.partId()) ? null : "OTHER_PART";
     }
 
-    /** 찍은 LOT 에 qty 가 다 남아 있으면 거기서 빼고 SCANNED 로 기록한다. 아니면 false (입고 순으로 뺀다). */
+    /** 찍은 LOT 에 qty 가 다 남아 있으면 거기서 뺀다. 아니면 false (입고 순으로 뺀다). */
     private boolean takeScanned(String vin, PartLot scanned, int qty) {
         if (scanned == null) {
             return false;
@@ -219,7 +215,6 @@ public class FinishedVehicleService {
             return false;
         }
         scanned.take(qty);
-        saveUsage(vin, scanned.getId(), qty, PartLotUsageSource.SCANNED);
         return true;
     }
 
@@ -233,30 +228,23 @@ public class FinishedVehicleService {
     }
 
     /**
-     * 부품 qty 를 어느 LOT 에서 썼는지 남긴다 (docs/specs/part-lot.md "2. 생산 완료"). 모든 재고에 LOT 이 있으므로 LOT 을 입고
-     * 순서로만 쓴다 (초기 재고 LOT 이 가장 먼저다). LOT 이 모자라면 실물과 LOT 이 어긋난 데이터라 PART_LOT_SHORTAGE (재시도 후 DLQ).
+     * 부품 qty 를 LOT 에서 입고 순서로 뺀다 (docs/specs/part-lot.md "2. 생산 완료", 초기 재고 LOT 이 가장 먼저다). LOT 이 모자라면
+     * 실물과 LOT 이 어긋난 데이터라 PART_LOT_SHORTAGE (재시도 후 DLQ).
      */
-    private void recordLots(String vin, Long productionId, Part part, int qty, List<PartLot> lots) {
+    private void takeInReceiptOrder(Long productionId, Part part, int qty, List<PartLot> lots) {
         int left = qty;
         for (PartLot lot : lots) {
-            int taken = lot.take(left);
-            if (taken > 0) {
-                saveUsage(vin, lot.getId(), taken, PartLotUsageSource.FIFO);
-                left -= taken;
+            left -= lot.take(left);
+            if (left == 0) {
+                return;
             }
         }
-        if (left > 0) {
-            log.error(
-                    "PART_LOT_SHORTAGE productionId={} partId={} missing={}",
-                    productionId,
-                    part.getId(),
-                    left);
-            throw new CustomException(InventoryErrorCode.PART_LOT_SHORTAGE);
-        }
-    }
-
-    private void saveUsage(String vin, Long lotId, int qty, PartLotUsageSource source) {
-        partLotUsageRepository.save(PartLotUsage.use(vin, lotId, qty, source));
+        log.error(
+                "PART_LOT_SHORTAGE productionId={} partId={} missing={}",
+                productionId,
+                part.getId(),
+                left);
+        throw new CustomException(InventoryErrorCode.PART_LOT_SHORTAGE);
     }
 
     /** 찍은 LOT 번호의 LOT 을 번호별로. 없는 번호는 빠진다. */

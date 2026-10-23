@@ -45,7 +45,6 @@ class StockAdjustmentTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
         jdbc.update("DELETE FROM stock_adjustment");
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM stock_history");
         jdbc.update("DELETE FROM part_reservation");
@@ -263,10 +262,21 @@ class StockAdjustmentTest {
     }
 
     @Test
-    void adjustmentLotNumberIsAValidLotNumber() throws Exception {
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", "LOT-ADJ-000012"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PART_LOT_NOT_FOUND"));
+    void adjustmentLotShowsUpInTheLotStock() throws Exception {
+        // 조정 LOT 도 다른 LOT 처럼 LOT 별 재고에 나온다 (LOT 번호로 차를 찾는 계보는 mes, #176)
+        long tire = insertPart("TIRE-18", 0, 0);
+        String body =
+                adjust(tire, "{\"qty\":2,\"reason\":\"실사에서 더 나옴\"}")
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        String lotNo = JsonPath.read(body, "$.data.lotNo");
+
+        mockMvc.perform(get("/inventory/parts/{partId}/lots", tire))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lots[0].lotNo").value(lotNo))
+                .andExpect(jsonPath("$.data.lots[0].remainingQty").value(2));
     }
 
     @Test
