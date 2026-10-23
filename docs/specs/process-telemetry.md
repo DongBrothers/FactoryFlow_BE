@@ -34,7 +34,7 @@ mes: 큐 mes.equipment-step-telemetry → MongoDB step_telemetry 에 샘플마�
 | PAINT | `humidityPct` 습도 | % | 55 ~ 65 | |
 | PAINT | `filmThicknessUm` 도막 두께 | µm | 100 ~ 120 | filmThicknessUm (도장 얼룩) |
 
-- 범위는 화면에 기준선으로 보여 주려고 mes 도 같은 값을 갖는다 (서비스끼리 코드를 공유하지 않으므로 양쪽에 같은 표를 둔다)
+- 범위는 화면에 기준선으로 보여 주려고 mes 도 같은 값을 갖는다 (서비스끼리 코드를 공유하지 않으므로 양쪽에 같은 표를 둔다). 두 서비스의 테스트(`SpecTablesTest`)가 각자 이 표와 맞춰 본다 (#179). 항목·범위를 바꾸면 이 표와 두 서비스를 함께 바꾼다
 
 ### 2. mes: 저장
 - 큐 `mes.equipment-step-telemetry` (DLQ 포함), `ProcessedEventGuard` 로 같은 메시지는 한 번만 (메시지가 공정당 1개라 처리 기록도 공정당 1행)
