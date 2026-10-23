@@ -61,8 +61,25 @@ public class StockAdjustmentService {
         if (candidates.isEmpty()) {
             throw new CustomException(InventoryErrorCode.INSUFFICIENT_AVAILABLE);
         }
-        return productionClient.holdForMaterial(
-                new HoldMaterialRequest(partId, shortfall, candidates));
+        return askProductionToHold(new HoldMaterialRequest(partId, shortfall, candidates));
+    }
+
+    /**
+     * production 이 거둔 뒤 응답만 실패했을 수 있으므로, 호출이 실패하면(PRODUCTION_UNAVAILABLE) 부품을 다 잡은 후보를 READY 로 되돌린다
+     * (PR #172 리뷰).
+     */
+    private List<Long> askProductionToHold(HoldMaterialRequest request) {
+        try {
+            return productionClient.holdForMaterial(request);
+        } catch (CustomException e) {
+            if (e.getErrorCode() == InventoryErrorCode.PRODUCTION_UNAVAILABLE) {
+                stockAdjustmentWriter.restoreHeld(
+                        request.candidates().stream()
+                                .map(HoldMaterialCandidateRequest::productionId)
+                                .toList());
+            }
+            throw e;
+        }
     }
 
     private Part findPart(Long partId) {

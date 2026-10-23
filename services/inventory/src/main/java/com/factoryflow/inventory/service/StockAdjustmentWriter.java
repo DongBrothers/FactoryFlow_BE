@@ -74,13 +74,17 @@ public class StockAdjustmentWriter {
     }
 
     /**
-     * 부품 대기로 되돌린 생산 건을 다시 READY 로 돌린다: 거둔 뒤 저장이 실패해 예약이 RESERVED 그대로일 때 inventory.reserved 를 다시 보낸다
-     * (production 은 WAITING_MATERIAL 에서 받아 READY 로 바꾼다).
+     * 부품 대기로 되돌렸을 수 있는 생산 건을 다시 READY 로 돌린다: 거둔 뒤 저장이 실패했거나 production 응답이 실패했을 때. 다른 부품을 아직
+     * 기다리는(WAITING 줄이 있는) 생산 건은 빼고, 부품을 다 잡은 생산 건에만 inventory.reserved 를 보낸다 (production 은
+     * WAITING_MATERIAL 이면 READY 로 바꾸고, 이미 READY 면 무시한다).
      */
     @Transactional
-    public void restoreHeld(List<Long> heldProductionIds) {
-        log.warn("재고 조정 저장 실패로 거둔 생산 건을 되돌림: productionIds={}", heldProductionIds);
-        heldProductionIds.forEach(id -> eventPublisher.publish(new InventoryReserved(id)));
+    public void restoreHeld(List<Long> productionIds) {
+        Set<Long> stillWaiting = findStillWaiting(productionIds);
+        List<Long> restored =
+                productionIds.stream().filter(id -> !stillWaiting.contains(id)).toList();
+        log.warn("재고 조정이 끝나지 않아 생산 건을 READY 로 되돌림: productionIds={}", restored);
+        restored.forEach(id -> eventPublisher.publish(new InventoryReserved(id)));
     }
 
     /**
@@ -156,6 +160,15 @@ public class StockAdjustmentWriter {
     private List<PartReservation> findReservedLinesOf(Long partId, List<Long> productionIds) {
         return reservationRepository.findAllByPartIdAndProductionIdInAndStatus(
                 partId, productionIds, ReservationStatus.RESERVED);
+    }
+
+    /** 다른 부품을 아직 기다리는(WAITING 줄이 남은) 생산 건. */
+    private Set<Long> findStillWaiting(List<Long> productionIds) {
+        return reservationRepository
+                .findAllByProductionIdInAndStatus(productionIds, ReservationStatus.WAITING)
+                .stream()
+                .map(PartReservation::getProductionId)
+                .collect(Collectors.toSet());
     }
 
     private List<PartLot> findOpenLots(Long partId) {

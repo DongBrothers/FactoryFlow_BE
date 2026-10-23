@@ -288,10 +288,15 @@ class StockAdjustmentTest {
     }
 
     @Test
-    void productionUnavailableIs503AndNothingChanges() throws Exception {
-        long tire = insertPart("TIRE-18", 1, 4);
+    void productionUnavailableIs503AndPutsFullyReservedCandidatesBackToReady() throws Exception {
+        // production 이 거둔 뒤 응답만 실패했을 수 있다. 부품을 다 잡은 후보(차 9)는 READY 로 되돌리고,
+        // 다른 부품을 아직 기다리는 후보(차 7)는 그대로 둔다 (PR #172 리뷰)
+        long tire = insertPart("TIRE-18", 1, 8);
+        long seat = insertPart("SEAT", 0, 0);
+        insertReservation(7, tire, 4, "RESERVED");
+        insertReservation(7, seat, 1, "WAITING");
         insertReservation(9, tire, 4, "RESERVED");
-        insertLot(tire, "LOT-261001-000001", 5, "2026-10-01 09:00:00");
+        insertLot(tire, "LOT-261001-000001", 9, "2026-10-01 09:00:00");
         when(productionClient.holdForMaterial(any()))
                 .thenThrow(new CustomException(InventoryErrorCode.PRODUCTION_UNAVAILABLE));
 
@@ -300,6 +305,13 @@ class StockAdjustmentTest {
                 .andExpect(jsonPath("$.code").value("PRODUCTION_UNAVAILABLE"));
 
         assertThat(reservationStatus(9, tire)).isEqualTo("RESERVED");
+        assertThat(reservationStatus(7, tire)).isEqualTo("RESERVED");
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT payload FROM outbox WHERE event_name = 'inventory.reserved'",
+                                String.class))
+                .extracting(p -> JsonPath.<Integer>read(p, "$.payload.productionId"))
+                .containsExactly(9);
         assertNothingRecorded();
     }
 

@@ -71,8 +71,8 @@ gateway `/api/inventory/parts/{partId}/adjustments`, 헤더 `X-User-Id`(gateway 
 | partId 가 양수가 아님 | 400 | 없음 |
 | 부품 없음 (지운 것 포함) | 404 `PART_NOT_FOUND` | 없음 |
 | 줄이는 수량이 available 보다 많고, 발행 전 차에서 거둬도 모자람 | 409 `INSUFFICIENT_AVAILABLE` | 없음 (production 도 바꾸지 않음) |
-| production 호출 실패·시간 초과 | 503 `PRODUCTION_UNAVAILABLE` | 없음 |
-| 거둔 뒤 inventory 저장 실패 | 409 `PART_CONFLICT` | 거둔 생산 건마다 `inventory.reserved` 재발행 (READY 로 되돌림) |
+| production 호출 실패·시간 초과, NOT_ENOUGH_UNRELEASED 가 아닌 409 | 503 `PRODUCTION_UNAVAILABLE` | 재고는 그대로. production 이 거둔 뒤 응답만 실패했을 수 있어, 후보 중 부품을 다 잡은(WAITING 줄 없는) 생산 건에 `inventory.reserved` 재발행 (PR #172 리뷰) |
+| 거둔 뒤 inventory 저장 실패 | 409 `PART_CONFLICT` 등 그 오류 | 거둔 생산 건 중 부품을 다 잡은 건에 `inventory.reserved` 재발행 (READY 로 되돌림) |
 | 다른 처리가 같은 부품을 먼저 바꿈 | 409 `PART_CONFLICT` | 없음 (롤백) |
 | LOT 남은 수량 합이 줄일 수량보다 적음 (실물과 LOT 이 어긋난 데이터) | 500 `PART_LOT_SHORTAGE` | 없음 (롤백) |
 | PURCHASE 가 아님 | 403 (gateway) | — |
@@ -110,7 +110,8 @@ gateway `/api/inventory/parts/{partId}/adjustments`, 헤더 `X-User-Id`(gateway 
 - [ ] 거둔 예약은 대기 줄에서 원래 순서(예약 id) 자리에 서고, 남은 available 로 뒤 줄을 채우지 않는다
 - [ ] production material-holds: READY·발행 전만 WAITING_MATERIAL + status-changed, 발행한 건 건너뜀, 합이 모자라면 아무것도 안 바꾸고 409
 - [ ] 거둬도 모자람: 409 INSUFFICIENT_AVAILABLE, production·inventory 모두 그대로
-- [ ] production 호출 실패: 503 PRODUCTION_UNAVAILABLE, 재고 그대로
+- [ ] production 호출 실패: 503 PRODUCTION_UNAVAILABLE, 재고 그대로, 부품을 다 잡은 후보만 inventory.reserved (다른 부품을 기다리는 후보는 안 보냄)
+- [ ] client: 409 중 NOT_ENOUGH_UNRELEASED 만 INSUFFICIENT_AVAILABLE, 다른 409 는 PRODUCTION_UNAVAILABLE
 - [ ] 거둔 뒤 inventory 저장 실패: 거둔 생산 건마다 inventory.reserved 재발행 → production READY 로 돌아옴
 - [ ] production 이 되돌렸지만 예약이 이미 RESERVED 가 아닌 생산 건: 거두지 않고 inventory.reserved
 - [ ] qty 0·없음, reason 없음, X-User-Id 없음 400. 없는·지운 부품 404
