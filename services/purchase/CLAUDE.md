@@ -5,5 +5,6 @@
 - 발행: purchase.received (purchaseId, partId, qty)
 - 수신: 없음
 - 구매 담당 API: 목록(ORDERED·RECEIVED, 커서), 공급업체 목록, 구매 건 만들기(= 발주), 입고(ORDERED → RECEIVED + purchase.received). 공급업체는 기본 데이터(Flyway)에 더해 등록·수정 POST /purchases/suppliers, PUT /purchases/suppliers/{id} (docs/specs/master-data.md) (docs/specs/purchase-receiving.md "3. 입고")
+- 발주 제안: GET /purchases/suggestions. inventory GET /internal/parts/shortages(PartClient) 로 부족 부품을 받아 부품별 ORDERED 합을 빼 suggestedQty, 가장 최근 구매 건의 공급업체를 붙임. inventory 호출은 PurchaseService 에서 트랜잭션 밖, DB 읽기는 PurchaseSuggestionReader 의 readOnly 트랜잭션 하나 (QueryDSL: PurchaseRepositoryCustom/Impl, docs/specs/purchase-suggestion.md)
 - 동시 변경: 구매 건은 @Version 으로 막는다 (같은 구매 건을 동시에 입고)
 - 보상: 없음 (구매 취소·부분 입고는 #105)

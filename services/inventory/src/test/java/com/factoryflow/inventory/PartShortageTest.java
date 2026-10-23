@@ -75,6 +75,27 @@ class PartShortageTest {
     }
 
     @Test
+    void internalShortageApiReturnsTheSameShortagesForPurchase() throws Exception {
+        // purchase 의 발주 제안이 부르는 내부 API (docs/specs/purchase-suggestion.md)
+        insertReservation(100L, engine, 2, "WAITING");
+        insertReservation(100L, tire, 4, "WAITING");
+        insertReservation(101L, tire, 5, "WAITING");
+
+        mockMvc.perform(get("/internal/parts/shortages"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].partId").value(tire))
+                .andExpect(jsonPath("$.data[0].code").value("TIRE-T"))
+                .andExpect(jsonPath("$.data[0].name").value("타이어"))
+                .andExpect(jsonPath("$.data[0].unit").value("EA"))
+                .andExpect(jsonPath("$.data[0].available").value(3))
+                .andExpect(jsonPath("$.data[0].waitingQty").value(9))
+                .andExpect(jsonPath("$.data[0].shortQty").value(6))
+                .andExpect(jsonPath("$.data[1].partId").value(engine))
+                .andExpect(jsonPath("$.data[1].shortQty").value(1));
+    }
+
+    @Test
     void internalPartApiReturnsOnlyExistingParts() throws Exception {
         jdbc.update("UPDATE part SET is_deleted = TRUE WHERE id = ?", seat);
 
@@ -96,7 +117,8 @@ class PartShortageTest {
                 .andExpect(
                         jsonPath("$.paths['/inventory/parts/shortages'].get.summary")
                                 .value("부족 부품"))
-                .andExpect(jsonPath("$.paths['/internal/parts']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/internal/parts']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/parts/shortages']").doesNotExist());
     }
 
     private long insertPart(String code, String name, int available) {

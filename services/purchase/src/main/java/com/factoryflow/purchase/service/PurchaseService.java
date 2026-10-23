@@ -5,14 +5,17 @@ import com.factoryflow.common.web.exception.CustomException;
 import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.purchase.client.inventory.PartClient;
 import com.factoryflow.purchase.client.inventory.dto.response.PartResponse;
+import com.factoryflow.purchase.client.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.purchase.domain.Purchase;
 import com.factoryflow.purchase.domain.PurchaseStatus;
 import com.factoryflow.purchase.dto.request.CreatePurchaseRequest;
 import com.factoryflow.purchase.dto.response.PurchaseResponse;
+import com.factoryflow.purchase.dto.response.PurchaseSuggestionResponse;
 import com.factoryflow.purchase.event.publisher.payload.PurchaseReceived;
 import com.factoryflow.purchase.exception.PurchaseErrorCode;
 import com.factoryflow.purchase.repository.PurchaseRepository;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PurchaseService {
 
     private final PurchaseRepository purchaseRepository;
+    private final PurchaseSuggestionReader purchaseSuggestionReader;
     private final PurchaseWriter purchaseWriter;
     private final PartClient partClient;
     private final EventPublisher eventPublisher;
@@ -101,5 +105,32 @@ public class PurchaseService {
         return purchaseRepository
                 .findById(purchaseId)
                 .orElseThrow(() -> new CustomException(PurchaseErrorCode.PURCHASE_NOT_FOUND));
+    }
+
+    /**
+     * 발주 제안: inventory 의 부족 부품마다 발주 중(ORDERED) 수량을 빼 더 살 수량을 정하고, 가장 최근 구매 건의 공급업체를 붙인다
+     * (docs/specs/purchase-suggestion.md). inventory 호출은 트랜잭션 밖이고, DB 읽기는 PurchaseSuggestionReader
+     * 가 한 트랜잭션에서 한다.
+     */
+    public List<PurchaseSuggestionResponse> findSuggestions() {
+        List<PartShortageResponse> shortages = partClient.findShortages();
+        if (shortages.isEmpty()) {
+            return List.of();
+        }
+        PurchaseHistory history =
+                purchaseSuggestionReader.read(
+                        shortages.stream().map(PartShortageResponse::partId).toList());
+        return shortages.stream()
+                .map(
+                        shortage ->
+                                PurchaseSuggestionResponse.of(
+                                        shortage,
+                                        history.orderedQtyOf(shortage.partId()),
+                                        history.lastSupplierOf(shortage.partId())))
+                .sorted(
+                        Comparator.comparingLong(PurchaseSuggestionResponse::suggestedQty)
+                                .reversed()
+                                .thenComparing(PurchaseSuggestionResponse::partCode))
+                .toList();
     }
 }

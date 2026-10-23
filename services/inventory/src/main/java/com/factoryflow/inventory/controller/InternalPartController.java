@@ -2,6 +2,7 @@ package com.factoryflow.inventory.controller;
 
 import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.inventory.dto.response.InternalPartResponse;
+import com.factoryflow.inventory.dto.response.InternalPartShortageResponse;
 import com.factoryflow.inventory.service.PartService;
 import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
@@ -24,5 +25,12 @@ public class InternalPartController {
             @RequestParam("ids") @NotEmpty List<Long> ids) {
         List<InternalPartResponse> parts = partService.findPartsByIds(ids);
         return ApiResponse.ok(parts);
+    }
+
+    /** purchase 의 발주 제안이 부른다 (docs/specs/purchase-suggestion.md). */
+    @GetMapping("/shortages")
+    public ApiResponse<List<InternalPartShortageResponse>> findShortages() {
+        List<InternalPartShortageResponse> shortages = partService.findShortagesForPurchase();
+        return ApiResponse.ok(shortages);
     }
 }

@@ -4,6 +4,7 @@ import com.factoryflow.common.web.response.ApiResponse;
 import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.purchase.dto.request.CreatePurchaseRequest;
 import com.factoryflow.purchase.dto.response.PurchaseResponse;
+import com.factoryflow.purchase.dto.response.PurchaseSuggestionResponse;
 import com.factoryflow.purchase.service.PurchaseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +39,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseController {
 
     private final PurchaseService purchaseService;
+
+    @Operation(
+            summary = "발주 제안",
+            description =
+                    "부족 부품마다 발주 중(ORDERED) 수량을 빼 더 사야 할 수량(suggestedQty)과 가장 최근 구매 건의 공급업체를 준다."
+                            + " 더 살 수량 큰 순. 제안만 하고 구매 건은 만들지 않는다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공 (부족 부품이 없으면 빈 목록)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description = "inventory 응답 없음·시간 초과 (INVENTORY_UNAVAILABLE)")
+    })
+    @GetMapping("/suggestions")
+    public ApiResponse<List<PurchaseSuggestionResponse>> findSuggestions() {
+        List<PurchaseSuggestionResponse> suggestions = purchaseService.findSuggestions();
+        return ApiResponse.ok(suggestions);
+    }
 
     @Operation(
             summary = "구매 목록",

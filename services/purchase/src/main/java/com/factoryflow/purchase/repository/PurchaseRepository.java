@@ -6,7 +6,8 @@ import java.util.List;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface PurchaseRepository extends JpaRepository<Purchase, Long> {
+public interface PurchaseRepository
+        extends JpaRepository<Purchase, Long>, PurchaseRepositoryCustom {
 
     List<Purchase> findAllByStatusAndIdGreaterThanOrderByIdAsc(
             PurchaseStatus status, Long lastId, Limit limit);
