@@ -1,6 +1,7 @@
 package com.factoryflow.simulator.config;
 
 import java.time.Clock;
+import java.util.Random;
 import java.util.random.RandomGenerator;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -18,9 +19,12 @@ public class SimulatorConfig {
         return Clock.systemUTC();
     }
 
-    /** 불량·고장 확률을 뽑는다. */
+    /**
+     * 불량·고장 확률을 뽑는다. JRE 이미지에 jdk.random 모듈이 없을 수 있어 java.base 의 Random 을 쓴다 (getDefault 는
+     * jdk.random).
+     */
     @Bean
     RandomGenerator randomGenerator() {
-        return RandomGenerator.getDefault();
+        return new Random();
     }
 }
