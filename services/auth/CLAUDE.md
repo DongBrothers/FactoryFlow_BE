@@ -1,9 +1,9 @@
 # auth 서비스
-- DB: auth_db (Flyway: src/main/resources/db/migration). 테이블: user_account (직원 계정), role (역할), permission (권한), role_permission (역할별 권한. 역할별 권한의 원본은 이 표 하나, 행은 마이그레이션으로만 넣는다). 고객 데이터(customer)는 쓰는 곳이 없어 V4 에서 지웠다 (#123). 필요해지면 order 에 둔다
+- DB: auth_db (Flyway: src/main/resources/db/migration). 테이블: user_account (직원 계정), role (역할), permission (권한), role_permission (역할별 권한. 원본은 이 표 하나. 운영 중에는 관리자 API PUT /auth/admin/roles/{code}/permissions 로 바꾼다, docs/specs/role-permission-admin.md). 고객 데이터(customer)는 쓰는 곳이 없어 V4 에서 지웠다 (#123). 필요해지면 order 에 둔다
 - 계정: 로그인하는 사람은 직원뿐이다. 관리자가 발급하면 Redis 에만 대기하고, 직원이 활성화(비번 설정)할 때 user_account 에 처음 저장한다 (docs/specs/auth-account.md)
 - 경로: 밖에서는 /api/auth/**, gateway 가 /api 를 떼고 넘기므로 컨트롤러는 /auth/** (다른 서비스와 같은 규칙). 내부 API 는 /internal/**
-- 로그인 ID 는 이메일 (trim + 소문자로 저장·비교). 밖으로 나가는 식별자(JWT sub)는 public_id(UUID), 내부 참조는 id. 역할·권한도 DB 안에서는 id 로 잇고, API·JWT(role, permissions)·Redis 에는 code 를 쓴다
-- Redis 키: auth:activation:{token}, auth:pending:{email}, auth:refresh:{publicId}, auth:login-fail:{email} (명세 "Redis 키" 표)
+- 로그인 ID 는 이메일 (trim + 소문자로 저장·비교). 밖으로 나가는 식별자(JWT sub)는 public_id(UUID), 내부 참조는 id. 역할·권한도 DB 안에서는 id 로 잇고, API·JWT(role)·Redis 에는 code 를 쓴다. JWT 에 권한은 넣지 않는다 (gateway 는 Redis 로 받은 표, 프론트는 GET /auth/me)
+- Redis 키: auth:activation:{token}, auth:pending:{email}, auth:refresh:{publicId}, auth:login-fail:{email} (명세 "Redis 키" 표), auth:role-permissions (gateway 용 역할 → 권한 표, 같은 이름의 -changed 채널로도 발행). 표는 뜰 때·권한을 바꾼 뒤·Redis 재연결 때 쓴다 (service/redis/RolePermissionSyncTrigger). 업무 이벤트가 아니라 events.md·Outbox 를 쓰지 않는다
 - 비밀번호는 해시만 저장한다. 비밀번호·토큰·이메일은 로그에 남기지 않는다. 개인정보 컬럼(전화, 주소 등)을 추가하면 암호화해서 저장한다
 - 발행: 없음
 - 수신: 없음

@@ -44,6 +44,8 @@
 
 ## 1. 내 정보 `GET /auth/me`
 
+> 2026-10-23: 권한 관리 작업에 들어갔다 (`docs/specs/role-permission-admin.md`, 브랜치 `feat/role-permission-admin`). 응답에 `permissions` 를 더하고, 아래 gateway 규칙은 "로그인한 직원 모두" 로 바뀐다
+
 - 화면 상단에 "이름 · 역할" 을 띄우려고. JWT 에는 `sub`(public_id)·`role` 만 있고 이름은 없다 (개인정보를 토큰에 넣지 않는 규칙)
 - auth: `X-User-Id`(gateway 가 JWT sub 로 채움)로 `UserAccount` 를 찾아 `{ publicId, name, role }` (이메일은 넣을지 명세에서 정한다. 로그에는 남기지 않는다)
 - 확인한 코드: `services/auth/src/main/java/com/factoryflow/auth/domain/UserAccount.java` 에 `publicId`, `name`, `role` 이 있다. 지금 auth 에 `X-User-Id` 를 읽는 곳은 없다

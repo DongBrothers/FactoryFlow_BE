@@ -1,13 +1,13 @@
 # gateway 서비스
 - Spring Cloud Gateway (WebFlux). Servlet 기반 common-web 은 사용하지 않는다
-- DB: 없음
+- DB: 없음. Redis: auth 가 보낸 역할 → 권한 표만 읽는다 (키 auth:role-permissions, 채널 auth:role-permissions-changed, config/RolePermissionSubscriber). dev 는 APP_DEV_YML_GATEWAY 의 spring.data.redis.*
 - 발행: 없음
 - 수신: 없음
 - 역할: 외부 요청 라우팅 → 각 서비스. 업무 로직을 두지 않는다
 - 사용자 헤더: 클라이언트가 보낸 X-User-* 는 모두 지우고, 검증한 JWT 의 sub 로 X-User-Id 만 다시 채운다 (config/UserHeaderFilter). role 은 넘기지 않는다
 - 경로: SecurityConfig 의 경로는 밖 주소(/api/...) 기준. 라우트는 StripPrefix=1 로 /api 를 떼고 넘긴다
 - CORS: 허용 origin 은 app.cors.allowed-origins (env CORS_ALLOWED_ORIGINS). 기본은 비어 있음(모두 거부), 프론트 주소는 환경별 설정에 넣는다. allowCredentials=true 라 "*" 는 안 된다
-- 권한: JWT 의 permissions 클레임만 본다(역할 이름을 코드에 두지 않는다). /api/auth/admin/** 은 ACCOUNT_ADMIN, 조회(GET)는 READ, 쓰기는 권한 표의 권한만, 표에 없는 요청은 아무도 못 함 (SecurityConfig.authorizeByPermission, docs/specs/role-permissions.md). 역할별 권한은 auth DB(role_permission)가 정한다. 새 API 를 열려면 표와 명세에 더한다
+- 권한: 토큰의 role 로 메모리의 역할 → 권한 표(config/RolePermissionTable)에서 권한을 찾아 hasAuthority 로 본다. 역할 이름을 코드에 두지 않는다. 표는 Redis 로 받고(뜰 때·재연결 때 키, 바뀔 때 채널), 받기 전·키가 없으면 비어 있어 모두 403 이고 retry-interval 마다 다시 읽는다. GET /api/auth/me 는 로그인만, /api/auth/admin/** 은 ACCOUNT_ADMIN, 조회(GET)는 READ, 쓰기는 권한 표의 권한만, 표에 없는 요청은 아무도 못 함 (SecurityConfig.authorizeByPermission, docs/specs/role-permissions.md, role-permission-admin.md). 새 API 를 열려면 표와 명세에 더한다
 - 공개 경로(로그인·활성화·재발급·로그아웃, health)는 SecurityConfig 의 PUBLIC_PATHS 한 곳에 둔다. 이 경로는 Bearer 토큰을 읽지 않는다(만료 토큰이 붙어도 통과)
 - 오류 응답: gateway 가 직접 만드는 오류(401·403·404·5xx)도 서비스와 같은 {"code","message"} (config/GatewayErrors, GatewayErrorWebExceptionHandler). code 는 상태 이름, 상태는 그대로(뒤 서비스 연결 실패만 503). 서비스가 낸 오류는 그대로 전달
 - traceId: 요청마다 새로 만들어(클라이언트 값은 버림) 뒤 서비스로 X-Trace-Id 로 넘기고 모든 응답에 붙인다 (config/TraceIdFilter). WebFlux 라 MDC 가 없으므로 gateway 로그는 traceId 를 메시지에 직접 넣는다

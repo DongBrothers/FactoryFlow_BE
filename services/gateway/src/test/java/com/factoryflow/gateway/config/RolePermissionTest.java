@@ -11,11 +11,12 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
- * API 권한 (docs/specs/role-permissions.md). gateway 는 역할이 아니라 JWT permissions 만 본다. 조회(GET)는 READ,
- * 쓰기는 표의 권한만, 표에 없는 요청은 아무도 못 한다. 라우트가 없으므로 통과하면 404, 막히면 401·403 이다.
+ * API 권한 (docs/specs/role-permissions.md, role-permission-admin.md). gateway 는 토큰의 role 로 역할 → 권한
+ * 표에서 권한을 찾는다. 조회(GET)는 READ, 쓰기는 표의 권한만, 표에 없는 요청은 아무도 못 한다. 테스트 역할 이름은 가진 권한을 + 로 이은 것이다
+ * (TestRolePermissions). 라우트가 없으므로 통과하면 404, 막히면 401·403 이다.
  */
 @WebFluxTest
-@Import({SecurityConfig.class, PermissionTokenDecoder.class})
+@Import({SecurityConfig.class, RoleTokenDecoder.class, TestRolePermissions.class})
 class RolePermissionTest {
 
     private static final String ORDER_NO = "550e8400-e29b-41d4-a716-446655440000";
@@ -124,15 +125,26 @@ class RolePermissionTest {
         post(path, "READ").expectStatus().isForbidden();
     }
 
-    @ParameterizedTest(name = "permissions 없는 옛 {0} 토큰은 아무것도 할 수 없다")
-    @ValueSource(strings = {"SALES", "PRODUCTION", "WORKER", "ADMIN"})
-    void roleOnlyTokenHasNoPermission(String role) {
-        // permissions 클레임이 생기기 전에 받은 토큰. WORKER 는 #118 에서 PRODUCTION 으로 합쳤다. 다시 로그인하면 된다
-        String token = PermissionTokenDecoder.ROLE_ONLY + role;
-        post("/api/orders", token).expectStatus().isForbidden();
-        post("/api/mes/work-orders/1/steps/PRESS/start", token).expectStatus().isForbidden();
-        post("/api/auth/admin/users", token).expectStatus().isForbidden();
-        request(HttpMethod.GET, "/api/mes/work-orders", token).expectStatus().isForbidden();
+    @ParameterizedTest(name = "권한 표에 없는 {0} 역할은 아무것도 할 수 없다")
+    @ValueSource(strings = {"SALES", "WORKER", "QUALITY"})
+    void roleNotInTableHasNoPermission(String role) {
+        // 표에 없는 역할 (WORKER 는 #118 에서 PRODUCTION 으로 합쳐 없어졌다)
+        post("/api/orders", role).expectStatus().isForbidden();
+        post("/api/mes/work-orders/1/steps/PRESS/start", role).expectStatus().isForbidden();
+        post("/api/auth/admin/users", role).expectStatus().isForbidden();
+        request(HttpMethod.GET, "/api/mes/work-orders", role).expectStatus().isForbidden();
+    }
+
+    @ParameterizedTest(name = "{0} 역할도 내 정보를 볼 수 있다")
+    @ValueSource(strings = {"READ", "ACCOUNT_ADMIN", "WORKER"})
+    void anyLoggedInRoleCanReadMe(String role) {
+        // 내 정보는 권한 없이 로그인한 직원 모두 (권한 없는 역할, 표에 없는 역할 포함)
+        request(HttpMethod.GET, "/api/auth/me", role).expectStatus().isNotFound();
+    }
+
+    @Test
+    void meNeedsLogin() {
+        client.get().uri("/api/auth/me").exchange().expectStatus().isUnauthorized();
     }
 
     @ParameterizedTest(name = "표에 없는 요청은 {0} 권한으로도 할 수 없다")

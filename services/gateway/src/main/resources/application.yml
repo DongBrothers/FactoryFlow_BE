@@ -9,6 +9,11 @@ spring:
         jwt:
           # auth 서비스의 공개키(JWKS). 환경별로 주입(로컬·도커·AWS). 기본은 도커 컨테이너명 기준
           jwk-set-uri: ${AUTH_JWKS_URI:http://auth:8080/internal/jwks}
+  # 역할 → 권한 표를 auth 가 이 Redis 로 보낸다 (auth 와 같은 Redis). 로컬은 docker compose 의 ff-redis, dev 는 APP_DEV_YML_GATEWAY 에서 덮어쓴다
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 server:
   port: 8080
@@ -18,6 +23,9 @@ app:
     # 브라우저에서 부르는 프론트 주소. 쉼표로 여러 개. allowCredentials 를 켜므로 "*" 는 안 된다.
     # 기본은 비어 있음(모든 origin 거부). 프론트 주소가 정해지면 환경별 설정(application-dev.yml 등)에 넣는다
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  role-permissions:
+    # Redis 키가 없거나 읽지 못할 때 다시 읽는 간격. 읽으면 멈춘다 (평소에는 읽지 않는다)
+    retry-interval: 3s
 
 management:
   endpoints:

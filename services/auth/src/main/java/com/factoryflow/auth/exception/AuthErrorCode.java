@@ -18,7 +18,16 @@ public enum AuthErrorCode implements ErrorCode {
     TOKEN_SIGNING_FAILED("AUTH-011", "토큰을 발급하지 못했습니다.", HttpStatus.INTERNAL_SERVER_ERROR),
     MAIL_UNAVAILABLE(
             "AUTH-012", "활성화 메일을 보내지 못했습니다. 잠시 후 다시 발급해 주세요.", HttpStatus.SERVICE_UNAVAILABLE),
-    INVALID_ROLE("AUTH-013", "존재하지 않는 역할입니다.", HttpStatus.BAD_REQUEST);
+    INVALID_ROLE("AUTH-013", "존재하지 않는 역할입니다.", HttpStatus.BAD_REQUEST),
+    ROLE_NOT_FOUND("AUTH-014", "존재하지 않는 역할입니다.", HttpStatus.NOT_FOUND),
+    INVALID_PERMISSION("AUTH-015", "존재하지 않는 권한이 있습니다.", HttpStatus.BAD_REQUEST),
+    ACCOUNT_ADMIN_REQUIRED(
+            "AUTH-016", "계정 관리(ACCOUNT_ADMIN) 권한을 가진 역할이 하나는 있어야 합니다.", HttpStatus.CONFLICT),
+    ROLE_PERMISSION_SYNC_UNAVAILABLE(
+            "AUTH-017",
+            "권한을 저장했지만 반영하지 못했습니다. 같은 내용으로 다시 저장해 주세요.",
+            HttpStatus.SERVICE_UNAVAILABLE),
+    USER_NOT_FOUND("AUTH-018", "존재하지 않는 계정입니다.", HttpStatus.NOT_FOUND);
 
     private final String code;
     private final String message;
