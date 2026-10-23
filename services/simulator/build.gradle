@@ -19,3 +19,8 @@ dependencies {
 tasks.named('test') {
     systemProperty 'spring.profiles.active', 'test'
 }
+
+// SpecTablesTest 가 명세 표(docs/specs)를 읽으므로, 명세만 바뀌어도 테스트를 다시 돌린다 (#179)
+tasks.named('test') {
+    inputs.dir("$rootDir/docs/specs").withPropertyName('specs')
+}

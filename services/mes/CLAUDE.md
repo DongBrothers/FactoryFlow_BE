@@ -14,6 +14,7 @@
 - LOT 스캔: 의장(ASSEMBLY) 양품 완료 요청의 scannedLots(부품마다 LOT 하나, 선택)를 work_order_part_scan 에 남긴다(재작업 뒤 다시 양품이면 바꿈). 다른 공정·불량이면 400 SCAN_NOT_ALLOWED. 완료 때 mes.vehicle-completed 의 scannedLots 로 보낸다 (docs/specs/part-lot-scan.md)
 - 부품 계보(VIN ↔ LOT)의 주인: 찍은 LOT 으로 GET /mes/vehicles/{vin}/part-lots(부품 id 순), GET /mes/part-lots/{lotNo}/vehicles(리콜, 찍은 시각 순, 검사 전 차는 vin null). 부품 이름·출고 여부는 inventory 조회로 붙인다 (PartScanService, docs/specs/part-genealogy.md)
 - 취소 판단: production.release-cancel-requested 수신 시 작업지시가 RELEASED(첫 공정 전)면 CANCELLED + mes.work-order-cancelled, 시작했으면 mes.work-order-cancel-rejected(작업지시 상태). 작업지시가 아직 없으면(발행보다 먼저 옴) CANCELLED 작업지시를 남기고 cancelled
+- 설비 목록(V2 시드)과 센서 항목·범위(TelemetryParameter)는 simulator 에도 있다. 명세 표(equipment-status.md "설비 목록", process-telemetry.md)가 기준이고 SpecTablesTest 가 맞춰 본다 (#179)
 - 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
 - 센서값: equipment.step-telemetry 수신 → step_telemetry 에 샘플마다 문서 1개. 메시지당 300개 넘으면 저장하지 않고 DLQ, 조회는 한 번에 5,000개까지(truncated). 조회 GET /mes/work-orders/{id}/steps/{process}/telemetry(로봇 공정만, 회차별), GET /mes/equipments/{code}/telemetry?from=&to=(최대 1시간). 테스트는 MongoContainerConfig 를 함께 가져온다
 - 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected

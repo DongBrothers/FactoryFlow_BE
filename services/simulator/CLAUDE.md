@@ -9,5 +9,5 @@
 - 시작할 때 설비마다 지금 상태(equipment.status-changed)를 보내 mes 의 설비 상태를 맞춘다 (설비가 기준, docs/specs/simulator-restart.md)
 - 내부 API: /internal/simulator/equipments (상태 보기, fault·stop·run). 시연·테스트용, gateway 에 노출하지 않음
 - 설정: factoryflow.simulator.* (작업 시간, 불량 확률, 자동 고장 확률(기본 0), 재전송 주기, 센서값 간격) (docs/specs/simulator.md). 공통 application.yml 이 아니라 환경별 application-{local,dev,test}.yml 에 둔다. 테스트는 test 프로필
-- 설비 코드와 공정은 mes 의 equipment 와 같은 값을 쓴다 (예: PRESS-01, BODY-02)
+- 설비 코드와 공정은 mes 의 equipment 와 같은 값을 쓴다 (예: PRESS-01, BODY-02). 설비 목록과 센서 항목·범위는 명세 표(equipment-status.md "설비 목록", process-telemetry.md)가 기준이고 SpecTablesTest 가 맞춰 본다 (#179)
 - 보상: 없음. 고장·정지 때 그 설비의 공정을 다른 설비로 재배정하는 건 mes 가 판단한다 (docs/specs/equipment-status.md)
