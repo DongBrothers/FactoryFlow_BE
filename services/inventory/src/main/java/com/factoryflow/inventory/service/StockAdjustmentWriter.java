@@ -80,11 +80,8 @@ public class StockAdjustmentWriter {
      */
     @Transactional
     public void restoreHeld(List<Long> productionIds) {
-        Set<Long> stillWaiting = findStillWaiting(productionIds);
-        List<Long> restored =
-                productionIds.stream().filter(id -> !stillWaiting.contains(id)).toList();
+        List<Long> restored = publishReservedUnlessWaiting(productionIds);
         log.warn("재고 조정이 끝나지 않아 생산 건을 READY 로 되돌림: productionIds={}", restored);
-        restored.forEach(id -> eventPublisher.publish(new InventoryReserved(id)));
     }
 
     /**
@@ -105,11 +102,24 @@ public class StockAdjustmentWriter {
         }
         Set<Long> reclaimed =
                 lines.stream().map(PartReservation::getProductionId).collect(Collectors.toSet());
-        // 그 사이 예약이 바뀌어 거두지 못한 생산 건은 부품 대기로 남지 않게 READY 로 되돌린다
-        heldProductionIds.stream()
-                .filter(id -> !reclaimed.contains(id))
-                .forEach(id -> eventPublisher.publish(new InventoryReserved(id)));
+        // 그 사이 예약이 바뀌어 거두지 못한 생산 건은 부품 대기로 남지 않게 READY 로 되돌린다 (다른 부품을 기다리면 그대로)
+        publishReservedUnlessWaiting(
+                heldProductionIds.stream().filter(id -> !reclaimed.contains(id)).toList());
         return heldProductionIds.stream().filter(reclaimed::contains).toList();
+    }
+
+    /**
+     * 부품을 다 잡은(WAITING 줄이 없는) 생산 건에만 inventory.reserved 를 보낸다. 이 이벤트는 부품을 다 잡았다는 뜻이라, 다른 부품을 기다리거나
+     * 다른 조정이 먼저 거둬 간 생산 건에는 보내지 않는다 (PR #172 리뷰). 보낸 생산 건 id 를 돌려준다.
+     */
+    private List<Long> publishReservedUnlessWaiting(List<Long> productionIds) {
+        if (productionIds.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> stillWaiting = findStillWaiting(productionIds);
+        List<Long> ready = productionIds.stream().filter(id -> !stillWaiting.contains(id)).toList();
+        ready.forEach(id -> eventPublisher.publish(new InventoryReserved(id)));
+        return ready;
     }
 
     /** 늘린 수량으로 조정 LOT 을 만들고, 입고와 같은 규칙으로 기다리는 줄을 채운다. 조정 LOT 번호를 돌려준다. */

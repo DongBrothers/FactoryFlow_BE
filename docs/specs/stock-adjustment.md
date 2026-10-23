@@ -53,7 +53,7 @@ gateway `/api/inventory/parts/{partId}/adjustments`, 헤더 `X-User-Id`(gateway 
      - 거둔 생산 건의 그 부품 예약 RESERVED → **WAITING** (예약 id 는 그대로라 대기 줄에서 원래 순서 자리에 선다), part.reserved − qty, part.available + qty, 재고 이력 `RELEASE` (ref_type `PRODUCTION`, ref_id = 거둔 생산 건. 생산 취소로 풀 때와 같은 종류)
      - 그 뒤 위의 "줄일 때" 를 그대로 한다 (available − |qty|, ADJUST_OUT, LOT 차감)
      - 남은 available 로 기다리는 줄을 채우지 않는다. 거둔 차가 줄의 앞에 서므로, 그 차가 다 들어가지 않으면 뒤 차도 멈춘다 (기존 규칙)
-     - production 이 되돌렸지만 그 사이 예약이 RESERVED 가 아니게 된 생산 건(취소 등)은 거두지 않고 `inventory.reserved` 로 READY 로 돌려보낸다
+     - production 이 되돌렸지만 그 사이 예약이 RESERVED 가 아니게 된 생산 건(취소 등)은 거두지 않고, 부품을 다 잡은(WAITING 줄이 없는) 건만 `inventory.reserved` 로 READY 로 돌려보낸다. 다른 조정이 먼저 거둬 가 WAITING 이면 보내지 않는다 (PR #172 리뷰)
   - 거둔 차의 **다른 부품** 예약은 RESERVED 그대로 둔다. 이 부품이 다시 채워지면 기존 줄 채우기가 `inventory.reserved` 를 보내 READY 로 돌아간다
 - **3 이 실패하면** (부품 version 충돌 등): production 은 이미 WAITING_MATERIAL 이고 inventory 예약은 RESERVED 다. 거둔 생산 건마다 `inventory.reserved` 를 다시 발행해(별도 트랜잭션, Outbox) READY 로 되돌리고, 조정은 409 `PART_CONFLICT` 로 끝낸다 (production 은 WAITING_MATERIAL 에서 inventory.reserved 를 받아 READY 로 바꾼다, 기존 동작)
 - 응답에 `"reclaimedProductionIds": [9]` 를 더한다 (거두지 않았으면 빈 목록)
@@ -113,7 +113,7 @@ gateway `/api/inventory/parts/{partId}/adjustments`, 헤더 `X-User-Id`(gateway 
 - [ ] production 호출 실패: 503 PRODUCTION_UNAVAILABLE, 재고 그대로, 부품을 다 잡은 후보만 inventory.reserved (다른 부품을 기다리는 후보는 안 보냄)
 - [ ] client: 409 중 NOT_ENOUGH_UNRELEASED 만 INSUFFICIENT_AVAILABLE, 다른 409 는 PRODUCTION_UNAVAILABLE
 - [ ] 거둔 뒤 inventory 저장 실패: 거둔 생산 건마다 inventory.reserved 재발행 → production READY 로 돌아옴
-- [ ] production 이 되돌렸지만 예약이 이미 RESERVED 가 아닌 생산 건: 거두지 않고 inventory.reserved
+- [ ] production 이 되돌렸지만 예약이 이미 RESERVED 가 아닌 생산 건: 거두지 않고, WAITING 줄이 없을 때만 inventory.reserved
 - [ ] qty 0·없음, reason 없음, X-User-Id 없음 400. 없는·지운 부품 404
 - [ ] 조정 LOT 번호로 LOT 조회 API 가 400 이 아님
 - [ ] gateway: PURCHASE 만, 나머지 403

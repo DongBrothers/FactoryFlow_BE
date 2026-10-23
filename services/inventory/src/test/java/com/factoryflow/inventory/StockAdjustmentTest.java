@@ -256,6 +256,27 @@ class StockAdjustmentTest {
     }
 
     @Test
+    void heldCarAlreadyReclaimedByAnotherAdjustmentIsNotSentBackToReady() throws Exception {
+        // 다른 조정이 차 9 를 먼저 거둬 간 경우(WAITING): 부품이 모자라므로 READY 로 보내면 안 된다 (PR #172 리뷰)
+        long tire = insertPart("TIRE-18", 0, 1);
+        insertReservation(9, tire, 4, "WAITING");
+        insertReservation(7, tire, 1, "RESERVED");
+        insertLot(tire, "LOT-261001-000001", 1, "2026-10-01 09:00:00");
+        when(productionClient.holdForMaterial(any())).thenReturn(List.of(7L, 9L));
+
+        adjust(tire, "{\"qty\":-1,\"reason\":\"분실\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.reclaimedProductionIds.length()").value(1))
+                .andExpect(jsonPath("$.data.reclaimedProductionIds[0]").value(7));
+
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT COUNT(*) FROM outbox WHERE event_name = 'inventory.reserved'",
+                                Integer.class))
+                .isZero();
+    }
+
+    @Test
     void notEnoughUnreleasedCarsIs409AndNothingChanges() throws Exception {
         long tire = insertPart("TIRE-18", 2, 6);
         insertReservation(9, tire, 6, "RESERVED");
