@@ -1,5 +1,10 @@
 package com.factoryflow.gateway.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -36,6 +41,23 @@ class SecurityConfigTest {
     @Test
     void adminApiAllowsAccountAdmin() {
         callAdminApi("ACCOUNT_ADMIN").expectStatus().isNotFound();
+    }
+
+    /**
+     * gateway 는 역할 이름을 모르고 권한 코드만 본다. 역할별 권한은 auth DB(role_permission)가 정한다
+     * (docs/specs/role-permissions.md). 역할 이름이 다시 들어오면 역할을 더할 때 gateway 도 고쳐야 한다.
+     */
+    @Test
+    void securityConfigDoesNotNameRoles() throws IOException {
+        String source =
+                Files.readString(
+                        Path.of(
+                                "src/main/java/com/factoryflow/gateway/config/SecurityConfig.java"));
+
+        // 단어 경계라 권한 코드(PURCHASE_WRITE, ACCOUNT_ADMIN 등)는 걸리지 않는다
+        assertThat(source)
+                .doesNotContainPattern("\\b(SALES|PURCHASE|PRODUCTION|ADMIN|WORKER)\\b")
+                .doesNotContain("ROLE_", "hasRole");
     }
 
     @Test
