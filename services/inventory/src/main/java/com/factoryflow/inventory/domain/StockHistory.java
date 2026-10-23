@@ -86,6 +86,11 @@ public class StockHistory {
                 partId, qty, StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);
     }
 
+    public static StockHistory scrapForProduction(Long partId, int qty, Long productionId) {
+        return new StockHistory(
+                partId, qty, StockHistoryType.SCRAP, StockHistoryRefType.PRODUCTION, productionId);
+    }
+
     public static StockHistory consumeForProduction(Long partId, int qty, Long productionId) {
         return new StockHistory(
                 partId,

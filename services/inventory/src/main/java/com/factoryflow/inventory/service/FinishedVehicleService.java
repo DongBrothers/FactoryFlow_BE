@@ -9,6 +9,7 @@ import com.factoryflow.inventory.domain.PartLot;
 import com.factoryflow.inventory.domain.PartReservation;
 import com.factoryflow.inventory.domain.ReservationStatus;
 import com.factoryflow.inventory.domain.StockHistory;
+import com.factoryflow.inventory.domain.StockHistoryType;
 import com.factoryflow.inventory.dto.response.FinishedVehicleListResponse;
 import com.factoryflow.inventory.dto.response.FinishedVehicleSummaryResponse;
 import com.factoryflow.inventory.dto.response.ShipFinishedVehicleResponse;
@@ -66,7 +67,12 @@ public class FinishedVehicleService {
         if (reservations.isEmpty()) {
             throw new CustomException(InventoryErrorCode.RESERVATION_NOT_FOUND);
         }
-        consume(event.productionId(), event.vin(), reservations, event.scannedLotsOrEmpty());
+        consume(
+                event.productionId(),
+                event.vin(),
+                reservations,
+                event.scannedLotsOrEmpty(),
+                StockHistoryType.CONSUME);
         FinishedVehicle vehicle =
                 finishedVehicleRepository.save(
                         FinishedVehicle.stock(
@@ -141,6 +147,20 @@ public class FinishedVehicleService {
     }
 
     /**
+     * production.scrapped: 공정 불량으로 폐기된 차가 잡아 둔 부품을 쓴 것으로 처리한다. 완성 때와 같이 예약 CONSUMED, 잡은 수량 감소, LOT
+     * 입고 순 차감이고 이력은 SCRAP 이다. 완성차는 없다. 잡아 둔 부품이 없으면(이미 처리함) 건너뛴다 (docs/specs/defect-scrap.md).
+     */
+    @Transactional
+    public void scrapParts(Long productionId) {
+        List<PartReservation> reservations = findReserved(productionId);
+        if (reservations.isEmpty()) {
+            log.info("잡아 둔 부품이 없어 폐기 소모 건너뜀: productionId={}", productionId);
+            return;
+        }
+        consume(productionId, null, reservations, List.of(), StockHistoryType.SCRAP);
+    }
+
+    /**
      * 예약 줄마다 LOT 남은 수량을 줄이고, 부품의 잡은 수량을 줄이고 사용 이력을 남긴다. 찍은 LOT 을 쓸 수 있으면 그 LOT 에서, 아니면 입고 순으로 뺀다.
      * 어느 차에 어느 LOT 이 들어갔는지(계보)는 mes 가 갖는다 (docs/specs/part-genealogy.md). 부품과 LOT 은 한 번에 읽는다 (동시
      * 예약·입고와 부품 version 으로 부딪힌다).
@@ -149,7 +169,8 @@ public class FinishedVehicleService {
             Long productionId,
             String vin,
             List<PartReservation> reservations,
-            List<ScannedPartLot> scans) {
+            List<ScannedPartLot> scans,
+            StockHistoryType type) {
         List<Long> partIds = reservations.stream().map(PartReservation::getPartId).toList();
         Map<Long, Part> partsById = findParts(partIds);
         Map<Long, List<PartLot>> lotsByPartId = findOpenLots(partIds);
@@ -166,8 +187,11 @@ public class FinishedVehicleService {
             part.consume(reservation.getQty());
             reservation.consume();
             stockHistoryRepository.save(
-                    StockHistory.consumeForProduction(
-                            reservation.getPartId(), reservation.getQty(), productionId));
+                    type == StockHistoryType.SCRAP
+                            ? StockHistory.scrapForProduction(
+                                    reservation.getPartId(), reservation.getQty(), productionId)
+                            : StockHistory.consumeForProduction(
+                                    reservation.getPartId(), reservation.getQty(), productionId));
         }
     }
 

@@ -10,6 +10,8 @@ public enum StockHistoryType {
     RECEIVE,
     /** 생산에 사용: reserved − */
     CONSUME,
+    /** 공정 불량으로 폐기된 차가 잡아 둔 부품: reserved − (docs/specs/defect-scrap.md) */
+    SCRAP,
     /** 재고 조정으로 늘림: available + (docs/specs/stock-adjustment.md) */
     ADJUST_IN,
     /** 재고 조정으로 줄임: available − */
