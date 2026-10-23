@@ -10,6 +10,7 @@ import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
 import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.dto.response.MyAccountResponse;
+import com.factoryflow.auth.dto.response.UserNameResponse;
 import com.factoryflow.auth.exception.AuthErrorCode;
 import com.factoryflow.auth.repository.RoleRepository;
 import com.factoryflow.auth.repository.UserAccountRepository;
@@ -19,7 +20,9 @@ import com.factoryflow.auth.service.redis.ActivationTokenStore;
 import com.factoryflow.auth.service.redis.LoginAttemptGuard;
 import com.factoryflow.auth.service.redis.RefreshTokenStore;
 import com.factoryflow.common.web.exception.CustomException;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -152,6 +155,13 @@ public class AuthService {
         return MyAccountResponse.of(account, role, roleService.findPermissionCodes(role));
     }
 
+    /** 직원 이름: 없는 id 는 빠지고 같은 id 는 한 번만. 상태(DISABLED)와 상관없이 준다 (그만둔 직원의 옛 실적도 이름으로). */
+    public List<UserNameResponse> findNames(List<String> publicIds) {
+        return findAccountsByPublicIds(Set.copyOf(publicIds)).stream()
+                .map(UserNameResponse::from)
+                .toList();
+    }
+
     /** 로그아웃: Refresh 토큰(쿠키에서 읽음)을 폐기한다. */
     public void logout(String refreshToken) {
         if (refreshToken != null) {
@@ -175,6 +185,10 @@ public class AuthService {
         return repository
                 .findByPublicId(publicId)
                 .orElseThrow(() -> new CustomException(AuthErrorCode.USER_NOT_FOUND));
+    }
+
+    private List<UserAccount> findAccountsByPublicIds(Set<String> publicIds) {
+        return repository.findAllByPublicIdIn(publicIds);
     }
 
     /** 발급 대기의 역할 코드로 역할을 찾는다. 역할은 마이그레이션으로만 넣고 지우지 않으므로 발급 때 확인한 코드는 있다. */

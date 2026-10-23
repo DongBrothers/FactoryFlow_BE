@@ -18,7 +18,11 @@ import com.nimbusds.jwt.SignedJWT;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -407,6 +411,42 @@ class AuthAccountTest {
                 .andExpect(jsonPath("$.code").value("AUTH-018"));
     }
 
+    // --- 직원 이름 ---
+
+    @Test
+    void userNamesReturnsKnownAccountsOnceWithoutEmailOrRole() throws Exception {
+        activateNewAccount(EMAIL);
+        activateNewAccount("lee@gmail.com");
+        jdbc.update("UPDATE user_account SET name = '이영희' WHERE email = 'lee@gmail.com'");
+        // 그만둔 직원의 옛 실적도 이름으로 보이게
+        jdbc.update("UPDATE user_account SET status = 'DISABLED' WHERE email = 'lee@gmail.com'");
+        String kim = publicIdOf(EMAIL);
+        String lee = publicIdOf("lee@gmail.com");
+        String unknown = "00000000-0000-0000-0000-000000000000";
+
+        String body =
+                userNames(String.join(",", kim, lee, kim, unknown))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+
+        // 순서는 정하지 않는다. 필드는 publicId, name 둘뿐이다
+        assertThat(JsonPath.<List<Map<String, Object>>>read(body, "$.data"))
+                .containsExactlyInAnyOrder(
+                        Map.of("publicId", kim, "name", "김철수"),
+                        Map.of("publicId", lee, "name", "이영희"));
+    }
+
+    @Test
+    void userNamesRejectsMissingEmptyMalformedOrTooManyIds() throws Exception {
+        mockMvc.perform(get("/auth/users")).andExpect(status().isBadRequest());
+        userNames("").andExpect(status().isBadRequest());
+        userNames("not-a-uuid").andExpect(status().isBadRequest());
+        userNames(randomIds(101)).andExpect(status().isBadRequest());
+        userNames(randomIds(100)).andExpect(status().isOk());
+    }
+
     @Test
     void emailIsCaseInsensitive() throws Exception {
         issue("Kim@Gmail.COM").andExpect(status().isCreated());
@@ -569,6 +609,7 @@ class AuthAccountTest {
                 "409",
                 "503");
         assertOperationCodes(docs, "get", "/auth/me", "200", "400", "404");
+        assertOperationCodes(docs, "get", "/auth/users", "200", "400");
         // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 프론트가 보는 문서에 나오지 않는다
         assertThat(JsonPath.<Map<String, Object>>read(docs, "$.paths"))
                 .doesNotContainKey("/internal/jwks");
@@ -620,6 +661,21 @@ class AuthAccountTest {
 
     private ResultActions me(String publicId) throws Exception {
         return mockMvc.perform(get("/auth/me").header("X-User-Id", publicId));
+    }
+
+    private ResultActions userNames(String publicIds) throws Exception {
+        return mockMvc.perform(get("/auth/users").param("publicIds", publicIds));
+    }
+
+    private String publicIdOf(String email) {
+        return jdbc.queryForObject(
+                "SELECT public_id FROM user_account WHERE email = ?", String.class, email);
+    }
+
+    private static String randomIds(int count) {
+        return Stream.generate(() -> UUID.randomUUID().toString())
+                .limit(count)
+                .collect(Collectors.joining(","));
     }
 
     private ResultActions login(String email, String password) throws Exception {

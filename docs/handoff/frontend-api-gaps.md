@@ -16,10 +16,9 @@
 
 | # | 작업 | 서비스 | 쓰는 화면 | 크기 |
 |---|---|---|---|---|
-| 2 | 직원 이름 조회 (public_id → 이름) | auth | 작업지시 상세 실적의 작업자, 구매 목록의 발주자 | 작음 |
 | 3 | 설비 상태 이력 조회 | mes | 설비 현황의 이력 패널 | 작음 |
 
-(1번 "내 정보" 는 끝났다 → 아래 "끝난 것". 번호는 프론트 할 일에서 가리키므로 그대로 둔다)
+(1번 "내 정보", 2번 "직원 이름 조회" 는 끝났다 → 아래 "끝난 것". 번호는 프론트 할 일에서 가리키므로 그대로 둔다)
 
 백엔드가 필요 없는 것 (프론트에서 처리)
 - 작업지시 목록·완성차 목록에는 `productId` 만 있다 → 프론트가 `GET /api/production/products` 로 id → 이름을 바꾼다
@@ -39,10 +38,17 @@
 2. **메뉴·첫 화면은 역할 이름이 아니라 권한으로 고른다**: 로그인 뒤 `GET /api/auth/me` 의 `permissions` 를 본다 (예: 주문 등록 버튼은 `ORDER_WRITE`, 계정 발급·권한 편집 메뉴는 `ACCOUNT_ADMIN`). 토큰에는 `sub`·`role` 만 있고 `permissions` 는 없다. 그러면 관리자가 권한을 바꿔도 프론트는 고치지 않는다
 3. **화면 상단 이름·역할**: `GET /api/auth/me` 의 `name`·`role` (이메일은 주지 않는다)
 4. **계정 발급의 역할 선택지**: `GET /api/auth/admin/roles` 의 `code`·`name`. 발급 `role` 에는 `code` 를 보낸다 (하드코딩하지 않는다)
-5. **실적 작업자·구매 발주자 이름**: 상세 응답의 public_id 들(mes 실적의 `workerId`, purchase 의 `orderedBy`)을 모아 남은 작업 2번 API 로 한 번에 이름을 받는다 (2번이 끝나면 경로를 여기 적는다)
+5. **실적 작업자·구매 발주자 이름**: 상세 응답의 public_id 들(mes 실적의 `workerId`, purchase 의 `orderedBy`)을 모아 `GET /api/auth/users?publicIds=a,b,c` 로 한 번에 이름을 받는다 → `[{ publicId, name }]`. 1~100개, 없는 id 는 빠지고 순서는 정해지지 않으므로 `publicId` 로 찾는다. ADMIN 은 `READ` 가 없어 403 (ADMIN 화면에는 쓸 곳이 없음)
 6. **설비 이력 패널**: 남은 작업 3번 API (3번이 끝나면 경로를 여기 적는다)
 
 ## 끝난 것
+
+### 직원 이름 조회 `GET /api/auth/users?publicIds=` (2026-10-24, 브랜치 `feat/user-names`)
+- 응답 `[{ publicId, name }]`. 이메일·역할 없음. 없는 id 는 빠지고, 같은 id 는 한 번, `DISABLED` 계정도 준다. 순서는 정하지 않는다
+- `publicIds` 가 없거나 비었거나 100개 초과, UUID 형식 아니면 400
+- gateway 규칙 추가 없음 (GET → `READ`). ADMIN 은 403 (ADMIN 화면에 쓸 곳이 없어 그대로. 필요하면 권한 편집으로 ADMIN 에 `READ` 를 더한다)
+- mes·purchase·inventory 는 바꾸지 않았다. 프론트가 id 를 모아 부른다 (위 "프론트 할 일" 5번)
+- 명세 `docs/specs/auth-account.md` "6. 직원 이름 조회"
 
 ### 내 정보 `GET /api/auth/me` (2026-10-23, #175)
 - 응답 `{ publicId, name, role, permissions }`. 이메일은 없다 (화면에 필요 없음, 개인정보)
@@ -68,13 +74,6 @@
 - `docs/specs/auth-account.md` 의 낡은 "`customer` 는 auth_db 에 남아 있다" 문장은 2026-10-24 에 고쳤다
 
 ---
-
-## 2. 직원 이름 조회
-
-- 실적의 작업자(mes `production_result.worker_id`, 응답 `ProductionResultResponse.workerId`)와 구매의 발주자(`PurchaseResponse.orderedBy`)가 public_id 만 있다. 화면에 이름으로 보이기로 했다 (2026-10-16 결정). 재고 조정의 담당자(`stock_adjustment.adjusted_by`, #130)도 public_id 다 (조정 목록 API 는 아직 없음)
-- auth: `GET /auth/users?publicIds=a,b,c` → `[ { publicId, name } ]`. 이메일·역할은 넣지 않는다. 없는 id 는 빠진다. ids 가 비면 400
-- 프론트가 상세 응답의 id 들을 모아 한 번에 부른다 (mes·purchase 는 바꾸지 않는다)
-- GET 이라 `READ` 를 가진 역할에게 저절로 열린다. 경로가 `/api/auth/admin/**` 아래가 아니어야 ADMIN 전용이 되지 않는다
 
 ## 3. 설비 상태 이력 조회
 

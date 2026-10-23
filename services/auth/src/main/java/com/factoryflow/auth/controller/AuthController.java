@@ -10,6 +10,7 @@ import com.factoryflow.auth.dto.response.IssueAccountResponse;
 import com.factoryflow.auth.dto.response.MyAccountResponse;
 import com.factoryflow.auth.dto.response.PermissionResponse;
 import com.factoryflow.auth.dto.response.RoleResponse;
+import com.factoryflow.auth.dto.response.UserNameResponse;
 import com.factoryflow.auth.service.AuthService;
 import com.factoryflow.auth.service.IssuedTokens;
 import com.factoryflow.auth.service.RoleService;
@@ -20,6 +21,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,6 +46,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+    /** 직원 public_id 형식: UUID (UserAccount 가 UUID.randomUUID() 로 만든다). */
+    private static final String PUBLIC_ID =
+            "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
     private final AuthService authService;
     private final RoleService roleService;
@@ -164,6 +172,32 @@ public class AuthController {
                     String publicId) {
         MyAccountResponse me = authService.findMe(publicId);
         return ApiResponse.ok(me);
+    }
+
+    @Operation(
+            summary = "직원 이름",
+            description =
+                    "public_id 여러 개의 직원 이름을 한 번에 준다 (실적 작업자, 발주자를 화면에 이름으로 보일 때). 없는 id 는 빠지고 같은 id 는 한 번만"
+                            + " 준다. 순서는 정하지 않는다. 이메일·역할은 주지 않는다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공. 하나도 없으면 빈 목록"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "publicIds 없음·빈 값, 100개 초과, UUID 형식 아님")
+    })
+    @GetMapping("/users")
+    public ApiResponse<List<UserNameResponse>> findUserNames(
+            @Parameter(
+                            description = "쉼표로 이은 직원 public_id (1~100개)",
+                            example = "6c1e2f3a-8b4d-4f7e-9a2c-1d3e5f7a9b0c")
+                    @RequestParam("publicIds")
+                    @NotEmpty
+                    @Size(max = 100)
+                    List<@Pattern(regexp = PUBLIC_ID) String> publicIds) {
+        List<UserNameResponse> names = authService.findNames(publicIds);
+        return ApiResponse.ok(names);
     }
 
     @Operation(
