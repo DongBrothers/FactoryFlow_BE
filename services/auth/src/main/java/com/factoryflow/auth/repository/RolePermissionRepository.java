@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface RolePermissionRepository extends JpaRepository<RolePermission, Long> {
 
     List<RolePermission> findAllByRoleId(Long roleId);
+
+    void deleteAllByRoleId(Long roleId);
 }

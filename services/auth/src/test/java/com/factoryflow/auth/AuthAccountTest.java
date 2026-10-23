@@ -326,14 +326,12 @@ class AuthAccountTest {
         String publicId = jdbc.queryForObject("SELECT public_id FROM user_account", String.class);
         assertThat(claims.getSubject()).isEqualTo(publicId);
         assertThat(claims.getStringClaim("role")).isEqualTo("SALES");
-        // 역할의 권한은 role_permission 에서 읽는다 (V6)
-        assertThat(claims.getStringListClaim("permissions"))
-                .containsExactlyInAnyOrder("READ", "ORDER_WRITE");
-        assertThat(claims.getClaims()).doesNotContainKeys("email", "employeeNo");
+        // 권한은 토큰에 싣지 않는다. gateway 는 Redis 로 받은 표, 프론트는 내 정보로 본다 (role-permission-admin.md)
+        assertThat(claims.getClaims()).doesNotContainKeys("permissions", "email", "employeeNo");
     }
 
     @Test
-    void refreshedAccessTokenCarriesPermissions() throws Exception {
+    void refreshedAccessTokenHasRoleWithoutPermissions() throws Exception {
         activateNewAccount(EMAIL);
         Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
 
@@ -342,13 +340,13 @@ class AuthAccountTest {
                         mockMvc.perform(post("/auth/token/refresh").cookie(refresh))
                                 .andExpect(status().isOk()));
 
-        assertThat(claims.getStringListClaim("permissions"))
-                .containsExactlyInAnyOrder("READ", "ORDER_WRITE");
+        assertThat(claims.getStringClaim("role")).isEqualTo("SALES");
+        assertThat(claims.getClaims()).doesNotContainKey("permissions");
     }
 
     @Test
     void roleAddedByMigrationNeedsNoCodeChange() throws Exception {
-        // 기존 권한을 조합한 역할은 role, role_permission 행만 넣으면 발급·로그인되고 토큰에 그 권한이 들어간다
+        // 기존 권한을 조합한 역할은 role, role_permission 행만 넣으면 발급·로그인되고 내 정보에 그 권한이 나온다
         jdbc.update("INSERT INTO role (code, name, sort_order) VALUES ('QUALITY', '품질', 5)");
         jdbc.update(
                 "INSERT INTO role_permission (role_id, permission_id)"
@@ -367,7 +365,46 @@ class AuthAccountTest {
 
         var claims = accessClaims(login(EMAIL, PASSWORD).andExpect(status().isOk()));
         assertThat(claims.getStringClaim("role")).isEqualTo("QUALITY");
-        assertThat(claims.getStringListClaim("permissions")).containsExactly("READ");
+        me(claims.getSubject())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.role").value("QUALITY"))
+                .andExpect(jsonPath("$.data.permissions.length()").value(1))
+                .andExpect(jsonPath("$.data.permissions[0]").value("READ"));
+    }
+
+    // --- 내 정보 ---
+
+    @Test
+    void meReturnsAccountAndPermissionsWithoutEmail() throws Exception {
+        activateNewAccount(EMAIL);
+        String publicId = jdbc.queryForObject("SELECT public_id FROM user_account", String.class);
+
+        String body =
+                me(publicId)
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.data.publicId").value(publicId))
+                        .andExpect(jsonPath("$.data.name").value("김철수"))
+                        .andExpect(jsonPath("$.data.role").value("SALES"))
+                        .andExpect(jsonPath("$.data.permissions[0]").value("ORDER_WRITE"))
+                        .andExpect(jsonPath("$.data.permissions[1]").value("READ"))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+
+        assertThat(body).doesNotContain(EMAIL);
+    }
+
+    @Test
+    void meNeedsUserHeader() throws Exception {
+        // gateway 를 거치지 않아 X-User-Id 가 없는 요청
+        mockMvc.perform(get("/auth/me")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void meRejectsUnknownAccount() throws Exception {
+        me("00000000-0000-0000-0000-000000000000")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("AUTH-018"));
     }
 
     @Test
@@ -520,6 +557,18 @@ class AuthAccountTest {
         assertResponseCodes(docs, "/auth/login", "200", "400", "401", "403", "429");
         assertResponseCodes(docs, "/auth/token/refresh", "200", "401", "403");
         assertResponseCodes(docs, "/auth/logout", "204");
+        assertOperationCodes(docs, "get", "/auth/admin/roles", "200");
+        assertOperationCodes(docs, "get", "/auth/admin/permissions", "200");
+        assertOperationCodes(
+                docs,
+                "put",
+                "/auth/admin/roles/{code}/permissions",
+                "200",
+                "400",
+                "404",
+                "409",
+                "503");
+        assertOperationCodes(docs, "get", "/auth/me", "200", "400", "404");
         // 서버끼리만 쓰는 JWKS 는 다른 내부 API 처럼 프론트가 보는 문서에 나오지 않는다
         assertThat(JsonPath.<Map<String, Object>>read(docs, "$.paths"))
                 .doesNotContainKey("/internal/jwks");
@@ -537,10 +586,14 @@ class AuthAccountTest {
     }
 
     private static void assertResponseCodes(String docs, String path, String... codes) {
-        assertThat(JsonPath.<String>read(docs, "$.paths['" + path + "'].post.summary"))
-                .isNotBlank();
-        Map<String, Object> responses =
-                JsonPath.read(docs, "$.paths['" + path + "'].post.responses");
+        assertOperationCodes(docs, "post", path, codes);
+    }
+
+    private static void assertOperationCodes(
+            String docs, String method, String path, String... codes) {
+        String operation = "$.paths['" + path + "']." + method;
+        assertThat(JsonPath.<String>read(docs, operation + ".summary")).isNotBlank();
+        Map<String, Object> responses = JsonPath.read(docs, operation + ".responses");
         assertThat(responses.keySet()).containsExactlyInAnyOrder(codes);
     }
 
@@ -563,6 +616,10 @@ class AuthAccountTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                                 "{\"token\":\"" + token + "\",\"password\":\"" + PASSWORD + "\"}"));
+    }
+
+    private ResultActions me(String publicId) throws Exception {
+        return mockMvc.perform(get("/auth/me").header("X-User-Id", publicId));
     }
 
     private ResultActions login(String email, String password) throws Exception {

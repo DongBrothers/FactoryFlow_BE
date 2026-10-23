@@ -4,17 +4,23 @@ import com.factoryflow.auth.config.RefreshCookieFactory;
 import com.factoryflow.auth.dto.request.ActivateAccountRequest;
 import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
+import com.factoryflow.auth.dto.request.ReplaceRolePermissionsRequest;
 import com.factoryflow.auth.dto.response.AccessTokenResponse;
 import com.factoryflow.auth.dto.response.IssueAccountResponse;
+import com.factoryflow.auth.dto.response.MyAccountResponse;
+import com.factoryflow.auth.dto.response.PermissionResponse;
 import com.factoryflow.auth.dto.response.RoleResponse;
 import com.factoryflow.auth.service.AuthService;
 import com.factoryflow.auth.service.IssuedTokens;
 import com.factoryflow.auth.service.RoleService;
 import com.factoryflow.common.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -22,8 +28,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,8 +77,8 @@ public class AuthController {
     @Operation(
             summary = "역할 목록 (관리자)",
             description =
-                    "계정 발급 화면의 역할 선택지. role 테이블의 역할을 표시 순서대로 한 번에 준다 (기준 정보라 페이지 없음). ADMIN 확인은"
-                            + " gateway 가 JWT 의 role 로 한다.")
+                    "계정 발급 화면의 역할 선택지와 권한 편집 화면. role 테이블의 역할을 표시 순서대로 한 번에 주고(기준 정보라 페이지 없음),"
+                            + " 역할마다 가진 권한 코드를 준다. ACCOUNT_ADMIN 확인은 gateway 가 한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -79,6 +88,82 @@ public class AuthController {
     public ApiResponse<List<RoleResponse>> findRoles() {
         List<RoleResponse> roles = roleService.findRoles();
         return ApiResponse.ok(roles);
+    }
+
+    @Operation(
+            summary = "권한 목록 (관리자)",
+            description = "권한 편집 화면의 선택지. 권한 코드 순으로 한 번에 준다. 권한 종류는 마이그레이션으로만 늘어난다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공")
+    })
+    @GetMapping("/admin/permissions")
+    public ApiResponse<List<PermissionResponse>> findPermissions() {
+        List<PermissionResponse> permissions = roleService.findPermissions();
+        return ApiResponse.ok(permissions);
+    }
+
+    @Operation(
+            summary = "역할 권한 바꾸기 (관리자)",
+            description =
+                    "역할의 권한을 요청한 목록으로 통째로 바꾼다. 같은 코드가 여러 번 오면 한 번으로 본다. 저장 뒤 표를 Redis 로 보내 gateway 에"
+                            + " 1초 안팎에 반영된다. 같은 내용으로 다시 보내도 결과가 같다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "바뀐 역할"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "요청 형식 오류, 없는 권한 코드 (AUTH-015)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "없는 역할 (AUTH-014)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "409",
+                description = "바꾸면 ACCOUNT_ADMIN 을 가진 역할이 하나도 없음 (AUTH-016). 바뀌지 않는다"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "503",
+                description =
+                        "저장했지만 Redis 에 쓰지 못해 gateway 에 반영되지 않음 (AUTH-017). 같은 내용으로 다시 저장하면 된다")
+    })
+    @PutMapping("/admin/roles/{code}/permissions")
+    public ApiResponse<RoleResponse> replacePermissions(
+            @Parameter(description = "역할 코드", example = "SALES")
+                    @PathVariable("code")
+                    @NotBlank
+                    @Size(max = 20)
+                    String code,
+            @Valid @RequestBody ReplaceRolePermissionsRequest request) {
+        RoleResponse role = roleService.replacePermissions(code, request);
+        return ApiResponse.ok(role);
+    }
+
+    @Operation(
+            summary = "내 정보",
+            description =
+                    "로그인한 직원의 이름, 역할, 권한. 프론트가 화면 상단 이름과 메뉴를 고른다. 이메일은 주지 않는다. 로그인한 직원 모두(ADMIN"
+                            + " 포함) 부를 수 있다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "X-User-Id 없음 (gateway 를 거치지 않은 요청)"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "404",
+                description = "없는 계정 (AUTH-018)")
+    })
+    @GetMapping("/me")
+    public ApiResponse<MyAccountResponse> findMe(
+            @Parameter(description = "로그인한 직원 (gateway 가 넣는 JWT sub)", example = "6c1e2f3a-…")
+                    @RequestHeader("X-User-Id")
+                    @NotBlank
+                    @Size(max = 36)
+                    String publicId) {
+        MyAccountResponse me = authService.findMe(publicId);
+        return ApiResponse.ok(me);
     }
 
     @Operation(
