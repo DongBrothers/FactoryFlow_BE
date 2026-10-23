@@ -87,6 +87,17 @@ public class Production extends BaseTimeEntity {
         return true;
     }
 
+    /**
+     * 재고 조정으로 잡아 둔 부품을 거둬 다시 부품을 기다린다. 발행 전 READY 에서만 바뀐다 (발행한 차는 현장에 넘어가 부품을 뺄 수 없다). 바뀌었으면 true.
+     */
+    public boolean holdForMaterial() {
+        if (status != ProductionStatus.READY || isReleased()) {
+            return false;
+        }
+        this.status = ProductionStatus.WAITING_MATERIAL;
+        return true;
+    }
+
     /** 생산 담당이 작업지시를 발행했다. 상태는 READY 그대로이고, 이후 시작·취소 판단은 mes 가 한다. */
     public void release(LocalDateTime now) {
         this.releasedAt = now;

@@ -7,7 +7,10 @@ import com.factoryflow.production.domain.Bom;
 import com.factoryflow.production.domain.Product;
 import com.factoryflow.production.domain.Production;
 import com.factoryflow.production.domain.ProductionStatus;
+import com.factoryflow.production.dto.request.InternalHoldMaterialCandidateRequest;
+import com.factoryflow.production.dto.request.InternalHoldMaterialRequest;
 import com.factoryflow.production.dto.response.AwaitingReleaseResponse;
+import com.factoryflow.production.dto.response.InternalMaterialHoldResponse;
 import com.factoryflow.production.dto.response.ReleaseWorkOrderResponse;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
@@ -23,9 +26,11 @@ import com.factoryflow.production.repository.BomRepository;
 import com.factoryflow.production.repository.ProductRepository;
 import com.factoryflow.production.repository.ProductionRepository;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -193,6 +198,34 @@ public class ProductionService {
         return ReleaseWorkOrderResponse.from(production);
     }
 
+    /**
+     * 재고 조정이 찜한 부품을 거둘 때: 후보를 순서대로 보며 발행 전 READY 생산 건을 WAITING_MATERIAL 로 되돌리고, 거둔 qty 합이 neededQty
+     * 이상이 되면 멈춘다. 모자라면 아무것도 바꾸지 않고 NOT_ENOUGH_UNRELEASED. 생산 건은 발행과 같은 잠금으로 읽어 동시에 발행되는 차는 한쪽만 이긴다
+     * (docs/specs/stock-adjustment.md "찜한 부품 거둬들이기").
+     */
+    @Transactional
+    public InternalMaterialHoldResponse holdForMaterial(InternalHoldMaterialRequest request) {
+        List<Production> held = new ArrayList<>();
+        int heldQty = 0;
+        for (InternalHoldMaterialCandidateRequest candidate : request.candidates()) {
+            Optional<Production> production = findProductionToHold(candidate.productionId());
+            if (production.isPresent() && production.get().holdForMaterial()) {
+                held.add(production.get());
+                heldQty += candidate.qty();
+            }
+            if (heldQty >= request.neededQty()) {
+                held.forEach(this::publishStatusChanged);
+                return InternalMaterialHoldResponse.from(held);
+            }
+        }
+        log.info(
+                "발행 전 차에서 거둬도 모자라 거절: partId={} neededQty={} heldQty={}",
+                request.partId(),
+                request.neededQty(),
+                heldQty);
+        throw new CustomException(ProductionErrorCode.NOT_ENOUGH_UNRELEASED);
+    }
+
     /** 작업지시 발행 대기 목록: READY 이고 아직 발행하지 않은 생산 건, 먼저 생긴 순 (docs/specs/work-order-release.md). */
     @Transactional(readOnly = true)
     public CursorPage<AwaitingReleaseResponse> findAwaitingRelease(Long lastId, int size) {
@@ -211,6 +244,11 @@ public class ProductionService {
         return productionRepository
                 .findForReleaseById(productionId)
                 .orElseThrow(() -> new CustomException(ProductionErrorCode.PRODUCTION_NOT_FOUND));
+    }
+
+    /** 발행과 같은 잠금으로 읽는다. 없는 생산 건은 거둘 후보에서 빠진다. */
+    private Optional<Production> findProductionToHold(Long productionId) {
+        return productionRepository.findForReleaseById(productionId);
     }
 
     private List<Production> findAwaitingReleaseAfter(Long lastId, int limit) {

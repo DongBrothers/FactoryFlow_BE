@@ -16,6 +16,7 @@ public enum ProductionErrorCode implements ErrorCode {
     PART_NOT_FOUND(HttpStatus.NOT_FOUND, "BOM 의 부품을 찾을 수 없습니다."),
     INVENTORY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "부품 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     INVALID_ORDER_QTY(HttpStatus.BAD_REQUEST, "주문 수량은 1 이상이어야 합니다."),
+    NOT_ENOUGH_UNRELEASED(HttpStatus.CONFLICT, "발행 전 차에서 거둬도 부품이 모자랍니다."),
     PRODUCTION_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요.");
 
     private final HttpStatus httpStatus;
