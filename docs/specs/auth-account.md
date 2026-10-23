@@ -19,6 +19,7 @@
 - 활성화: 이메일로 받은 **일회용 링크**로 비밀번호 설정 → 이때 DB 저장
 - 로그인(이메일 + 비밀번호)·토큰: JWT Access(RS256) + Refresh(Redis, 회전)
 - 역할 기반 접근 제어 (admin 전용 API)
+- 직원 이름 조회 (public_id → 이름, 실적 작업자·구매 발주자 표시용)
 - 활성화 메일 발송 (SMTP, 아래 "활성화 메일")
 - springdoc OpenAPI 문서
 
@@ -116,6 +117,23 @@
 - admin 전용 API 는 gateway 가 JWT 의 `role` 로 역할 → 권한 표를 찾아 `ACCOUNT_ADMIN` 이 있는지 확인한다. 다른 API 의 필요한 권한은
   docs/specs/role-permissions.md. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
 
+### 6. 직원 이름 조회 — `GET /api/auth/users?publicIds=a,b,c`
+
+다른 서비스는 직원을 public_id 로만 들고 있다 (mes 실적 `workerId`, purchase `orderedBy`, inventory 재고 조정 `adjustedBy`).
+화면은 상세 응답의 id 들을 모아 이 API 로 한 번에 이름을 받는다 (mes·purchase·inventory 는 바꾸지 않는다, docs/handoff/frontend-api-gaps.md 2번).
+
+```json
+[ { "publicId": "3f2c…", "name": "김철수" }, { "publicId": "9a1b…", "name": "이영희" } ]
+```
+- `publicIds`: 쉼표로 이은 public_id 목록. **1~100개** (화면 한 장의 id 수. 목록 API 의 size 상한 100 과 같다), 원소는 UUID 형식.
+  비었거나 100개 초과, 형식 오류는 400 (Bean Validation, 공통 핸들러)
+- 같은 id 가 여러 번 오면 한 번만 준다. 없는 id 는 빠진다 (404 아님 — 지운 계정도 화면이 깨지지 않게)
+- 상태(`ACTIVE`·`DISABLED`)와 상관없이 준다 (그만둔 직원의 옛 실적도 이름으로 보이게)
+- 이메일·역할은 넣지 않는다 (화면에 필요 없음, 개인정보). 순서는 정하지 않는다 (화면은 publicId 로 찾는다)
+- gateway: GET 이라 `READ` 를 가진 역할이 부른다 (규칙 추가 없음). **ADMIN 은 `READ` 가 없어 403** 이다 — ADMIN 화면(계정 발급·권한 편집)에는
+  직원 이름을 바꿔 보일 곳이 없으므로 그대로 둔다. 필요해지면 관리자가 ADMIN 역할에 `READ` 를 더하면 된다 (코드 변경 없음)
+- 경로는 `/api/auth/admin/**` 밖이다 (그 아래면 ACCOUNT_ADMIN 전용이 된다). `POST /api/auth/admin/users`(발급)와 겹치지 않는다
+
 ## Redis 키
 
 | 키 | 값 | TTL | 용도 |
@@ -160,6 +178,9 @@
 | 발급 | 활성화 메일을 보내지 못함 (MAIL_UNAVAILABLE). 대기 정보는 남지 않으므로 다시 발급하면 된다 | 503 |
 | 역할 목록 | 성공 | 200 |
 | 역할 목록 | ADMIN 이 아님 (gateway 가 JWT role 로 막음) | 403 |
+| 직원 이름 | 성공 (없는 id 는 빠짐, 하나도 없으면 빈 목록) | 200 |
+| 직원 이름 | `publicIds` 없음·빈 값, 101개 이상, UUID 형식 아님 | 400 |
+| 직원 이름 | `READ` 권한 없음 (ADMIN 등, gateway 가 막음) | 403 |
 | 활성화 | 성공 | 204 |
 | 활성화 | 형식 오류, 없거나 만료·재사용된 토큰 (INVALID_ACTIVATION_TOKEN) | 400 |
 | 활성화 | 저장 순간 같은 이메일이 이미 있음 (같은 이메일을 거의 동시에 두 번 발급한 경우, DUPLICATE_EMAIL). 계정은 이미 있으므로 재시도가 아니라 로그인하면 된다 | 409 |
@@ -348,3 +369,5 @@ gateway 는 JWT 를 검증하고, 뒤 서비스는 JWT 를 다시 열지 않고 
 - [ ] 발급하면 활성화 메일이 발급한 이메일로 가고, 링크에 토큰이 들어 있다
 - [ ] 메일 발송이 실패하면 503 이고, Redis 에 이번 발급의 대기 정보가 남지 않는다
 - [ ] 메일 발송 로그에 이메일·토큰·링크가 남지 않는다
+- [ ] 직원 이름 조회가 있는 id 의 `{publicId, name}` 만 주고 이메일·역할은 없다. 없는 id 는 빠지고, 같은 id 는 한 번, `DISABLED` 계정도 준다
+- [ ] 직원 이름 조회의 `publicIds` 가 없거나 비었으면, 101개면, UUID 형식이 아니면 400 (100개는 200)
