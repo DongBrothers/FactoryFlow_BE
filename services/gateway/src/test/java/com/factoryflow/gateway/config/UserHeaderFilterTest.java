@@ -15,7 +15,7 @@ class UserHeaderFilterTest extends GatewayTestSupport {
     void replacesForgedUserIdWithJwtSubject() {
         client.get()
                 .uri("/api/orders/1")
-                .header("Authorization", "Bearer SALES")
+                .header("Authorization", "Bearer READ")
                 .header("X-User-Id", "forged-user")
                 .exchange()
                 .expectStatus()
@@ -29,7 +29,7 @@ class UserHeaderFilterTest extends GatewayTestSupport {
     void removesOtherUserHeadersRegardlessOfCase() {
         client.get()
                 .uri("/api/orders/1")
-                .header("Authorization", "Bearer SALES")
+                .header("Authorization", "Bearer READ")
                 .header("x-user-role", "ADMIN")
                 .header("X-USER-NAME", "forged")
                 .exchange()
@@ -58,7 +58,7 @@ class UserHeaderFilterTest extends GatewayTestSupport {
     void expiredTokenOnPublicPathReachesBackendWithoutUserId() {
         client.post()
                 .uri("/api/auth/token/refresh")
-                .header("Authorization", "Bearer " + RoleTokenDecoder.EXPIRED)
+                .header("Authorization", "Bearer " + PermissionTokenDecoder.EXPIRED)
                 .header("X-User-Id", "forged-user")
                 .exchange()
                 .expectStatus()

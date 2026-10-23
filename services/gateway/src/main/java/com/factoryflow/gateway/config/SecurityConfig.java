@@ -27,24 +27,28 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
 /**
- * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 role 클레임으로 접근을 제어한다. 로그인·활성화·재발급·로그아웃은 공개(토큰을
- * 검증하지 않음), /api/auth/admin/** 은 ADMIN 만(ADMIN 은 계정 발급만 한다). 조회(GET)는 업무
- * 역할(SALES·PURCHASE·PRODUCTION), 쓰기는 역할 표의 역할만, 표에 없는 요청은 아무도 못 한다
- * (docs/specs/role-permissions.md). 새 API 를 열려면 표와 여기에 더한다. 경로는 브라우저가 부르는 밖 주소 기준(라우트의 StripPrefix
- * 보다 먼저 돈다). JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다. (docs/specs/auth-account.md)
+ * gateway 보안: auth 의 JWKS 로 Access 토큰 서명을 검증하고, JWT 의 permissions 클레임으로 접근을 제어한다 (역할 이름은 보지 않는다).
+ * 로그인·활성화·재발급·로그아웃은 공개(토큰을 검증하지 않음), /api/auth/admin/** 은 ACCOUNT_ADMIN, 조회(GET)는 READ, 쓰기는 권한 표의
+ * 권한만, 표에 없는 요청은 아무도 못 한다 (docs/specs/role-permissions.md). 새 API 를 열려면 표와 여기에 더한다. 경로는 브라우저가 부르는 밖
+ * 주소 기준(라우트의 StripPrefix 보다 먼저 돈다). JWKS 는 jwk-set-uri 로 auth 에서 직접 받으므로 밖으로 열지 않는다.
+ * (docs/specs/auth-account.md)
  */
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
-    /** 계정 발급만 하는 역할 (업무 조회·쓰기는 못 한다). */
-    private static final String ADMIN = "ADMIN";
+    /**
+     * 권한 코드 (docs/specs/role-permissions.md). 역할이 어떤 권한을 갖는지는 auth DB(role_permission)가 정하고 JWT
+     * permissions 클레임으로 온다. 여기는 API 마다 필요한 권한만 둔다.
+     */
+    private static final String READ = "READ";
 
-    private static final String SALES = "SALES";
-    private static final String PURCHASE = "PURCHASE";
+    private static final String ORDER_WRITE = "ORDER_WRITE";
+    private static final String PRODUCTION_WRITE = "PRODUCTION_WRITE";
+    private static final String PURCHASE_WRITE = "PURCHASE_WRITE";
 
-    /** 생산(공정 진행, 출고). 라인 작업자 WORKER 를 합쳤다 (#118). */
-    private static final String PRODUCTION = "PRODUCTION";
+    /** 계정 발급·역할 목록. 업무 조회·쓰기는 열지 않는다 (#118). */
+    private static final String ACCOUNT_ADMIN = "ACCOUNT_ADMIN";
 
     /** 로그인 없이 부르는 경로. 토큰이 붙어 있어도 검증하지 않는다. */
     private static final ServerWebExchangeMatcher PUBLIC_PATHS =
@@ -62,7 +66,7 @@ public class SecurityConfig {
             ServerHttpSecurity http, CorsConfigurationSource corsConfigurationSource) {
         return http.csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
-                .authorizeExchange(SecurityConfig::authorizeByRole)
+                .authorizeExchange(SecurityConfig::authorizeByPermission)
                 .exceptionHandling(
                         handling ->
                                 handling.authenticationEntryPoint(GatewayErrors::unauthorized)
@@ -79,29 +83,26 @@ public class SecurityConfig {
     }
 
     /**
-     * 역할 표 (docs/specs/role-permissions.md): 공개 경로, ADMIN 은 계정 발급만, 쓰기는 표의 역할만, 조회는 업무
-     * 역할(SALES·PURCHASE· PRODUCTION)만, 표에 없는 요청은 아무도 못 한다.
+     * 권한 표 (docs/specs/role-permissions.md): 공개 경로, 계정 관리는 ACCOUNT_ADMIN, 쓰기는 표의 권한만, 조회는 READ, 표에
+     * 없는 요청은 아무도 못 한다. 역할 이름은 보지 않는다.
      */
-    private static void authorizeByRole(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
+    private static void authorizeByPermission(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
         exchange.matchers(PUBLIC_PATHS)
                 .permitAll()
                 .pathMatchers("/api/auth/admin/**")
-                .hasRole(ADMIN);
+                .hasAuthority(ACCOUNT_ADMIN);
         authorizeWrites(exchange);
-        exchange.pathMatchers(HttpMethod.GET)
-                .hasAnyRole(SALES, PURCHASE, PRODUCTION)
-                .anyExchange()
-                .denyAll();
+        exchange.pathMatchers(HttpMethod.GET).hasAuthority(READ).anyExchange().denyAll();
     }
 
-    /** 역할 표의 쓰기 요청. 규칙은 등록 순서대로 맞춰 보므로 읽기·거부 규칙보다 먼저 둔다. */
+    /** 권한 표의 쓰기 요청. 규칙은 등록 순서대로 맞춰 보므로 읽기·거부 규칙보다 먼저 둔다. */
     private static void authorizeWrites(ServerHttpSecurity.AuthorizeExchangeSpec exchange) {
         exchange.pathMatchers(
                         HttpMethod.POST,
                         "/api/orders",
                         "/api/orders/*/cancel",
                         "/api/orders/customers")
-                .hasRole(SALES)
+                .hasAuthority(ORDER_WRITE)
                 .pathMatchers(
                         HttpMethod.POST,
                         "/api/mes/work-orders/*/steps/*/start",
@@ -109,9 +110,9 @@ public class SecurityConfig {
                         "/api/inventory/finished-vehicles/*/ship",
                         "/api/production/products",
                         "/api/production/productions/*/work-order")
-                .hasRole(PRODUCTION)
+                .hasAuthority(PRODUCTION_WRITE)
                 .pathMatchers(HttpMethod.PUT, "/api/production/products/*")
-                .hasRole(PRODUCTION)
+                .hasAuthority(PRODUCTION_WRITE)
                 .pathMatchers(
                         HttpMethod.POST,
                         "/api/purchases",
@@ -119,10 +120,10 @@ public class SecurityConfig {
                         "/api/purchases/suppliers",
                         "/api/inventory/parts",
                         "/api/inventory/parts/*/adjustments")
-                .hasRole(PURCHASE)
+                .hasAuthority(PURCHASE_WRITE)
                 .pathMatchers(
                         HttpMethod.PUT, "/api/purchases/suppliers/*", "/api/inventory/parts/*")
-                .hasRole(PURCHASE);
+                .hasAuthority(PURCHASE_WRITE);
     }
 
     /**
@@ -155,16 +156,21 @@ public class SecurityConfig {
         return source;
     }
 
-    /** JWT 의 role 클레임("ADMIN")을 권한("ROLE_ADMIN")으로 변환한다. */
+    /**
+     * JWT 의 permissions 클레임(["READ", "ORDER_WRITE"])을 그대로 권한으로 쓴다. 클레임이 없는 토큰(permissions 전에 받은
+     * 토큰)은 권한이 없다. role 클레임은 보지 않는다.
+     */
     private Converter<Jwt, Mono<AbstractAuthenticationToken>> jwtConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(
                 jwt -> {
-                    String role = jwt.getClaimAsString("role");
-                    if (role == null) {
+                    List<String> permissions = jwt.getClaimAsStringList("permissions");
+                    if (permissions == null) {
                         return List.<GrantedAuthority>of();
                     }
-                    return List.<GrantedAuthority>of(new SimpleGrantedAuthority("ROLE_" + role));
+                    return permissions.stream()
+                            .<GrantedAuthority>map(SimpleGrantedAuthority::new)
+                            .toList();
                 });
         return new ReactiveJwtAuthenticationConverterAdapter(converter);
     }

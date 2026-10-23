@@ -29,16 +29,24 @@ class MigrationTest extends MigrationTestSupport {
                                 + " created_at, updated_at) VALUES (?, 'worker@gmail.com', 'hash',"
                                 + " '작업자', 'WORKER', 'ACTIVE', NOW(6), NOW(6))",
                         UUID.randomUUID().toString());
-        jdbc = migrateTo("4");
+        jdbc = migrateTo("6");
     }
 
     @Test
     void v3MergesWorkerIntoProduction() {
+        // V3 가 PRODUCTION 으로 바꾼 역할을 V5 가 role_id 로 옮긴다
         assertThat(
                         jdbc.queryForObject(
-                                "SELECT role FROM user_account WHERE email = 'worker@gmail.com'",
+                                "SELECT r.code FROM user_account u JOIN role r ON r.id = u.role_id"
+                                        + " WHERE u.email = 'worker@gmail.com'",
                                 String.class))
                 .isEqualTo("PRODUCTION");
+    }
+
+    @Test
+    void v5ReplacesRoleColumnWithRoleId() {
+        assertThat(columnCount(jdbc, "user_account", "role")).isZero();
+        assertThat(columnCount(jdbc, "user_account", "role_id")).isEqualTo(1);
     }
 
     @Test
@@ -91,6 +99,76 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v5SeedsFourRoles() {
+        // 뒤 마이그레이션이 역할을 더할 수 있어, V5 의 4개가 이 순서로 있는지만 본다
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(code, ':', name) FROM role ORDER BY sort_order",
+                                String.class))
+                .containsSubsequence("SALES:영업", "PURCHASE:구매", "PRODUCTION:생산", "ADMIN:관리자");
+    }
+
+    @Test
+    void v6SeedsPermissions() {
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(code, ':', name) FROM permission", String.class))
+                .contains(
+                        "READ:조회",
+                        "ORDER_WRITE:주문 쓰기",
+                        "PRODUCTION_WRITE:생산 쓰기",
+                        "PURCHASE_WRITE:구매 쓰기",
+                        "ACCOUNT_ADMIN:계정 관리");
+    }
+
+    @Test
+    void v6GrantsSamePermissionsAsTheOldGatewayTable() {
+        // docs/specs/role-permissions.md "V6 이 처음 넣는 역할별 권한"
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT CONCAT(r.code, ':', p.code) FROM role_permission rp"
+                                        + " JOIN role r ON r.id = rp.role_id"
+                                        + " JOIN permission p ON p.id = rp.permission_id"
+                                        + " WHERE r.code IN ('SALES', 'PURCHASE', 'PRODUCTION', 'ADMIN')",
+                                String.class))
+                .containsExactlyInAnyOrder(
+                        "SALES:READ",
+                        "SALES:ORDER_WRITE",
+                        "PURCHASE:READ",
+                        "PURCHASE:PURCHASE_WRITE",
+                        "PRODUCTION:READ",
+                        "PRODUCTION:PRODUCTION_WRITE",
+                        "ADMIN:ACCOUNT_ADMIN");
+    }
+
+    @Test
+    void rejectsDuplicateRolePermission() {
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO role_permission (role_id, permission_id)"
+                                                + " SELECT r.id, p.id FROM role r, permission p"
+                                                + " WHERE r.code = 'SALES' AND p.code = 'READ'"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_role_permission");
+    }
+
+    @Test
+    void rejectsUserWithUnknownRole() {
+        // user_account.role_id 는 role.id 를 가리킨다 (V5)
+        assertThatThrownBy(
+                        () ->
+                                jdbc.update(
+                                        "INSERT INTO user_account (public_id, email, password, name,"
+                                                + " role_id, status, created_at, updated_at) VALUES (?,"
+                                                + " 'nope@factoryflow.test', 'hash', '홍길동', 999999,"
+                                                + " 'ACTIVE', NOW(6), NOW(6))",
+                                        UUID.randomUUID().toString()))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("fk_user_account_role");
+    }
+
+    @Test
     void rejectsDuplicateEmail() {
         insertUser("dup@factoryflow.test", "hash");
 
@@ -118,9 +196,10 @@ class MigrationTest extends MigrationTestSupport {
 
     private void insertUser(String email, String password) {
         jdbc.update(
-                "INSERT INTO user_account (public_id, email, password, name, role, status,"
+                "INSERT INTO user_account (public_id, email, password, name, role_id, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (?, ?, ?, '홍길동', 'PRODUCTION', 'ACTIVE', NOW(6), NOW(6))",
+                        + " SELECT ?, ?, ?, '홍길동', id, 'ACTIVE', NOW(6), NOW(6)"
+                        + " FROM role WHERE code = 'PRODUCTION'",
                 UUID.randomUUID().toString(),
                 email,
                 password);

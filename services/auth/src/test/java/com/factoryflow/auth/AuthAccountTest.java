@@ -13,6 +13,7 @@ import com.icegreen.greenmail.util.ServerSetupTest;
 import com.jayway.jsonpath.JsonPath;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.servlet.http.Cookie;
@@ -68,10 +69,32 @@ class AuthAccountTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
         jdbc.update("DELETE FROM user_account");
+        // roleAddedByMigrationNeedsNoCodeChange 가 넣은 역할
+        jdbc.update(
+                "DELETE rp FROM role_permission rp JOIN role r ON r.id = rp.role_id"
+                        + " WHERE r.code = 'QUALITY'");
+        jdbc.update("DELETE FROM role WHERE code = 'QUALITY'");
         var keys = redis.keys("auth:*");
         if (!keys.isEmpty()) {
             redis.delete(keys);
         }
+    }
+
+    // --- 역할 ---
+
+    @Test
+    void listsRolesFromTableInDisplayOrder() throws Exception {
+        // 계정 발급 화면의 역할 선택지 (V5 role 테이블). 역할은 마이그레이션으로 늘 수 있어 개수는 보지 않는다
+        mockMvc.perform(get("/auth/admin/roles"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].code").value("SALES"))
+                .andExpect(jsonPath("$.data[0].name").value("영업"))
+                .andExpect(jsonPath("$.data[1].code").value("PURCHASE"))
+                .andExpect(jsonPath("$.data[1].name").value("구매"))
+                .andExpect(jsonPath("$.data[2].code").value("PRODUCTION"))
+                .andExpect(jsonPath("$.data[2].name").value("생산"))
+                .andExpect(jsonPath("$.data[3].code").value("ADMIN"))
+                .andExpect(jsonPath("$.data[3].name").value("관리자"));
     }
 
     // --- 발급 ---
@@ -149,7 +172,8 @@ class AuthAccountTest {
                                         "{\"email\":\""
                                                 + EMAIL
                                                 + "\",\"name\":\"김철수\",\"role\":\"WORKER\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUTH-013"));
 
         assertThat(redis.keys("auth:*")).isEmpty();
     }
@@ -208,7 +232,8 @@ class AuthAccountTest {
 
         var row =
                 jdbc.queryForMap(
-                        "SELECT public_id, email, password, name, role, status FROM user_account");
+                        "SELECT u.public_id, u.email, u.password, u.name, r.code AS role, u.status"
+                                + " FROM user_account u JOIN role r ON r.id = u.role_id");
         assertThat(row)
                 .containsEntry("email", EMAIL)
                 .containsEntry("name", "김철수")
@@ -242,9 +267,10 @@ class AuthAccountTest {
         String token = pendingToken(EMAIL);
         // 같은 이메일이 다른 경로(거의 동시의 두 번째 발급)로 먼저 저장된 상황
         jdbc.update(
-                "INSERT INTO user_account (public_id, email, password, name, role, status,"
+                "INSERT INTO user_account (public_id, email, password, name, role_id, status,"
                         + " created_at, updated_at)"
-                        + " VALUES (UUID(), ?, 'hash', '다른사람', 'PRODUCTION', 'ACTIVE', NOW(6), NOW(6))",
+                        + " SELECT UUID(), ?, 'hash', '다른사람', id, 'ACTIVE', NOW(6), NOW(6)"
+                        + " FROM role WHERE code = 'PRODUCTION'",
                 EMAIL);
 
         activate(token)
@@ -300,7 +326,48 @@ class AuthAccountTest {
         String publicId = jdbc.queryForObject("SELECT public_id FROM user_account", String.class);
         assertThat(claims.getSubject()).isEqualTo(publicId);
         assertThat(claims.getStringClaim("role")).isEqualTo("SALES");
+        // 역할의 권한은 role_permission 에서 읽는다 (V6)
+        assertThat(claims.getStringListClaim("permissions"))
+                .containsExactlyInAnyOrder("READ", "ORDER_WRITE");
         assertThat(claims.getClaims()).doesNotContainKeys("email", "employeeNo");
+    }
+
+    @Test
+    void refreshedAccessTokenCarriesPermissions() throws Exception {
+        activateNewAccount(EMAIL);
+        Cookie refresh = refreshCookie(login(EMAIL, PASSWORD));
+
+        var claims =
+                accessClaims(
+                        mockMvc.perform(post("/auth/token/refresh").cookie(refresh))
+                                .andExpect(status().isOk()));
+
+        assertThat(claims.getStringListClaim("permissions"))
+                .containsExactlyInAnyOrder("READ", "ORDER_WRITE");
+    }
+
+    @Test
+    void roleAddedByMigrationNeedsNoCodeChange() throws Exception {
+        // 기존 권한을 조합한 역할은 role, role_permission 행만 넣으면 발급·로그인되고 토큰에 그 권한이 들어간다
+        jdbc.update("INSERT INTO role (code, name, sort_order) VALUES ('QUALITY', '품질', 5)");
+        jdbc.update(
+                "INSERT INTO role_permission (role_id, permission_id)"
+                        + " SELECT r.id, p.id FROM role r, permission p"
+                        + " WHERE r.code = 'QUALITY' AND p.code = 'READ'");
+
+        mockMvc.perform(
+                        post("/auth/admin/users")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"email\":\""
+                                                + EMAIL
+                                                + "\",\"name\":\"김철수\",\"role\":\"QUALITY\"}"))
+                .andExpect(status().isCreated());
+        activate(pendingToken(EMAIL)).andExpect(status().isNoContent());
+
+        var claims = accessClaims(login(EMAIL, PASSWORD).andExpect(status().isOk()));
+        assertThat(claims.getStringClaim("role")).isEqualTo("QUALITY");
+        assertThat(claims.getStringListClaim("permissions")).containsExactly("READ");
     }
 
     @Test
@@ -504,6 +571,11 @@ class AuthAccountTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(
                                 "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"));
+    }
+
+    private static JWTClaimsSet accessClaims(ResultActions result) throws Exception {
+        String body = result.andReturn().getResponse().getContentAsString();
+        return SignedJWT.parse(JsonPath.read(body, "$.data.accessToken")).getJWTClaimsSet();
     }
 
     private void activateNewAccount(String email) throws Exception {

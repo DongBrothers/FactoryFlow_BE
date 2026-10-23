@@ -14,7 +14,7 @@ class GatewayErrorResponseTest extends GatewayTestSupport {
     void unknownRouteReturnsNotFoundInCommonFormat() {
         client.get()
                 .uri("/api/unknown/1")
-                .header("Authorization", "Bearer SALES")
+                .header("Authorization", "Bearer READ")
                 .exchange()
                 .expectStatus()
                 .isNotFound()
@@ -29,7 +29,7 @@ class GatewayErrorResponseTest extends GatewayTestSupport {
     void unreachableServiceReturnsServiceUnavailable() {
         client.get()
                 .uri("/api/down/1")
-                .header("Authorization", "Bearer SALES")
+                .header("Authorization", "Bearer READ")
                 .exchange()
                 .expectStatus()
                 .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
@@ -44,7 +44,7 @@ class GatewayErrorResponseTest extends GatewayTestSupport {
     void serviceErrorPassesThroughUnchanged() {
         client.get()
                 .uri("/api/orders/error")
-                .header("Authorization", "Bearer SALES")
+                .header("Authorization", "Bearer READ")
                 .exchange()
                 .expectStatus()
                 .isEqualTo(HttpStatus.CONFLICT)

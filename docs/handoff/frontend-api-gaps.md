@@ -7,7 +7,7 @@
 
 - 작업 순서는 루트 CLAUDE.md 그대로: `docs/specs/` 명세 초안(`_template.md`) → 사용자 확인 → 테스트 먼저 → 구현 → `./gradlew :services:<svc>:check`
 - 항목마다 브랜치 하나, PR 하나. 새 작업은 worktree 말고 이 폴더에서 브랜치만 바꾼다. PR 의 "## 왜" 는 비워 둔다
-- 역할 규칙 (gateway `SecurityConfig.authorizeByRole`, 쓰기는 `authorizeWrites`, 표는 `docs/specs/role-permissions.md`): GET 은 SALES·PURCHASE·PRODUCTION, 쓰기는 표에 넣은 것만, ADMIN 은 `/api/auth/admin/**` 만. **새 GET 은 업무 역할에게 저절로 열리고, 새 쓰기 API 와 ADMIN 이 볼 GET 은 표에 줄을 넣어야 열린다**
+- 권한 규칙 (gateway `SecurityConfig`, 표는 `docs/specs/role-permissions.md`): gateway 는 역할이 아니라 JWT `permissions` 의 권한만 본다. GET 은 `READ`, 쓰기는 표에 넣은 권한만, `/api/auth/admin/**` 은 `ACCOUNT_ADMIN`. 역할별 권한은 auth DB(`role_permission`). **새 GET 은 `READ` 로 저절로 열리고, 새 쓰기 API 는 표에 줄을 넣어야 열린다**
 - 화면 갱신은 폴링이라 서버 푸시는 필요 없다
 - 테스트를 지우거나 단언을 바꿔야 하면 이유와 매핑을 먼저 말하고 승인을 받는다
 
@@ -25,6 +25,12 @@
 - 설비 목록 `GET /api/production/equipments?process=` 는 process 가 필수다 → 설비 현황 화면은 공정 5개를 각각 불러 합친다 (2026-10-18 결정. process 를 선택으로 바꾸는 안은 하지 않는다)
 
 ## 끝난 것
+
+### 역할 목록 `GET /api/auth/admin/roles` (2026-10-23, 브랜치 `feat/role-table`)
+- 계정 발급 화면의 역할 선택지를 DB 에서 가져온다. 응답 `[{ code, name }]` (`SALES 영업, PURCHASE 구매, PRODUCTION 생산, ADMIN 관리자` 순), 페이지 없음. ADMIN 전용 (gateway `/api/auth/admin/**` 규칙 그대로)
+- 발급 `role` 에는 `code` 를 보낸다. 없는 역할이면 400 `AUTH-013`
+- 역할별 권한은 auth DB(`role_permission`) 한 곳이다. Access 토큰에 `permissions` 배열(예: SALES → `["READ", "ORDER_WRITE"]`)이 들어간다 (명세 `docs/specs/role-permissions.md`)
+- **프론트 할 일**: `menu.ts` 의 메뉴·첫 화면을 역할 이름이 아니라 토큰의 `permissions` 로 고른다 (예: 주문 등록 버튼은 `ORDER_WRITE`, 계정 발급 메뉴는 `ACCOUNT_ADMIN`). 그러면 역할을 더하거나 권한을 바꿔도 프론트는 고치지 않는다. `role` 클레임은 표시용으로만 쓴다
 
 ### 고객을 order 에 만들기 → #126 (#125) 로 구현됨
 - order V9 `customer` (name, contact), 고객 등록 `POST /orders/customers` (SALES), 고객 목록 `GET /orders/customers` (페이지 없이 전체, 등록 순), 등록되지 않은 고객으로 주문하면 404 `CUSTOMER_NOT_FOUND` (production 을 부르기 전에 확인). 명세 `docs/specs/customer.md`

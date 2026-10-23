@@ -6,18 +6,22 @@ import com.factoryflow.auth.dto.request.IssueAccountRequest;
 import com.factoryflow.auth.dto.request.LoginRequest;
 import com.factoryflow.auth.dto.response.AccessTokenResponse;
 import com.factoryflow.auth.dto.response.IssueAccountResponse;
+import com.factoryflow.auth.dto.response.RoleResponse;
 import com.factoryflow.auth.service.AuthService;
 import com.factoryflow.auth.service.IssuedTokens;
+import com.factoryflow.auth.service.RoleService;
 import com.factoryflow.common.web.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final RoleService roleService;
     private final RefreshCookieFactory refreshCookieFactory;
 
     @Operation(
@@ -44,7 +49,7 @@ public class AuthController {
                 description = "발급됨 (대기). 아직 DB 에 없으므로 id 는 없다"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
-                description = "요청 형식 오류, 허용되지 않은 이메일 도메인 (AUTH-003)"),
+                description = "요청 형식 오류, 허용되지 않은 이메일 도메인 (AUTH-003), 없는 역할 (AUTH-013)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description = "이미 활성화된 이메일 (AUTH-002)"),
@@ -58,6 +63,22 @@ public class AuthController {
             @Valid @RequestBody IssueAccountRequest request) {
         IssueAccountResponse response = authService.issue(request);
         return ApiResponse.created(response);
+    }
+
+    @Operation(
+            summary = "역할 목록 (관리자)",
+            description =
+                    "계정 발급 화면의 역할 선택지. role 테이블의 역할을 표시 순서대로 한 번에 준다 (기준 정보라 페이지 없음). ADMIN 확인은"
+                            + " gateway 가 JWT 의 role 로 한다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "조회 성공")
+    })
+    @GetMapping("/admin/roles")
+    public ApiResponse<List<RoleResponse>> findRoles() {
+        List<RoleResponse> roles = roleService.findRoles();
+        return ApiResponse.ok(roles);
     }
 
     @Operation(

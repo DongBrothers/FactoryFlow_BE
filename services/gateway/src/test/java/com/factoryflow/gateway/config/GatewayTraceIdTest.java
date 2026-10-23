@@ -23,7 +23,7 @@ class GatewayTraceIdTest extends GatewayTestSupport {
         EntityExchangeResult<byte[]> result =
                 client.get()
                         .uri("/api/orders/1")
-                        .header("Authorization", "Bearer SALES")
+                        .header("Authorization", "Bearer READ")
                         .header(TRACE_ID, "client-trace")
                         .exchange()
                         .expectStatus()
@@ -42,7 +42,7 @@ class GatewayTraceIdTest extends GatewayTestSupport {
         EntityExchangeResult<byte[]> result =
                 client.get()
                         .uri("/api/orders/1")
-                        .header("Authorization", "Bearer SALES")
+                        .header("Authorization", "Bearer READ")
                         .exchange()
                         .expectStatus()
                         .isOk()
@@ -97,7 +97,7 @@ class GatewayTraceIdTest extends GatewayTestSupport {
         String traceId =
                 client.get()
                         .uri("/api/unknown/1")
-                        .header("Authorization", "Bearer SALES")
+                        .header("Authorization", "Bearer READ")
                         .exchange()
                         .expectStatus()
                         .isNotFound()
@@ -115,7 +115,7 @@ class GatewayTraceIdTest extends GatewayTestSupport {
         String traceId =
                 client.get()
                         .uri("/api/down/1")
-                        .header("Authorization", "Bearer SALES")
+                        .header("Authorization", "Bearer READ")
                         .exchange()
                         .expectStatus()
                         .isEqualTo(503)

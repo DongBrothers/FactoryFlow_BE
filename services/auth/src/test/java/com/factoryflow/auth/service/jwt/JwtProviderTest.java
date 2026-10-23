@@ -3,7 +3,6 @@ package com.factoryflow.auth.service.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.factoryflow.auth.config.AuthProperties;
-import com.factoryflow.auth.domain.Role;
 import com.factoryflow.auth.domain.UserAccount;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -11,6 +10,7 @@ import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jwt.SignedJWT;
 import java.time.Duration;
 import java.util.Date;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class JwtProviderTest {
@@ -35,9 +35,11 @@ class JwtProviderTest {
 
     @Test
     void accessTokenIsSignedWithPublicKeyAndCarriesClaims() throws Exception {
-        var account = UserAccount.create("a@gmail.com", "홍길동", Role.PRODUCTION, "hash");
+        var account = UserAccount.create("a@gmail.com", "홍길동", 3L, "hash");
 
-        String token = provider.createAccessToken(account);
+        String token =
+                provider.createAccessToken(
+                        account, "PRODUCTION", List.of("READ", "PRODUCTION_WRITE"));
 
         SignedJWT jwt = SignedJWT.parse(token);
         RSAKey publicKey = provider.publicJwkSet().getKeys().get(0).toRSAKey();
@@ -46,6 +48,8 @@ class JwtProviderTest {
         var claims = jwt.getJWTClaimsSet();
         assertThat(claims.getSubject()).isEqualTo(account.getPublicId());
         assertThat(claims.getStringClaim("role")).isEqualTo("PRODUCTION");
+        assertThat(claims.getStringListClaim("permissions"))
+                .containsExactly("READ", "PRODUCTION_WRITE");
         assertThat(claims.getExpirationTime()).isAfter(new Date());
         // 이메일(개인정보)은 토큰에 넣지 않는다
         assertThat(claims.getClaims()).doesNotContainKeys("email", "employeeNo");

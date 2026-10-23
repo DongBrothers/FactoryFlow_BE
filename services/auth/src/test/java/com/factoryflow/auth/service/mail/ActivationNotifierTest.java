@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.factoryflow.auth.config.ActivationMailProperties;
 import com.factoryflow.auth.domain.PendingAccount;
-import com.factoryflow.auth.domain.Role;
 import com.icegreen.greenmail.junit5.GreenMailExtension;
 import com.icegreen.greenmail.util.ServerSetupTest;
 import org.junit.jupiter.api.Test;
@@ -45,7 +44,7 @@ class ActivationNotifierTest {
     @Test
     void doesNotLogTokenOrEmail(CapturedOutput output) {
         notifier.sendActivationLink(
-                new PendingAccount("hong@gmail.com", "홍길동", Role.SALES),
+                new PendingAccount("hong@gmail.com", "홍길동", "SALES"),
                 "secret-activation-token-123");
 
         assertThat(mail.getReceivedMessages()).hasSize(1);

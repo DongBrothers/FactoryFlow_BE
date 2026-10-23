@@ -2,7 +2,6 @@ package com.factoryflow.auth.service.redis;
 
 import com.factoryflow.auth.config.AuthProperties;
 import com.factoryflow.auth.domain.PendingAccount;
-import com.factoryflow.auth.domain.Role;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,7 +56,7 @@ public class ActivationTokenStore {
                 TOKEN_PREFIX,
                 pending.email(),
                 pending.name(),
-                pending.role().name(),
+                pending.role(),
                 String.valueOf(properties.activationTokenTtl().toMillis()),
                 token);
     }
@@ -74,7 +73,7 @@ public class ActivationTokenStore {
                 new PendingAccount(
                         (String) fields.get("email"),
                         (String) fields.get("name"),
-                        Role.fromStored((String) fields.get("role")));
+                        (String) fields.get("role"));
         redis.execute(
                 RedisScripts.DELETE_IF_EQUALS, List.of(EMAIL_PREFIX + pending.email()), token);
         return pending;
