@@ -27,6 +27,7 @@ mes 가 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 이력�
 
 ## 설비 상태 이력 조회 — `GET /mes/equipments/{equipmentCode}/history?lastId=&size=20`
 gateway `/api/mes/equipments/{equipmentCode}/history`. 설비 현황 화면의 이력 패널 (docs/handoff/frontend-api-gaps.md 3번). 위 5번에서 쌓은 이력을 읽기만 한다.
+응답은 다른 API 와 같은 `ApiResponse { data, status, message }` 이고, `data` 가 `CursorPage` 다 (아래는 `data` 안쪽).
 ```json
 { "items": [ { "fromStatus": "RUNNING", "toStatus": "FAULT", "changedAt": "2026-10-24T10:00:00" } ],
   "count": 1, "last": false, "nextCursor": 12 }
