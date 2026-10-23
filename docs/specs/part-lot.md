@@ -46,6 +46,8 @@ gateway 경로 `/api/inventory/part-lots/{lotNo}/vehicles`. 그 LOT 의 부품�
 - lotNo 형식 400 (`LOT-` + 숫자 6자리 + `-` + 숫자 6자리 이상. 구매 건 id 가 999999 를 넘으면 7자리 이상. 또는 초기 재고 `LOT-INIT-` + 숫자), 없는 LOT 404 `PART_LOT_NOT_FOUND`, 아직 쓰인 차가 없으면 빈 목록
 - 내부 id 는 내보내지 않는다
 
+> **#170 에서 더함:** 의장 공정에서 찍은 LOT 이 있으면 그 LOT 부터 뺀다 (`part_lot_usage.source` SCANNED/FIFO). docs/specs/part-lot-scan.md
+
 ## 규칙 / 예외
 | 상황 | 처리 |
 |---|---|
