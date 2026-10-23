@@ -18,6 +18,7 @@ public enum MesErrorCode implements ErrorCode {
     EQUIPMENT_NOT_RUNNING(HttpStatus.CONFLICT, "설비가 가동 중이 아닙니다."),
     EQUIPMENT_BUSY(HttpStatus.CONFLICT, "설비가 다른 차를 작업 중입니다."),
     MES_CONFLICT(HttpStatus.CONFLICT, "다른 작업이 먼저 바꿨습니다. 다시 조회해 주세요."),
+    SCAN_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "부품 LOT 은 의장 공정을 양품으로 끝낼 때만 찍습니다."),
     TELEMETRY_TOO_LARGE(HttpStatus.BAD_REQUEST, "센서값 메시지가 너무 큽니다."),
     VIN_RANGE_EXCEEDED(HttpStatus.INTERNAL_SERVER_ERROR, "차대번호 자리를 넘어 발행할 수 없습니다.");
 

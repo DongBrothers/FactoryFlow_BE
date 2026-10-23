@@ -166,7 +166,8 @@ class ProductionCompletionTest {
                 break;
             }
             workOrderService.startStep(workOrder, process, process.name() + "-01");
-            workOrderService.completeStep(workOrder, process, StepResult.GOOD, null, WORKER);
+            workOrderService.completeStep(
+                    workOrder, process, StepResult.GOOD, null, List.of(), WORKER);
         }
         return workOrder;
     }

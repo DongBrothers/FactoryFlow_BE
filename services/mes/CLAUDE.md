@@ -11,6 +11,7 @@
 - 배정 회차: 공정을 맡길 때마다(배정, 작업자 시작) dispatch_seq +1, step-dispatched 에 싣고 회차가 다른 설비 보고는 무시 (docs/specs/simulator-restart.md)
 - 배정 시간 초과: 배정 뒤 시작 보고가 start-report-timeout(기본 1분) 안에 없거나, 설비가 시작한 뒤 완료 보고가 completion-report-timeout(기본 5분) 안에 없으면 그 공정을 PENDING 으로 되돌려 다시 배정 (simulator 재시작·통신 끊김 대비, 작업자가 시작한 공정은 보지 않음). 완료 보고가 시작보다 먼저 오면 둘 다 반영
 - 완료: 검사 양품 → VIN 발행 → 작업지시 COMPLETED + mes.vehicle-completed (production 이 생산 건 완료와 production.completed)
+- LOT 스캔: 의장(ASSEMBLY) 양품 완료 요청의 scannedLots(부품마다 LOT 하나, 선택)를 work_order_part_scan 에 남긴다(재작업 뒤 다시 양품이면 바꿈). 다른 공정·불량이면 400 SCAN_NOT_ALLOWED. 완료 때 mes.vehicle-completed 의 scannedLots 로 보낸다 (docs/specs/part-lot-scan.md)
 - 취소 판단: production.release-cancel-requested 수신 시 작업지시가 RELEASED(첫 공정 전)면 CANCELLED + mes.work-order-cancelled, 시작했으면 mes.work-order-cancel-rejected(작업지시 상태). 작업지시가 아직 없으면(발행보다 먼저 옴) CANCELLED 작업지시를 남기고 cancelled
 - 설비 고장·정지(equipment.status-changed FAULT, STOPPED) 수신 시 그 설비에 배정·진행 중인 공정을 PENDING 으로 되돌려 다른 설비로 재배정한다 (생산 실패 없음, docs/specs/equipment-status.md)
 - 센서값: equipment.step-telemetry 수신 → step_telemetry 에 샘플마다 문서 1개. 메시지당 300개 넘으면 저장하지 않고 DLQ, 조회는 한 번에 5,000개까지(truncated). 조회 GET /mes/work-orders/{id}/steps/{process}/telemetry(로봇 공정만, 회차별), GET /mes/equipments/{code}/telemetry?from=&to=(최대 1시간). 테스트는 MongoContainerConfig 를 함께 가져온다
