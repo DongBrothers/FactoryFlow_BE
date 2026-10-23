@@ -43,25 +43,26 @@ public class UserAccount extends BaseTimeEntity {
     @Column(nullable = false, length = 50)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private Role role;
+    /** 역할 (role.id). */
+    @Column(name = "role_id", nullable = false)
+    private Long roleId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AccountStatus status;
 
-    private UserAccount(String email, String name, Role role, String encodedPassword) {
+    private UserAccount(String email, String name, Long roleId, String encodedPassword) {
         this.publicId = UUID.randomUUID().toString();
         this.email = email;
         this.name = name;
-        this.role = role;
+        this.roleId = roleId;
         this.password = encodedPassword;
         this.status = AccountStatus.ACTIVE;
     }
 
     /** 활성화: 비번이 설정된 ACTIVE 계정을 만든다. */
-    public static UserAccount create(String email, String name, Role role, String encodedPassword) {
-        return new UserAccount(email, name, role, encodedPassword);
+    public static UserAccount create(
+            String email, String name, Long roleId, String encodedPassword) {
+        return new UserAccount(email, name, roleId, encodedPassword);
     }
 }

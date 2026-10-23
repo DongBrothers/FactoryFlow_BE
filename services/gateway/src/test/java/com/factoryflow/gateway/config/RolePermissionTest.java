@@ -11,11 +11,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
- * 역할별 API 권한 (docs/specs/role-permissions.md). 조회(GET)는 로그인한 직원 모두, 쓰기는 역할 표의 역할과 ADMIN 만, 표에 없는
- * 쓰기는 ADMIN 만. 라우트가 없으므로 통과하면 404, 막히면 401·403 이다.
+ * API 권한 (docs/specs/role-permissions.md). gateway 는 역할이 아니라 JWT permissions 만 본다. 조회(GET)는 READ,
+ * 쓰기는 표의 권한만, 표에 없는 요청은 아무도 못 한다. 라우트가 없으므로 통과하면 404, 막히면 401·403 이다.
  */
 @WebFluxTest
-@Import({SecurityConfig.class, RoleTokenDecoder.class})
+@Import({SecurityConfig.class, PermissionTokenDecoder.class})
 class RolePermissionTest {
 
     private static final String ORDER_NO = "550e8400-e29b-41d4-a716-446655440000";
@@ -23,128 +23,161 @@ class RolePermissionTest {
 
     @Autowired WebTestClient client;
 
-    @ParameterizedTest(name = "{1} 는 {0} 을 할 수 있다")
+    @ParameterizedTest(name = "{1} 권한으로 {0} 을 할 수 있다")
     @CsvSource({
-        "/api/orders, SALES",
-        "/api/orders/" + ORDER_NO + "/cancel, SALES",
-        "/api/orders/customers, SALES",
-        "/api/mes/work-orders/1/steps/PRESS/start, PRODUCTION",
-        "/api/mes/work-orders/1/steps/INSPECTION/complete, PRODUCTION",
-        "/api/purchases, PURCHASE",
-        "/api/purchases/1/receive, PURCHASE",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION",
-        "/api/inventory/parts, PURCHASE",
-        "/api/purchases/suppliers, PURCHASE",
-        "/api/production/products, PRODUCTION",
-        "/api/inventory/parts/1001/adjustments, PURCHASE",
-        "/api/production/productions/101/work-order, PRODUCTION"
+        "/api/orders, ORDER_WRITE",
+        "/api/orders/" + ORDER_NO + "/cancel, ORDER_WRITE",
+        "/api/orders/customers, ORDER_WRITE",
+        "/api/mes/work-orders/1/steps/PRESS/start, PRODUCTION_WRITE",
+        "/api/mes/work-orders/1/steps/INSPECTION/complete, PRODUCTION_WRITE",
+        "/api/purchases, PURCHASE_WRITE",
+        "/api/purchases/1/receive, PURCHASE_WRITE",
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, PRODUCTION_WRITE",
+        "/api/inventory/parts, PURCHASE_WRITE",
+        "/api/purchases/suppliers, PURCHASE_WRITE",
+        "/api/production/products, PRODUCTION_WRITE",
+        "/api/inventory/parts/1001/adjustments, PURCHASE_WRITE",
+        "/api/production/productions/101/work-order, PRODUCTION_WRITE"
     })
-    void allowedRoleCanWrite(String path, String role) {
-        post(path, role).expectStatus().isNotFound();
+    void allowedPermissionCanWrite(String path, String permission) {
+        post(path, permission).expectStatus().isNotFound();
     }
 
-    @ParameterizedTest(name = "{1} 는 {0} 을 할 수 없다")
+    @ParameterizedTest(name = "{1} 권한으로 {0} 을 할 수 없다")
     @CsvSource({
-        "/api/orders, PRODUCTION",
-        "/api/orders, PURCHASE",
-        "/api/orders, ADMIN",
-        "/api/orders/" + ORDER_NO + "/cancel, ADMIN",
-        "/api/orders/customers, PURCHASE",
-        "/api/orders/customers, PRODUCTION",
-        "/api/orders/customers, ADMIN",
-        "/api/mes/work-orders/1/steps/PRESS/start, SALES",
-        "/api/mes/work-orders/1/steps/PRESS/start, PURCHASE",
-        "/api/mes/work-orders/1/steps/PRESS/start, ADMIN",
-        "/api/mes/work-orders/1/steps/INSPECTION/complete, SALES",
-        "/api/purchases, SALES",
-        "/api/purchases, PRODUCTION",
-        "/api/purchases, ADMIN",
-        "/api/purchases/1/receive, ADMIN",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, SALES",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, PURCHASE",
-        "/api/inventory/finished-vehicles/" + VIN + "/ship, ADMIN",
-        "/api/inventory/parts, SALES",
-        "/api/inventory/parts, PRODUCTION",
-        "/api/inventory/parts, ADMIN",
-        "/api/purchases/suppliers, SALES",
-        "/api/purchases/suppliers, PRODUCTION",
-        "/api/purchases/suppliers, ADMIN",
-        "/api/production/products, SALES",
-        "/api/production/products, PURCHASE",
-        "/api/production/products, ADMIN",
-        "/api/inventory/parts/1001/adjustments, SALES",
-        "/api/inventory/parts/1001/adjustments, PRODUCTION",
-        "/api/inventory/parts/1001/adjustments, ADMIN",
-        "/api/production/productions/101/work-order, SALES",
-        "/api/production/productions/101/work-order, PURCHASE",
-        "/api/production/productions/101/work-order, ADMIN"
+        "/api/orders, PRODUCTION_WRITE",
+        "/api/orders, PURCHASE_WRITE",
+        "/api/orders, ACCOUNT_ADMIN",
+        "/api/orders/" + ORDER_NO + "/cancel, ACCOUNT_ADMIN",
+        "/api/orders/customers, PURCHASE_WRITE",
+        "/api/orders/customers, PRODUCTION_WRITE",
+        "/api/orders/customers, ACCOUNT_ADMIN",
+        "/api/mes/work-orders/1/steps/PRESS/start, ORDER_WRITE",
+        "/api/mes/work-orders/1/steps/PRESS/start, PURCHASE_WRITE",
+        "/api/mes/work-orders/1/steps/PRESS/start, ACCOUNT_ADMIN",
+        "/api/mes/work-orders/1/steps/INSPECTION/complete, ORDER_WRITE",
+        "/api/purchases, ORDER_WRITE",
+        "/api/purchases, PRODUCTION_WRITE",
+        "/api/purchases, ACCOUNT_ADMIN",
+        "/api/purchases/1/receive, ACCOUNT_ADMIN",
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, ORDER_WRITE",
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, PURCHASE_WRITE",
+        "/api/inventory/finished-vehicles/" + VIN + "/ship, ACCOUNT_ADMIN",
+        "/api/inventory/parts, ORDER_WRITE",
+        "/api/inventory/parts, PRODUCTION_WRITE",
+        "/api/inventory/parts, ACCOUNT_ADMIN",
+        "/api/purchases/suppliers, ORDER_WRITE",
+        "/api/purchases/suppliers, PRODUCTION_WRITE",
+        "/api/purchases/suppliers, ACCOUNT_ADMIN",
+        "/api/production/products, ORDER_WRITE",
+        "/api/production/products, PURCHASE_WRITE",
+        "/api/production/products, ACCOUNT_ADMIN",
+        "/api/inventory/parts/1001/adjustments, ORDER_WRITE",
+        "/api/inventory/parts/1001/adjustments, PRODUCTION_WRITE",
+        "/api/inventory/parts/1001/adjustments, ACCOUNT_ADMIN",
+        "/api/production/productions/101/work-order, ORDER_WRITE",
+        "/api/production/productions/101/work-order, PURCHASE_WRITE",
+        "/api/production/productions/101/work-order, ACCOUNT_ADMIN"
     })
-    void otherRoleCannotWrite(String path, String role) {
-        post(path, role).expectStatus().isForbidden();
+    void otherPermissionCannotWrite(String path, String permission) {
+        post(path, permission).expectStatus().isForbidden();
     }
 
-    @ParameterizedTest(name = "{1} 는 {0} 을 고칠 수 있다")
+    @ParameterizedTest(name = "{1} 권한으로 {0} 을 고칠 수 있다")
     @CsvSource({
-        "/api/inventory/parts/1001, PURCHASE",
-        "/api/purchases/suppliers/1, PURCHASE",
-        "/api/production/products/1, PRODUCTION"
+        "/api/inventory/parts/1001, PURCHASE_WRITE",
+        "/api/purchases/suppliers/1, PURCHASE_WRITE",
+        "/api/production/products/1, PRODUCTION_WRITE"
     })
-    void allowedRoleCanUpdateMasterData(String path, String role) {
-        request(HttpMethod.PUT, path, role).expectStatus().isNotFound();
+    void allowedPermissionCanUpdateMasterData(String path, String permission) {
+        request(HttpMethod.PUT, path, permission).expectStatus().isNotFound();
     }
 
-    @ParameterizedTest(name = "{1} 는 {0} 을 고칠 수 없다")
+    @ParameterizedTest(name = "{1} 권한으로 {0} 을 고칠 수 없다")
     @CsvSource({
-        "/api/inventory/parts/1001, SALES",
-        "/api/inventory/parts/1001, PRODUCTION",
-        "/api/inventory/parts/1001, ADMIN",
-        "/api/purchases/suppliers/1, SALES",
-        "/api/purchases/suppliers/1, PRODUCTION",
-        "/api/purchases/suppliers/1, ADMIN",
-        "/api/production/products/1, SALES",
-        "/api/production/products/1, PURCHASE",
-        "/api/production/products/1, ADMIN"
+        "/api/inventory/parts/1001, ORDER_WRITE",
+        "/api/inventory/parts/1001, PRODUCTION_WRITE",
+        "/api/inventory/parts/1001, ACCOUNT_ADMIN",
+        "/api/purchases/suppliers/1, ORDER_WRITE",
+        "/api/purchases/suppliers/1, PRODUCTION_WRITE",
+        "/api/purchases/suppliers/1, ACCOUNT_ADMIN",
+        "/api/production/products/1, ORDER_WRITE",
+        "/api/production/products/1, PURCHASE_WRITE",
+        "/api/production/products/1, ACCOUNT_ADMIN"
     })
-    void otherRoleCannotUpdateMasterData(String path, String role) {
-        request(HttpMethod.PUT, path, role).expectStatus().isForbidden();
+    void otherPermissionCannotUpdateMasterData(String path, String permission) {
+        request(HttpMethod.PUT, path, permission).expectStatus().isForbidden();
     }
 
-    @ParameterizedTest(name = "합쳐 없어진 WORKER 토큰은 {0} 을 할 수 없다")
+    @ParameterizedTest(name = "READ 만으로는 {0} 을 할 수 없다")
     @ValueSource(
             strings = {
+                "/api/orders",
+                "/api/orders/customers",
                 "/api/mes/work-orders/1/steps/PRESS/start",
-                "/api/mes/work-orders/1/steps/INSPECTION/complete",
-                "/api/inventory/finished-vehicles/" + VIN + "/ship"
+                "/api/purchases",
+                "/api/inventory/finished-vehicles/" + VIN + "/ship",
+                "/api/inventory/parts",
+                "/api/production/products"
             })
-    void mergedWorkerRoleHasNoPermission(String path) {
-        // WORKER 는 PRODUCTION 으로 합쳤다 (#118). 합치기 전에 받은 토큰은 다시 로그인해야 한다
-        post(path, "WORKER").expectStatus().isForbidden();
-        request(HttpMethod.GET, "/api/mes/work-orders", "WORKER").expectStatus().isForbidden();
+    void readPermissionCannotWrite(String path) {
+        post(path, "READ").expectStatus().isForbidden();
     }
 
-    @ParameterizedTest(name = "표에 없는 요청은 {0} 도 할 수 없다")
-    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION", "ADMIN"})
-    void requestNotInTheTableIsDeniedToEveryone(String role) {
+    @ParameterizedTest(name = "permissions 없는 옛 {0} 토큰은 아무것도 할 수 없다")
+    @ValueSource(strings = {"SALES", "PRODUCTION", "WORKER", "ADMIN"})
+    void roleOnlyTokenHasNoPermission(String role) {
+        // permissions 클레임이 생기기 전에 받은 토큰. WORKER 는 #118 에서 PRODUCTION 으로 합쳤다. 다시 로그인하면 된다
+        String token = PermissionTokenDecoder.ROLE_ONLY + role;
+        post("/api/orders", token).expectStatus().isForbidden();
+        post("/api/mes/work-orders/1/steps/PRESS/start", token).expectStatus().isForbidden();
+        post("/api/auth/admin/users", token).expectStatus().isForbidden();
+        request(HttpMethod.GET, "/api/mes/work-orders", token).expectStatus().isForbidden();
+    }
+
+    @ParameterizedTest(name = "표에 없는 요청은 {0} 권한으로도 할 수 없다")
+    @ValueSource(
+            strings = {
+                "READ",
+                "ORDER_WRITE",
+                "PRODUCTION_WRITE",
+                "PURCHASE_WRITE",
+                "ACCOUNT_ADMIN",
+                "READ+ORDER_WRITE+PRODUCTION_WRITE+PURCHASE_WRITE+ACCOUNT_ADMIN"
+            })
+    void requestNotInTheTableIsDeniedToEveryone(String permissions) {
         // 설비 등록은 만들지 않았다 (docs/specs/master-data.md)
-        post("/api/mes/equipments", role).expectStatus().isForbidden();
-        request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, role).expectStatus().isForbidden();
-        request(HttpMethod.DELETE, "/api/purchases/1", role).expectStatus().isForbidden();
+        post("/api/mes/equipments", permissions).expectStatus().isForbidden();
+        request(HttpMethod.PUT, "/api/orders/" + ORDER_NO, permissions)
+                .expectStatus()
+                .isForbidden();
+        request(HttpMethod.DELETE, "/api/purchases/1", permissions).expectStatus().isForbidden();
     }
 
     @Test
-    void adminOnlyIssuesAccounts() {
-        // ADMIN 은 계정 발급만 한다. 업무 조회도 못 한다 (#118)
-        post("/api/auth/admin/users", "ADMIN").expectStatus().isNotFound();
+    void accountAdminOnlyIssuesAccounts() {
+        // ADMIN 의 권한(ACCOUNT_ADMIN)은 계정 발급만 연다. 업무 조회도 못 한다 (#118)
+        post("/api/auth/admin/users", "ACCOUNT_ADMIN").expectStatus().isNotFound();
+        request(HttpMethod.GET, "/api/auth/admin/roles", "ACCOUNT_ADMIN")
+                .expectStatus()
+                .isNotFound();
         for (String path : readPaths()) {
-            request(HttpMethod.GET, path, "ADMIN").expectStatus().isForbidden();
+            request(HttpMethod.GET, path, "ACCOUNT_ADMIN").expectStatus().isForbidden();
         }
     }
 
-    @ParameterizedTest(name = "{0} 는 조회할 수 있다")
-    @ValueSource(strings = {"SALES", "PURCHASE", "PRODUCTION"})
-    void businessRolesCanRead(String role) {
+    @Test
+    void readPermissionCanRead() {
         for (String path : readPaths()) {
-            request(HttpMethod.GET, path, role).expectStatus().isNotFound();
+            request(HttpMethod.GET, path, "READ").expectStatus().isNotFound();
+        }
+    }
+
+    @ParameterizedTest(name = "READ 없이 {0} 만으로는 조회할 수 없다")
+    @ValueSource(strings = {"ORDER_WRITE", "PRODUCTION_WRITE", "PURCHASE_WRITE"})
+    void writePermissionAloneCannotRead(String permission) {
+        for (String path : readPaths()) {
+            request(HttpMethod.GET, path, permission).expectStatus().isForbidden();
         }
     }
 
@@ -166,11 +199,14 @@ class RolePermissionTest {
         client.post().uri("/api/orders").exchange().expectStatus().isUnauthorized();
     }
 
-    private WebTestClient.ResponseSpec post(String path, String role) {
-        return request(HttpMethod.POST, path, role);
+    private WebTestClient.ResponseSpec post(String path, String permissions) {
+        return request(HttpMethod.POST, path, permissions);
     }
 
-    private WebTestClient.ResponseSpec request(HttpMethod method, String path, String role) {
-        return client.method(method).uri(path).header("Authorization", "Bearer " + role).exchange();
+    private WebTestClient.ResponseSpec request(HttpMethod method, String path, String permissions) {
+        return client.method(method)
+                .uri(path)
+                .header("Authorization", "Bearer " + permissions)
+                .exchange();
     }
 }

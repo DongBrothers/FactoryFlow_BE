@@ -1,10 +1,8 @@
 package com.factoryflow.auth.dto.request;
 
-import com.factoryflow.auth.domain.Role;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /** 관리자 계정 발급 요청. */
@@ -16,4 +14,7 @@ public record IssueAccountRequest(
                 @Size(max = 100)
                 String email,
         @Schema(description = "직원 이름", example = "김철수") @NotBlank @Size(max = 50) String name,
-        @Schema(description = "역할 (1인 1역할)", example = "SALES") @NotNull Role role) {}
+        @Schema(description = "역할 코드 (1인 1역할, 역할 목록의 code)", example = "SALES")
+                @NotBlank
+                @Size(max = 20)
+                String role) {}

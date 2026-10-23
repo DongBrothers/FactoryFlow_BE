@@ -14,6 +14,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -30,13 +31,17 @@ public class JwtProvider {
     private final AuthProperties properties;
     private final RSAKey rsaKey;
 
-    /** claim 은 sub(public_id), role 만 넣는다. 이메일 같은 개인정보는 넣지 않는다. */
-    public String createAccessToken(UserAccount account) {
+    /**
+     * claim 은 sub(public_id), role(역할 코드), permissions(역할의 권한 코드) 만 넣는다. gateway 는 permissions 로
+     * 권한을 확인한다. 이메일 같은 개인정보는 넣지 않는다.
+     */
+    public String createAccessToken(UserAccount account, String role, List<String> permissions) {
         Instant now = Instant.now();
         JWTClaimsSet claims =
                 new JWTClaimsSet.Builder()
                         .subject(account.getPublicId())
-                        .claim("role", account.getRole().name())
+                        .claim("role", role)
+                        .claim("permissions", permissions)
                         .issueTime(Date.from(now))
                         .expirationTime(Date.from(now.plus(properties.accessTokenTtl())))
                         .build();
