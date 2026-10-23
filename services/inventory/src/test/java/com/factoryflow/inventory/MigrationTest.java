@@ -20,9 +20,25 @@ class MigrationTest extends MigrationTestSupport {
 
     static JdbcTemplate jdbc;
 
+    /** V11 에서 지운 part_lot_usage 를 보는 옛 버전 테스트용: 따로 만든 DB 를 V10 까지만 올린다. */
+    static JdbcTemplate jdbcV10;
+
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("10");
+        jdbc = migrateTo("11");
+        jdbcV10 = migrateSeparateDatabase("inventory_v10", "10");
+    }
+
+    private static JdbcTemplate migrateSeparateDatabase(String database, String target) {
+        var root = new DriverManagerDataSource(mysql.getJdbcUrl(), "root", mysql.getPassword());
+        new JdbcTemplate(root).execute("CREATE DATABASE " + database);
+        var dataSource =
+                new DriverManagerDataSource(
+                        mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/" + database),
+                        "root",
+                        mysql.getPassword());
+        Flyway.configure().dataSource(dataSource).target(target).load().migrate();
+        return new JdbcTemplate(dataSource);
     }
 
     @Test
@@ -210,13 +226,13 @@ class MigrationTest extends MigrationTestSupport {
 
     @Test
     void v5PartLotUsageQtyIsPositive() {
-        jdbc.update(
+        jdbcV10.update(
                 "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at)"
                         + " VALUES ('KMH000017TU000521', 1, 1, NOW(6))");
 
         assertThatThrownBy(
                         () ->
-                                jdbc.update(
+                                jdbcV10.update(
                                         "INSERT INTO part_lot_usage (vin, lot_id, qty,"
                                                 + " created_at) VALUES"
                                                 + " ('KMH000017TU000522', 1, 0, NOW(6))"))
@@ -228,13 +244,13 @@ class MigrationTest extends MigrationTestSupport {
     void v6UsageNeedsALotAndInitialLotHasNoPurchase() {
         assertThatThrownBy(
                         () ->
-                                jdbc.update(
+                                jdbcV10.update(
                                         "INSERT INTO part_lot_usage (vin, lot_id, qty,"
                                                 + " created_at) VALUES"
                                                 + " ('KMH000017TU000531', NULL, 1, NOW(6))"))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("lot_id");
-        jdbc.update(
+        jdbcV10.update(
                 "INSERT INTO part_lot (part_id, lot_no, purchase_id, received_qty, remaining_qty,"
                         + " received_at, created_at, updated_at)"
                         + " VALUES (1, 'LOT-INIT-1', NULL, 5, 5, NOW(6), NOW(6), NOW(6))");
@@ -404,19 +420,27 @@ class MigrationTest extends MigrationTestSupport {
     @Test
     void v10LotUsageSourceDefaultsToFifo() {
         // 의장 공정 LOT 스캔 전 기록은 모두 입고 순 배정이다 (docs/specs/part-lot-scan.md)
-        jdbc.update(
+        jdbcV10.update(
                 "INSERT INTO part_lot_usage (vin, lot_id, qty, created_at)"
                         + " VALUES ('KMH000017TU001001', 1, 1, NOW(6))");
-        jdbc.update(
+        jdbcV10.update(
                 "INSERT INTO part_lot_usage (vin, lot_id, qty, source, created_at)"
                         + " VALUES ('KMH000017TU001002', 1, 1, 'SCANNED', NOW(6))");
 
         assertThat(
-                        jdbc.queryForList(
+                        jdbcV10.queryForList(
                                 "SELECT source FROM part_lot_usage WHERE vin IN"
                                         + " ('KMH000017TU001001', 'KMH000017TU001002') ORDER BY vin",
                                 String.class))
                 .containsExactly("FIFO", "SCANNED");
+    }
+
+    @Test
+    void v11DropsLotUsageBecauseGenealogyMovedToMes() {
+        // 차 ↔ LOT 계보는 mes 가 갖고, inventory 는 LOT 재고만 갖는다 (docs/specs/part-genealogy.md, #176)
+        var tables = jdbc.queryForList("SHOW TABLES", String.class);
+
+        assertThat(tables).contains("part_lot", "stock_history").doesNotContain("part_lot_usage");
     }
 
     @Test

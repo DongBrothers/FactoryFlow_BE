@@ -41,7 +41,6 @@ class StorageSlotTest {
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
         jdbc.update("UPDATE storage_slot SET finished_vehicle_id = NULL");
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM stock_history");

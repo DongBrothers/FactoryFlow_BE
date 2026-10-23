@@ -51,7 +51,6 @@ class PartLotScanConsumptionTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM stock_history");
@@ -76,11 +75,9 @@ class PartLotScanConsumptionTest {
         // 타이어는 LOT2 를 찍었다. 엔진은 안 찍어서 지금처럼 초기 재고 LOT 부터
         productionListener.onProductionCompleted(completed(scan(tire, LOT_2)));
 
-        assertThat(usages())
-                .containsExactlyInAnyOrder(tuple(engineInit, 1, "FIFO"), tuple(lot2, 4, "SCANNED"));
-        assertThat(remaining(lot2)).isEqualTo(1);
-        assertThat(remaining(tireInit)).isEqualTo(2);
-        assertThat(remaining(lot1)).isEqualTo(3);
+        assertThat(remainingByLot())
+                .containsExactly(
+                        tuple(engineInit, 9), tuple(tireInit, 2), tuple(lot1, 3), tuple(lot2, 1));
     }
 
     @Test
@@ -92,11 +89,9 @@ class PartLotScanConsumptionTest {
                         scan(tire, "LOT-999999-999999"),
                         scan(999_999L, LOT_2)));
 
-        assertThat(usages())
-                .containsExactlyInAnyOrder(
-                        tuple(engineInit, 1, "FIFO"),
-                        tuple(tireInit, 2, "FIFO"),
-                        tuple(lot1, 2, "FIFO"));
+        assertThat(remainingByLot())
+                .containsExactly(
+                        tuple(engineInit, 9), tuple(tireInit, 0), tuple(lot1, 1), tuple(lot2, 5));
         assertThat(output)
                 .contains("SCANNED_LOT_REJECTED", "reason=OTHER_PART")
                 .contains("reason=NOT_FOUND")
@@ -109,11 +104,9 @@ class PartLotScanConsumptionTest {
         // LOT1 은 3개 남아 타이어 4 를 다 줄 수 없다 → 그 부품은 입고 순 (초기 재고 2 + LOT1 2)
         productionListener.onProductionCompleted(completed(scan(tire, LOT_1)));
 
-        assertThat(usages())
-                .containsExactlyInAnyOrder(
-                        tuple(engineInit, 1, "FIFO"),
-                        tuple(tireInit, 2, "FIFO"),
-                        tuple(lot1, 2, "FIFO"));
+        assertThat(remainingByLot())
+                .containsExactly(
+                        tuple(engineInit, 9), tuple(tireInit, 0), tuple(lot1, 1), tuple(lot2, 5));
         assertThat(output).contains("SCANNED_LOT_REJECTED", "reason=NOT_ENOUGH");
     }
 
@@ -127,35 +120,24 @@ class PartLotScanConsumptionTest {
                                 "productId", 1L,
                                 "vin", VIN)));
 
-        assertThat(usages())
-                .containsExactlyInAnyOrder(
-                        tuple(engineInit, 1, "FIFO"),
-                        tuple(tireInit, 2, "FIFO"),
-                        tuple(lot1, 2, "FIFO"));
+        assertThat(remainingByLot())
+                .containsExactly(
+                        tuple(engineInit, 9), tuple(tireInit, 0), tuple(lot1, 1), tuple(lot2, 5));
     }
 
     @Test
-    void lotQueriesShowWhetherTheLotWasScanned() throws Exception {
+    void scannedLotShowsUpOnlyAsLowerStockOfThatLot() throws Exception {
+        // inventory 는 LOT 재고만 바뀌고 차 ↔ LOT 기록은 남기지 않는다. 계보는 mes 가 찍은 LOT 으로 갖는다 (#176)
         productionListener.onProductionCompleted(completed(scan(tire, LOT_2)));
         MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
 
+        mockMvc.perform(get("/inventory/parts/{partId}/lots", tire))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lots[?(@.lotNo == '%s')].remainingQty", LOT_2).value(1))
+                .andExpect(
+                        jsonPath("$.data.lots[?(@.lotNo == '%s')].remainingQty", LOT_1).value(3));
         mockMvc.perform(get("/inventory/finished-vehicles/{vin}/part-lots", VIN))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].partCode").value("ENG-T"))
-                .andExpect(jsonPath("$.data[0].source").value("FIFO"))
-                .andExpect(jsonPath("$.data[1].lotNo").value(LOT_2))
-                .andExpect(jsonPath("$.data[1].source").value("SCANNED"));
-        mockMvc.perform(get("/inventory/part-lots/{lotNo}/vehicles", LOT_2))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].vin").value(VIN))
-                .andExpect(jsonPath("$.data[0].source").value("SCANNED"));
-        mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(
-                        jsonPath("$.components.schemas.VehiclePartLotResponse.properties.source")
-                                .exists())
-                .andExpect(
-                        jsonPath("$.components.schemas.LotVehicleResponse.properties.source")
-                                .exists());
+                .andExpect(status().isNotFound());
     }
 
     private static Map<String, Object> scan(long partId, String lotNo) {
@@ -183,24 +165,16 @@ class PartLotScanConsumptionTest {
                 objectMapper.valueToTree(payload));
     }
 
-    private List<Tuple> usages() {
-        return jdbc
-                .queryForList(
-                        "SELECT lot_id, qty, source FROM part_lot_usage WHERE vin = ? ORDER BY id",
-                        VIN)
-                .stream()
-                .map(u -> tuple(u.get("lot_id"), u.get("qty"), u.get("source")))
+    /** LOT 마다 남은 수량, id 순. */
+    private List<Tuple> remainingByLot() {
+        return jdbc.queryForList("SELECT id, remaining_qty FROM part_lot ORDER BY id").stream()
+                .map(l -> tuple(l.get("id"), l.get("remaining_qty")))
                 .toList();
     }
 
     private int finishedVehicles() {
         return jdbc.queryForObject(
                 "SELECT COUNT(*) FROM finished_vehicle WHERE vin = ?", Integer.class, VIN);
-    }
-
-    private int remaining(long lotId) {
-        return jdbc.queryForObject(
-                "SELECT remaining_qty FROM part_lot WHERE id = ?", Integer.class, lotId);
     }
 
     private long insertPart(String code, int available, int reserved) {

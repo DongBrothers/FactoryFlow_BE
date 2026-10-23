@@ -51,7 +51,6 @@ class ProductionCompletedTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.update("DELETE FROM part_lot_usage");
         jdbc.update("DELETE FROM part_lot");
         jdbc.update("DELETE FROM finished_vehicle");
         jdbc.update("DELETE FROM stock_history");
