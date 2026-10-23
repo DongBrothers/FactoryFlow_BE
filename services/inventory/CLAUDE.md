@@ -3,7 +3,7 @@
 - part.reserved 는 part_reservation 의 RESERVED 합계와 같다. 예약 변경과 같은 트랜잭션에서 갱신
 - 발행: inventory.reserved, inventory.reservation-pending, inventory.reservation-failed (BOM 부품이 없을 때, docs/specs/stalled-flows.md), shipment.completed. 부족은 이벤트로 알리지 않고 부족 부품 조회 GET /inventory/parts/shortages 로 보여 준다 (docs/specs/purchase-manual.md). 내부 API GET /internal/parts (purchase 의 구매 건, production 의 BOM 부품 확인), GET /internal/parts/shortages (purchase 의 발주 제안, 공개 부족 부품 조회와 같은 값)
 - 수신: production.material-requested, production.cancelled, production.completed, purchase.received
-- 완료: production.completed 수신 시 예약 부품 CONSUMED, 완성차 재고 증가(VIN), 소모 부품 LOT ↔ VIN 연결
+- 완료: production.completed 수신 시 예약 부품 CONSUMED, 완성차 재고 증가(VIN), 소모 부품 LOT ↔ VIN 연결. 의장에서 찍은 LOT(scannedLots)이 그 부품의 LOT 이고 남은 수량이 되면 그 LOT 에서 빼고 SCANNED, 아니면 입고 순 FIFO + SCANNED_LOT_REJECTED WARN (part_lot_usage.source, docs/specs/part-lot-scan.md)
 - LOT: 입고 한 번에 LOT 하나, 모든 재고에 LOT 이 있다(처음 재고는 LOT-INIT-{부품 id}, #116). 생산 완료 때 LOT 입고 순으로 써서 기록. 조회 GET /inventory/finished-vehicles/{vin}/part-lots, GET /inventory/part-lots/{lotNo}/vehicles (docs/specs/part-lot.md)
 - 재고 조정: POST /inventory/parts/{id}/adjustments (늘리면 조정 LOT LOT-ADJ-{id} + 기다리는 줄 채움, 줄이면 available 만·LOT 입고 순, stock_adjustment, docs/specs/stock-adjustment.md)
 - 부품 등록·수정: POST /inventory/parts, PUT /inventory/parts/{id} (재고 0·LOT 없음으로 시작, 수정은 이름·단위만, docs/specs/master-data.md)

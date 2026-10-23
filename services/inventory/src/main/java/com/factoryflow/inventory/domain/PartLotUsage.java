@@ -3,6 +3,8 @@ package com.factoryflow.inventory.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -11,6 +13,8 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -38,18 +42,24 @@ public class PartLotUsage {
     @Column(nullable = false, updatable = false)
     private int qty;
 
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, updatable = false, length = 10)
+    private PartLotUsageSource source;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    private PartLotUsage(String vin, Long lotId, int qty) {
+    private PartLotUsage(String vin, Long lotId, int qty, PartLotUsageSource source) {
         this.vin = vin;
         this.lotId = lotId;
         this.qty = qty;
+        this.source = source;
     }
 
-    /** 그 차가 LOT 에서 qty 만큼 썼다. */
-    public static PartLotUsage use(String vin, Long lotId, int qty) {
-        return new PartLotUsage(vin, lotId, qty);
+    /** 그 차가 LOT 에서 qty 만큼 썼다. source 는 찍은 LOT 인지(SCANNED) 입고 순 배정인지(FIFO). */
+    public static PartLotUsage use(String vin, Long lotId, int qty, PartLotUsageSource source) {
+        return new PartLotUsage(vin, lotId, qty, source);
     }
 }

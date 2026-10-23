@@ -11,6 +11,7 @@ import com.factoryflow.test.container.TestContainersConfig;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,6 +86,35 @@ class ProductionCompletedTest {
         listener.onProductionCompleted(completed(201L, CAR_B, "KMH000027TU000201"));
         assertThat(itemStatus(CAR_B)).isEqualTo("COMPLETED");
         assertThat(orderStatus()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void scannedLotsInTheEventAreIgnored() {
+        // production.completed 에 의장 LOT 스캔(scannedLots)이 실려도 order 는 쓰지 않고 그대로 처리한다
+        // (docs/specs/part-lot-scan.md)
+        listener.onProductionCompleted(
+                new EventEnvelope(
+                        UUID.randomUUID(),
+                        "production.completed",
+                        UUID.randomUUID().toString(),
+                        1,
+                        Instant.now(),
+                        objectMapper.valueToTree(
+                                Map.of(
+                                        "orderId",
+                                        orderId,
+                                        "productionId",
+                                        201L,
+                                        "productId",
+                                        CAR_B,
+                                        "vin",
+                                        "KMH000027TU000201",
+                                        "scannedLots",
+                                        List.of(Map.of("partId", 1001, "lotNo", "LOT-1"))))));
+
+        assertThat(vehicle(201L))
+                .containsEntry("status", "COMPLETED")
+                .containsEntry("vin", "KMH000027TU000201");
     }
 
     @Test

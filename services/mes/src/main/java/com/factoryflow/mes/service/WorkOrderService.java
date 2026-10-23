@@ -10,14 +10,17 @@ import com.factoryflow.mes.domain.StepResult;
 import com.factoryflow.mes.domain.StepStatus;
 import com.factoryflow.mes.domain.Vin;
 import com.factoryflow.mes.domain.WorkOrder;
+import com.factoryflow.mes.domain.WorkOrderPartScan;
 import com.factoryflow.mes.domain.WorkOrderStatus;
 import com.factoryflow.mes.domain.WorkOrderStep;
+import com.factoryflow.mes.dto.request.ScannedLotRequest;
 import com.factoryflow.mes.dto.response.ProductionResultResponse;
 import com.factoryflow.mes.dto.response.WorkOrderDetailResponse;
 import com.factoryflow.mes.dto.response.WorkOrderResponse;
 import com.factoryflow.mes.dto.response.WorkOrderStepResponse;
 import com.factoryflow.mes.event.listener.payload.ProductionReleased;
 import com.factoryflow.mes.event.publisher.payload.ProductionStarted;
+import com.factoryflow.mes.event.publisher.payload.ScannedLot;
 import com.factoryflow.mes.event.publisher.payload.StepDispatched;
 import com.factoryflow.mes.event.publisher.payload.VehicleCompleted;
 import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelRejected;
@@ -25,6 +28,7 @@ import com.factoryflow.mes.event.publisher.payload.WorkOrderCancelled;
 import com.factoryflow.mes.exception.MesErrorCode;
 import com.factoryflow.mes.repository.EquipmentRepository;
 import com.factoryflow.mes.repository.ProductionResultRepository;
+import com.factoryflow.mes.repository.WorkOrderPartScanRepository;
 import com.factoryflow.mes.repository.WorkOrderRepository;
 import com.factoryflow.mes.repository.WorkOrderStepRepository;
 import java.time.LocalDateTime;
@@ -55,6 +59,7 @@ public class WorkOrderService {
     private final WorkOrderRepository workOrderRepository;
     private final WorkOrderStepRepository workOrderStepRepository;
     private final ProductionResultRepository productionResultRepository;
+    private final WorkOrderPartScanRepository workOrderPartScanRepository;
     private final EquipmentRepository equipmentRepository;
     private final EventPublisher eventPublisher;
 
@@ -349,14 +354,22 @@ public class WorkOrderService {
         return Optional.of(step);
     }
 
-    /** 진행 중인 공정을 끝내고 실적을 남긴다. 양품이면 DONE, 불량이면 실적만 남기고 재작업(PENDING). 이벤트는 없다. */
+    /**
+     * 진행 중인 공정을 끝내고 실적을 남긴다. 양품이면 DONE, 불량이면 실적만 남기고 재작업(PENDING). 의장 양품이면 찍은 부품 LOT 을 이번 것으로 바꿔
+     * 남긴다 (docs/specs/part-lot-scan.md). 의장 양품이 아닌데 찍은 LOT 이 있으면 SCAN_NOT_ALLOWED.
+     */
     @Transactional
     public WorkOrderDetailResponse completeStep(
             Long workOrderId,
             ProductionProcess process,
             StepResult result,
             String defectReason,
+            List<ScannedLotRequest> scannedLots,
             String workerId) {
+        boolean assemblyGood = process == ProductionProcess.ASSEMBLY && result == StepResult.GOOD;
+        if (!scannedLots.isEmpty() && !assemblyGood) {
+            throw new CustomException(MesErrorCode.SCAN_NOT_ALLOWED);
+        }
         WorkOrder workOrder = findOpenWorkOrder(workOrderId);
         List<WorkOrderStep> steps = findSteps(workOrderId);
         WorkOrderStep step = stepOf(steps, process);
@@ -364,8 +377,30 @@ public class WorkOrderService {
             throw invalidStepStatus(step);
         }
         finishStep(workOrder, step, result, defectReason, workerId);
+        if (assemblyGood) {
+            replaceScans(workOrderId, scannedLots, workerId);
+        }
         flushOrConflict(workOrderId);
         return detail(workOrder, steps);
+    }
+
+    /** 작업지시의 찍은 LOT 을 이번 것으로 바꾼다 (재작업 뒤 다시 양품이면 마지막 것만 남는다). */
+    private void replaceScans(
+            Long workOrderId, List<ScannedLotRequest> scannedLots, String workerId) {
+        workOrderPartScanRepository.deleteAllByWorkOrderId(workOrderId);
+        workOrderPartScanRepository.flush();
+        LocalDateTime now = LocalDateTime.now();
+        workOrderPartScanRepository.saveAll(
+                scannedLots.stream()
+                        .map(
+                                scan ->
+                                        WorkOrderPartScan.record(
+                                                workOrderId,
+                                                scan.partId(),
+                                                scan.lotNo(),
+                                                workerId,
+                                                now))
+                        .toList());
     }
 
     /**
@@ -406,7 +441,18 @@ public class WorkOrderService {
         String vin = Vin.issue(workOrder.getProductId(), workOrder.getId(), now.getYear());
         workOrder.complete(vin, now);
         eventPublisher.publish(
-                new VehicleCompleted(workOrder.getProductionId(), workOrder.getId(), vin));
+                new VehicleCompleted(
+                        workOrder.getProductionId(),
+                        workOrder.getId(),
+                        vin,
+                        findScans(workOrder.getId()).stream()
+                                .map(scan -> new ScannedLot(scan.getPartId(), scan.getLotNo()))
+                                .toList()));
+    }
+
+    /** 의장 공정에서 찍은 LOT, 부품 id 순. */
+    private List<WorkOrderPartScan> findScans(Long workOrderId) {
+        return workOrderPartScanRepository.findAllByWorkOrderIdOrderByPartIdAsc(workOrderId);
     }
 
     /**

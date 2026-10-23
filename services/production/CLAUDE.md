@@ -5,7 +5,7 @@
   - 생산: production (생산 건 = 차량 1대. SAGA 상태, 작업지시 발행 시각 released_at)
   - 작업지시·공정·실적·설비 테이블은 mes 가 갖는다 (V11 에서 삭제, docs/specs/mes-split.md)
 - 생산 트리거: inventory.reserved 수신 시 생산 건 READY(작업지시 발행 대기)까지. 생산 담당이 POST /production/productions/{id}/work-order 로 발행하면 released_at + production.released (202, 작업지시는 mes 가 만든다. 생산 건을 PESSIMISTIC_FORCE_INCREMENT 로 잠가 취소와 겹치면 취소가 재시도), 발행 대기 목록 GET /production/productions/awaiting-release = READY 이고 released_at NULL (docs/specs/work-order-release.md)
-- 생산 시작·완료: mes.production-started 수신 시 READY → IN_PROGRESS + status-changed, mes.vehicle-completed 수신 시 COMPLETED + production.completed (시작보다 먼저 오면 READY 에서도 완료)
+- 생산 시작·완료: mes.production-started 수신 시 READY → IN_PROGRESS + status-changed, mes.vehicle-completed 수신 시 COMPLETED + production.completed (시작보다 먼저 오면 READY 에서도 완료). 의장 LOT 스캔(scannedLots)은 받은 그대로 production.completed 에 싣는다 (docs/specs/part-lot-scan.md)
 - 제품 목록: GET /production/products 는 주문할 수 있는 제품(삭제 안 됨, BOM 있음)만 (docs/specs/list-apis.md)
 - 제품 등록·수정·상세: POST /production/products, PUT·GET /production/products/{id} (docs/specs/master-data.md). BOM 부품은 client/inventory PartClient 로 inventory GET /internal/parts 에 확인 (ProductService 가 트랜잭션 밖에서, 저장은 ProductWriter). 실패·시간 초과는 INVENTORY_UNAVAILABLE(503), 주소는 clients.inventory.url. BOM 수정은 이미 요청한 차에 영향 없음
 - 발행: production.material-requested, production.status-changed, production.released, production.release-cancel-requested, production.cancelled, production.cancel-rejected, production.completed

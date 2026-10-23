@@ -17,7 +17,7 @@ class MigrationTest extends MigrationTestSupport {
 
     @BeforeAll
     static void migrate() {
-        jdbc = migrateTo("2");
+        jdbc = migrateTo("3");
     }
 
     @Test
@@ -32,7 +32,8 @@ class MigrationTest extends MigrationTestSupport {
                         "equipment_status_history",
                         "work_order",
                         "work_order_step",
-                        "production_result")
+                        "production_result",
+                        "work_order_part_scan")
                 .doesNotContain("production", "product", "bom");
     }
 
@@ -108,6 +109,17 @@ class MigrationTest extends MigrationTestSupport {
     }
 
     @Test
+    void v3ScansOneLotPerPartOfAWorkOrder() {
+        // 의장 공정 LOT 스캔: 작업지시의 부품마다 하나 (docs/specs/part-lot-scan.md)
+        insertScan(1, 1001, "LOT-261017-000012");
+        insertScan(1, 1018, "LOT-INIT-1018");
+        insertScan(2, 1001, "LOT-261017-000012");
+        assertThatThrownBy(() -> insertScan(1, 1001, "LOT-261017-000013"))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_work_order_part_scan");
+    }
+
+    @Test
     void processedEventKeyIsIdAndEventIdIsUnique() {
         var pk =
                 jdbc.queryForList(
@@ -141,6 +153,15 @@ class MigrationTest extends MigrationTestSupport {
                 workOrderId,
                 process,
                 seq);
+    }
+
+    private void insertScan(long workOrderId, long partId, String lotNo) {
+        jdbc.update(
+                "INSERT INTO work_order_part_scan (work_order_id, part_id, lot_no, scanned_by,"
+                        + " scanned_at) VALUES (?, ?, ?, 'worker', NOW(6))",
+                workOrderId,
+                partId,
+                lotNo);
     }
 
     private void insertProcessedEvent(String eventId) {

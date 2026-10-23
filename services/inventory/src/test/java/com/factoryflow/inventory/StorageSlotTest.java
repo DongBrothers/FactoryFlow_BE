@@ -11,6 +11,7 @@ import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
 import com.factoryflow.inventory.repository.StorageSlotRepository;
 import com.factoryflow.inventory.service.FinishedVehicleService;
 import com.factoryflow.test.container.TestContainersConfig;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -193,7 +194,7 @@ class StorageSlotTest {
                     n,
                     part);
         }
-        finishedVehicleService.stock(new ProductionCompleted(42L, n, 1L, vin(n)));
+        finishedVehicleService.stock(new ProductionCompleted(42L, n, 1L, vin(n), List.of()));
     }
 
     /** 남은 빈 자리를 모두 다른 차(이 테스트 밖의 완성차)로 채운다. */

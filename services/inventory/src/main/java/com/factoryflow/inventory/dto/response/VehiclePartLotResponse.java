@@ -3,6 +3,7 @@ package com.factoryflow.inventory.dto.response;
 import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.domain.PartLot;
 import com.factoryflow.inventory.domain.PartLotUsage;
+import com.factoryflow.inventory.domain.PartLotUsageSource;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 
@@ -14,7 +15,11 @@ public record VehiclePartLotResponse(
                 String lotNo,
         @Schema(description = "그 LOT 에서 쓴 수량", example = "1") int qty,
         @Schema(description = "LOT 입고 시각", example = "2026-10-17T10:00:00")
-                LocalDateTime receivedAt) {
+                LocalDateTime receivedAt,
+        @Schema(
+                        description = "SCANNED: 의장 공정에서 찍은 LOT (확실), FIFO: 먼저 들어온 LOT 부터 배정 (추정)",
+                        example = "SCANNED")
+                PartLotUsageSource source) {
 
     public static VehiclePartLotResponse of(PartLotUsage usage, Part part, PartLot lot) {
         return new VehiclePartLotResponse(
@@ -22,6 +27,7 @@ public record VehiclePartLotResponse(
                 part.getName(),
                 lot.getLotNo(),
                 usage.getQty(),
-                lot.getReceivedAt());
+                lot.getReceivedAt(),
+                usage.getSource());
     }
 }

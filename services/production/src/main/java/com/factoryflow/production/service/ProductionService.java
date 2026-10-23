@@ -10,6 +10,7 @@ import com.factoryflow.production.domain.ProductionStatus;
 import com.factoryflow.production.dto.response.AwaitingReleaseResponse;
 import com.factoryflow.production.dto.response.ReleaseWorkOrderResponse;
 import com.factoryflow.production.event.listener.payload.OrderCreatedProduct;
+import com.factoryflow.production.event.publisher.payload.CompletedPartLot;
 import com.factoryflow.production.event.publisher.payload.MaterialRequested;
 import com.factoryflow.production.event.publisher.payload.MaterialRequestedPart;
 import com.factoryflow.production.event.publisher.payload.ProductionCancelRejected;
@@ -247,10 +248,12 @@ public class ProductionService {
     /**
      * mes.vehicle-completed: mes 가 검사 양품으로 차를 완성했다. 생산 건 IN_PROGRESS(시작 알림보다 먼저 왔으면 READY) →
      * COMPLETED 후 production.completed (inventory 는 부품 사용 처리와 완성차 재고, order 는 차량 COMPLETED). 이미
-     * 완료됐거나 다른 상태면 그대로 둔다 (docs/specs/production-completion.md, docs/specs/mes-split.md).
+     * 완료됐거나 다른 상태면 그대로 둔다 (docs/specs/production-completion.md, docs/specs/mes-split.md). 의장 공정에서
+     * 찍은 LOT 은 inventory 가 그 LOT 으로 재고를 빼도록 그대로 싣는다 (docs/specs/part-lot-scan.md).
      */
     @Transactional
-    public void completeProduction(Long productionId, String vin) {
+    public void completeProduction(
+            Long productionId, String vin, List<CompletedPartLot> scannedLots) {
         Production production = findProduction(productionId);
         if (!production.complete()) {
             log.info(
@@ -265,7 +268,8 @@ public class ProductionService {
                         production.getOrderId(),
                         production.getId(),
                         production.getProductId(),
-                        vin));
+                        vin,
+                        scannedLots));
     }
 
     /**

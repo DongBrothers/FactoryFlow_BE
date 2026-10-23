@@ -218,7 +218,7 @@ class EquipmentStatusTest {
         long workOrder = releasedWorkOrder();
         workOrderService.startStep(workOrder, ProductionProcess.PRESS, "PRESS-01");
         workOrderService.completeStep(
-                workOrder, ProductionProcess.PRESS, StepResult.GOOD, null, WORKER);
+                workOrder, ProductionProcess.PRESS, StepResult.GOOD, null, List.of(), WORKER);
         jdbc.update(
                 "UPDATE equipment SET occupied_step_id = (SELECT id FROM work_order_step"
                         + " WHERE work_order_id = ? AND process = 'PRESS') WHERE code = 'PRESS-01'",

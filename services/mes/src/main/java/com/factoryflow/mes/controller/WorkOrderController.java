@@ -133,7 +133,7 @@ public class WorkOrderController {
     @Operation(
             summary = "공정 종료 (실적 입력)",
             description =
-                    "진행 중인 공정을 끝내고 실적을 남긴다. 양품(GOOD)이면 공정이 끝나고 다음 공정을 시작할 수 있다. 불량(DEFECT, 사유 필수)이면 실적만 남기고 같은 공정을 다시 한다. 작업자는 로그인한 직원(X-User-Id)이다.")
+                    "진행 중인 공정을 끝내고 실적을 남긴다. 양품(GOOD)이면 공정이 끝나고 다음 공정을 시작할 수 있다. 불량(DEFECT, 사유 필수)이면 실적만 남기고 같은 공정을 다시 한다. 의장(ASSEMBLY) 양품이면 찍은 부품 LOT(scannedLots)을 함께 남길 수 있다. 작업자는 로그인한 직원(X-User-Id)이다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -141,7 +141,7 @@ public class WorkOrderController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "400",
                 description =
-                        "X-User-Id 없음, result 없음 또는 정해진 값이 아님, DEFECT 인데 사유 없음, process 가 정해진 값이 아님"),
+                        "X-User-Id 없음, result 없음 또는 정해진 값이 아님, DEFECT 인데 사유 없음, process 가 정해진 값이 아님, scannedLots 형식(같은 부품 두 번, LOT- 아님, 51개 이상), 의장 양품이 아닌데 scannedLots (SCAN_NOT_ALLOWED)"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "404",
                 description = "작업지시 없음 (WORK_ORDER_NOT_FOUND)"),
@@ -167,7 +167,12 @@ public class WorkOrderController {
             @Valid @RequestBody CompleteWorkOrderStepRequest request) {
         WorkOrderDetailResponse workOrder =
                 workOrderService.completeStep(
-                        workOrderId, process, request.result(), request.defectReason(), workerId);
+                        workOrderId,
+                        process,
+                        request.result(),
+                        request.defectReason(),
+                        request.scannedLotsOrEmpty(),
+                        workerId);
         return ApiResponse.ok(workOrder);
     }
 
