@@ -67,7 +67,7 @@
 ```
 
 - 발급의 `role` 에는 `code` 를 보낸다. 화면에는 `name` 을 보인다
-- 역할은 마이그레이션으로만 넣는다 (V5 가 처음 4개). 추가·수정 API 는 없다. 권한은 응답에 넣지 않는다 (발급 화면은 쓰지 않음)
+- 역할은 마이그레이션으로만 넣는다 (V5 가 처음 4개). 추가·삭제 API 는 없다. 역할마다 `permissions` 도 준다 (권한 편집 화면용, docs/specs/role-permission-admin.md)
 
 ### 2. 활성화 (직원) — `POST /api/auth/activation`
 
@@ -100,8 +100,9 @@
 { "accessToken": "eyJ..." }
 ```
 
-- Access 토큰 claim: `sub`(user_account.public_id), `role`(역할 코드), `permissions`(그 역할의 권한 코드 배열, 예: `["READ", "ORDER_WRITE"]`).
-  이메일 같은 개인정보는 넣지 않는다. 권한은 로그인·재발급 때마다 `role_permission` 에서 읽는다 (아래 "역할과 권한")
+- Access 토큰 claim: `sub`(user_account.public_id), `role`(역할 코드). 이메일 같은 개인정보는 넣지 않는다.
+  권한은 넣지 않는다 — gateway 는 Redis 로 받은 역할 → 권한 표로 판단하고, 프론트는 내 정보(`GET /api/auth/me`)로 받는다
+  (docs/specs/role-permission-admin.md. #171 에서 넣었던 `permissions` 를 뺐다)
 
 ### 4. 토큰 재발급·로그아웃
 
@@ -112,8 +113,8 @@
 
 - gateway 가 auth 의 **내부 API JWKS 엔드포인트(`GET /internal/jwks`)에서 공개키를 받아 캐시**하고,
   Access 토큰 서명을 공개키로 검증한다 (auth 에 매 요청 묻지 않음). 키 교체 시 JWKS 만 갱신
-- admin 전용 API 는 gateway 가 JWT 의 `permissions` 에 `ACCOUNT_ADMIN` 이 있는지 확인한다. 다른 API 의 필요한 권한은 docs/specs/role-permissions.md.
-  gateway 는 `role` 클레임으로 권한을 판단하지 않는다. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
+- admin 전용 API 는 gateway 가 JWT 의 `role` 로 역할 → 권한 표를 찾아 `ACCOUNT_ADMIN` 이 있는지 확인한다. 다른 API 의 필요한 권한은
+  docs/specs/role-permissions.md. auth 는 role 헤더를 받지 않는다 (2026-10-14, 리뷰)
 
 ## Redis 키
 
@@ -199,8 +200,9 @@
   ADMIN 은 계정 발급만 한다 (docs/specs/role-permissions.md)
 - **역할과 권한**: 역할이 갖는 권한의 원본은 auth DB 한 곳이다 (V6).
   `permission`(`id` PK, `code` UNIQUE, `name`) 에 `READ, ORDER_WRITE, PRODUCTION_WRITE, PURCHASE_WRITE, ACCOUNT_ADMIN`,
-  `role_permission`(`id` PK, `role_id`·`permission_id` 둘 다 FK, 둘을 합쳐 UNIQUE `uk_role_permission`) 에 역할별 권한. 로그인·재발급 때 `role_id` 로
-  역할 코드와 권한 코드를 읽어 JWT 에 넣는다. 권한이 없는 역할도 발급·로그인은 되고 `permissions` 는 빈 배열이다 (gateway 에서 모두 403)
+  `role_permission`(`id` PK, `role_id`·`permission_id` 둘 다 FK, 둘을 합쳐 UNIQUE `uk_role_permission`) 에 역할별 권한.
+  auth 는 표 전체를 Redis(`auth:role-permissions` 키와 같은 이름의 `-changed` 채널)로 gateway 에 보낸다. 역할의 권한은 운영 중 관리자 API 로 바꾼다
+  (docs/specs/role-permission-admin.md). 권한이 없는 역할도 발급·로그인은 되고 gateway 에서 모두 403 이다
 - **역할을 새로 넣을 때**: 기존 권한을 조합하는 역할이면 마이그레이션 하나(`role` 행 + `role_permission` 행)로 끝난다.
   gateway·프론트는 권한만 보므로 고치지 않는다. 새 권한 종류(새 기능)가 필요할 때만 gateway·프론트를 함께 고친다 (docs/specs/role-permissions.md "규칙 / 예외")
 
@@ -211,7 +213,7 @@
 - springdoc OpenAPI 로 문서화한다. auth 는 `/v3/api-docs` 와 Swagger UI 를 연다. 응답 코드는 API 마다 `@ApiResponse` 로
   위 표의 코드를 전부 적고, 공통 예외 핸들러 응답을 자동으로 붙이지 않는다 (`springdoc.override-with-generic-response: false`)
 - **권한 확인과 헤더 신뢰 전제 (보안)**: JWT 는 gateway 만 검증한다. 권한 확인(ACCOUNT_ADMIN 포함)도 gateway 가 JWT 의
-  `permissions` 로 하고, role·permissions 는 헤더로 넘기지 않는다 (헤더와 JWT 를 따로 맞출 필요가 없게. 2026-10-14 리뷰,
+  `role` 과 역할 → 권한 표로 하고, role·permissions 는 헤더로 넘기지 않는다 (헤더와 JWT 를 따로 맞출 필요가 없게. 2026-10-14 리뷰,
   2026-10-23 권한으로 바꿈). 그래서 업무 서비스는 역할·권한을 모르고, 권한 방식을 바꿔도 auth·gateway 만 고친다. 뒤 서비스가 믿는
   `X-User-Id` 같은 헤더는 다음 두 가지가 모두 성립할 때만 유효하다.
   1. 서비스는 gateway 를 통해서만 접근 가능(네트워크 격리: ECS 보안그룹에서 인터넷 직접 접속 차단).
@@ -290,6 +292,13 @@ gateway 는 WebFlux 라 common-web 을 쓰지 않고 같은 형식을 따로 만
     auth DB 한 곳에 두고 JWT `permissions` 로 내보낸다. gateway 는 "API → 필요한 권한" 만 코드에 두고(API 는 어차피 코드라서) 역할 이름을 모른다.
     경로 규칙까지 DB 에 두는 안은 하지 않았다 — 새 API 는 어차피 배포가 필요하고, DB 행 하나가 리뷰 없이 쓰기 API 를 열 수 있고,
     gateway 가 실행 중에 auth 에 기대게 된다. 대가: 권한 변경은 이미 발급된 Access 토큰이 만료(최대 15분)된 뒤 반영된다
+    (→ 18 에서 바꿈)
+18. **권한 표는 Redis 로 gateway 메모리에** (2026-10-23): 관리자가 화면에서 권한을 바꾸면 바로 반영되어야 해서, 권한을 토큰에서 빼고
+    gateway 가 역할 → 권한 표를 메모리에 들게 했다. 표는 auth 가 Redis 키에 쓰고 채널로 발행한다 — gateway 가 여러 대여도 모두 받고,
+    auth 를 부르지 않으며, 이미 쓰는 Redis 라 새 인프라가 없다. auth 가 gateway 를 직접 부르는 안은 gateway 가 여러 대(배포 중 포함)면
+    한 대에만 가고, gateway 에 밖에서 막아야 할 입구가 생겨 하지 않았다. RabbitMQ 이벤트는 gateway 에 Outbox·인스턴스별 큐가 필요해
+    하지 않았다. 평소 주기적 재조회는 하지 않는다 (권한은 드물게 바뀐다). 놓칠 수 있는 때(시작, Redis 재연결)에만 키를 다시 읽는다
+    (docs/specs/role-permission-admin.md)
 
 ## 다른 서비스에 필요한 후속 변경 (auth 범위 밖, 추후 상의 필요)
 
