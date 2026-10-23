@@ -111,10 +111,12 @@ public class OrderService {
         return detail(order, items, vehicles);
     }
 
-    /** 차량을 모두 알고(생산 계획이 끝남), 완료·출고 차량이 없고, 진행 중인 취소 요청이 없고, 취소할 차량이 있어야 한다. */
-    /** 폐기된 차량은 대체 차가 대신하므로 빼고 본다 (docs/specs/defect-scrap.md). */
-    private static void requireCancellable(List<OrderItem> items, List<OrderVehicle> all) {
-        List<OrderVehicle> vehicles = all.stream().filter(v -> !v.isScrapped()).toList();
+    /**
+     * 차량을 모두 알고(생산 계획이 끝남), 완료·출고 차량이 없고, 진행 중인 취소 요청이 없고, 취소할 차량이 있어야 한다. 폐기된 차량은 대체 차가 대신하므로 빼고
+     * 본다 (docs/specs/defect-scrap.md).
+     */
+    private static void requireCancellable(List<OrderItem> items, List<OrderVehicle> allVehicles) {
+        List<OrderVehicle> vehicles = allVehicles.stream().filter(v -> !v.isScrapped()).toList();
         int expected = items.stream().mapToInt(OrderItem::getQty).sum();
         if (vehicles.size() < expected) {
             throw new CustomException(OrderErrorCode.ORDER_NOT_READY);

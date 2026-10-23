@@ -124,12 +124,12 @@ public class OrderVehicle extends BaseTimeEntity {
         return true;
     }
 
-    /** since 이후에 취소됐는가 (이번 취소 요청 회차에 취소됐는가). */
     /** 공정 불량으로 폐기된 차량. 대체 차가 대신하므로 품목 수량에 세지 않는다. */
     public boolean isScrapped() {
         return status == OrderStatus.SCRAPPED;
     }
 
+    /** since 이후에 취소됐는가 (이번 취소 요청 회차에 취소됐는가). */
     public boolean isCancelledSince(LocalDateTime since) {
         return status == OrderStatus.CANCELLED
                 && cancelledAt != null

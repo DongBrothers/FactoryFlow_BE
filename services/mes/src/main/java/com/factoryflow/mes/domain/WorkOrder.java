@@ -84,7 +84,6 @@ public class WorkOrder extends BaseTimeEntity {
         return new WorkOrder(productionId, orderId, 0L, WorkOrderStatus.CANCELLED, now);
     }
 
-    /** 취소되어 더 진행하지 않는 작업지시. */
     /** 취소되거나 폐기돼 더 진행하지 않는 작업지시. 배정·작업자 시작·설비 보고에서 빠진다. */
     public boolean isClosed() {
         return status == WorkOrderStatus.CANCELLED || status == WorkOrderStatus.SCRAPPED;

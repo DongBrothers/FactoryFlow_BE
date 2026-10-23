@@ -392,6 +392,26 @@ class LineDispatchTest {
     }
 
     @Test
+    void equipmentReportsAfterTheScrapAreIgnored() {
+        long workOrder = releasedWorkOrder();
+        dispatcher.dispatchAll();
+        String press = (String) step(workOrder, "PRESS").get("equipment_code");
+        listener.onStepStarted(started(workOrder, "PRESS", press));
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "DEFECT", "찍힘"));
+
+        // 폐기 뒤 늦게 온 설비 보고(다른 이벤트)는 끝난 작업지시라 반영하지 않는다
+        listener.onStepStarted(started(workOrder, "PRESS", press));
+        listener.onStepCompleted(completed(workOrder, "PRESS", press, "GOOD", null));
+
+        assertThat(workOrderStatus(workOrder)).isEqualTo("SCRAPPED");
+        assertThat(step(workOrder, "PRESS")).containsEntry("status", "DONE");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM production_result", Integer.class))
+                .isEqualTo(1);
+        assertThat(outbox("mes.vehicle-scrapped")).hasSize(1);
+        assertThat(outbox("mes.vehicle-completed")).isEmpty();
+    }
+
+    @Test
     void sameReportTwiceIsAppliedOnce() {
         long workOrder = releasedWorkOrder();
         dispatcher.dispatchAll();
