@@ -25,6 +25,30 @@ mes 가 `equipment.status-changed` 를 받아 설비 상태를 바꾸고 이력�
    - 생산 건·주문: 그대로. 이벤트를 보내지 않는다
 7. 되돌린 공정은 다음 배정 주기에 같은 공정의 다른 RUNNING 설비로 다시 배정된다 (로봇 공정). 사람 공정은 작업자가 다른 설비로 다시 시작한다
 
+## 설비 상태 이력 조회 — `GET /mes/equipments/{equipmentCode}/history?lastId=&size=20`
+gateway `/api/mes/equipments/{equipmentCode}/history`. 설비 현황 화면의 이력 패널 (docs/handoff/frontend-api-gaps.md 3번). 위 5번에서 쌓은 이력을 읽기만 한다.
+응답은 다른 API 와 같은 `ApiResponse { data, status, message }` 이고, `data` 가 `CursorPage` 다 (아래는 `data` 안쪽).
+```json
+{ "items": [ { "fromStatus": "RUNNING", "toStatus": "FAULT", "changedAt": "2026-10-24T10:00:00" } ],
+  "count": 1, "last": false, "nextCursor": 12 }
+```
+- **최신 먼저** (이력 id 내림차순 = mes 가 기록한 순서의 역순). 이력은 추가만 하므로 id 순이 기록 순이다.
+  changedAt(이벤트 시각)은 보통 같은 순서지만, 이벤트가 늦게 오면 어긋날 수 있다 (그래도 id 순으로 준다. 커서가 id 라서)
+- id 커서(`CursorPage`)를 내림차순으로 쓴다: 처음엔 lastId 없이(가장 최신부터), 다음 페이지는 응답의 nextCursor 를 lastId 로 넘긴다 → `id < lastId`.
+  last = true 면 nextCursor 는 null. 주문·완성차 목록(docs/specs/list-apis.md)처럼 최신 먼저이고, 이력에는 밖으로 낼 다른 키가 없어 이력 id 를 커서로 쓴다
+- 항목에 id·설비 코드는 넣지 않는다 (경로에 있고, 커서는 nextCursor 로 준다)
+- 삭제된 설비(is_deleted)는 없는 설비와 같다 (404)
+
+| 확인 | 실패 |
+|---|---|
+| equipmentCode 형식 `{공정}-{두 자리}` (`EquipmentController.EQUIPMENT_CODE`, 센서값 조회와 같음), lastId 양수, size 1~100 | 400 (Bean Validation, 공통 핸들러) |
+| 설비 있음 (삭제되지 않음) | 404 `EQUIPMENT_NOT_FOUND` |
+
+- 이력이 없으면 200, 빈 목록(last = true)
+- lastId 가 다른 설비의 이력 id 여도 오류가 아니다 (그 id 보다 작은 이 설비 이력부터)
+- gateway 규칙 추가 없음: GET 이라 `READ` (docs/specs/role-permissions.md)
+- 인덱스는 지금 것(`equipment_code, changed_at`)으로 둔다. 설비 상태는 드물게 바뀌어 설비당 이력이 적다 (설비 코드로 거른 뒤 id 정렬). 많아지면 `(equipment_code, id)` 인덱스를 더한다
+
 ## 설비 목록 (mes·simulator 기준)
 mes 의 기본 설비 데이터(V2)와 simulator 의 가상 설비가 이 표와 같아야 한다. 두 서비스는 코드를 공유하지 않으므로 각자 테스트(`SpecTablesTest`)가 이 표와 맞춰 본다 (#179). 설비를 더하거나 바꾸면 이 표, mes 마이그레이션, simulator 를 함께 바꾼다.
 
@@ -65,7 +89,7 @@ mes 의 기본 설비 데이터(V2)와 simulator 의 가상 설비가 이 표와
 ### 테이블
 | 테이블 | 컬럼 |
 |---|---|
-| `equipment_status_history` (production, V6) | id, equipment_code, from_status, to_status, changed_at, created_at. INDEX(equipment_code, changed_at). 추가만 한다 |
+| `equipment_status_history` (mes V1. 처음엔 production V6, MES 분리로 옮김 docs/specs/mes-split.md) | id, equipment_code, from_status, to_status, changed_at, created_at. INDEX(equipment_code, changed_at). 추가만 한다 |
 
 ## 관련 이벤트 (events.md 참조)
 | 이벤트 | 발행 → 수신 (큐) | payload |
@@ -82,3 +106,5 @@ mes 의 기본 설비 데이터(V2)와 simulator 의 가상 설비가 이 표와
 - [ ] RUNNING 으로 돌아오면 상태·이력만 바뀐다
 - [ ] 같은 이벤트 두 번 → 한 번만 반영 (두 번째가 같은 상태 규칙이 아니라 ProcessedEventGuard 로 걸러지는지). 없는 설비 → DLQ. 맡은 공정이 없으면 STEP_NOT_FOUND. 실제 브로커 경유 수신
 - [ ] FAILED 가 production·order 코드에서 없어지고, 요약 규칙·매핑 테스트가 새 규칙과 맞다
+- [ ] 이력 조회: 그 설비의 이력만 최신 먼저 `{fromStatus, toStatus, changedAt}`, nextCursor 를 lastId 로 넘기면 겹치지 않고 이어진다, 마지막 페이지 last = true·nextCursor null, 이력 없으면 빈 목록
+- [ ] 이력 조회: 없는·삭제된 설비 404 `EQUIPMENT_NOT_FOUND`, 코드 형식·lastId 0 이하·size 범위 400. api-docs 에 summary 와 200·400·404

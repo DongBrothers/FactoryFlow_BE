@@ -1,11 +1,13 @@
 package com.factoryflow.mes.service;
 
 import com.factoryflow.common.web.exception.CustomException;
+import com.factoryflow.common.web.response.CursorPage;
 import com.factoryflow.mes.domain.Equipment;
 import com.factoryflow.mes.domain.EquipmentStatus;
 import com.factoryflow.mes.domain.EquipmentStatusHistory;
 import com.factoryflow.mes.domain.ProductionProcess;
 import com.factoryflow.mes.dto.response.EquipmentResponse;
+import com.factoryflow.mes.dto.response.EquipmentStatusHistoryResponse;
 import com.factoryflow.mes.exception.MesErrorCode;
 import com.factoryflow.mes.repository.EquipmentRepository;
 import com.factoryflow.mes.repository.EquipmentStatusHistoryRepository;
@@ -15,6 +17,7 @@ import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +35,27 @@ public class EquipmentService {
     @Transactional(readOnly = true)
     public List<EquipmentResponse> findEquipments(ProductionProcess process) {
         return findEquipmentsOf(process).stream().map(EquipmentResponse::from).toList();
+    }
+
+    /**
+     * 설비 상태 이력, 최신 먼저(id 내림차순). 처음엔 lastId 없이 가장 최신부터, 다음 페이지는 nextCursor 를 lastId 로 받아 그보다 작은 id
+     * 부터. 없거나 삭제된 설비면 EQUIPMENT_NOT_FOUND.
+     */
+    @Transactional(readOnly = true)
+    public CursorPage<EquipmentStatusHistoryResponse> findHistory(
+            String equipmentCode, Long lastId, int size) {
+        findEquipment(equipmentCode);
+        long beforeId = lastId == null ? Long.MAX_VALUE : lastId;
+        CursorPage<EquipmentStatusHistory> page =
+                CursorPage.of(
+                        findHistoryBefore(equipmentCode, beforeId, size + 1),
+                        size,
+                        EquipmentStatusHistory::getId);
+        return new CursorPage<>(
+                page.items().stream().map(EquipmentStatusHistoryResponse::from).toList(),
+                page.count(),
+                page.last(),
+                page.nextCursor());
     }
 
     /**
@@ -68,6 +92,12 @@ public class EquipmentService {
         return equipmentRepository
                 .findByCodeAndIsDeletedFalse(equipmentCode)
                 .orElseThrow(() -> new CustomException(MesErrorCode.EQUIPMENT_NOT_FOUND));
+    }
+
+    private List<EquipmentStatusHistory> findHistoryBefore(
+            String equipmentCode, long beforeId, int limit) {
+        return historyRepository.findAllByEquipmentCodeAndIdLessThanOrderByIdDesc(
+                equipmentCode, beforeId, Limit.of(limit));
     }
 
     private List<Equipment> findEquipmentsOf(ProductionProcess process) {

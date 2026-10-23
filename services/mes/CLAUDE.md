@@ -19,6 +19,6 @@
 - 센서값: equipment.step-telemetry 수신 → step_telemetry 에 샘플마다 문서 1개. 메시지당 300개 넘으면 저장하지 않고 DLQ, 조회는 한 번에 5,000개까지(truncated). 조회 GET /mes/work-orders/{id}/steps/{process}/telemetry(로봇 공정만, 회차별), GET /mes/equipments/{code}/telemetry?from=&to=(최대 1시간). 테스트는 MongoContainerConfig 를 함께 가져온다
 - 발행: mes.step-dispatched, mes.production-started, mes.vehicle-completed, mes.work-order-cancelled, mes.work-order-cancel-rejected
 - 수신: production.released, production.release-cancel-requested, equipment.step-started, equipment.step-completed, equipment.status-changed, equipment.step-telemetry
-- API: GET /mes/work-orders, /mes/work-orders/{id}, POST 공정 시작·종료, GET /mes/equipments?process=, 부품 계보 GET /mes/vehicles/{vin}/part-lots·/mes/part-lots/{lotNo}/vehicles (gateway /api/mes/**)
+- API: GET /mes/work-orders, /mes/work-orders/{id}, POST 공정 시작·종료, GET /mes/equipments?process=, 설비 상태 이력 GET /mes/equipments/{code}/history(최신 먼저 id 커서), 부품 계보 GET /mes/vehicles/{vin}/part-lots·/mes/part-lots/{lotNo}/vehicles (gateway /api/mes/**)
 - 설정: factoryflow.line.*, spring.mongodb.uri 는 공통 application.yml 이 아니라 환경별 application-{local,dev,test}.yml 에 둔다. 테스트는 test 프로필 (src/test/resources/application-test.yml)
 - 동시 변경: 작업지시·설비는 @Version (공정이 바뀔 때마다 작업지시 step_changed_at 을 바꿔 version 을 올린다)
