@@ -67,7 +67,10 @@ public class OrderItem extends BaseTimeEntity {
      * 차량 상태들로 품목 상태를 다시 계산한다. 아직 알려지지 않은 차량(수량보다 모자란 만큼)은 RECEIVED 로 본다. 차량 상태를 바꾼 트랜잭션에서 함께 부른다.
      */
     public void refreshStatus(Collection<OrderStatus> vehicleStatuses) {
-        List<OrderStatus> statuses = new ArrayList<>(vehicleStatuses);
+        // 폐기된 차는 대체 차가 대신한다. 대체 차가 아직 안 왔으면 접수로 센다 (docs/specs/defect-scrap.md)
+        List<OrderStatus> statuses =
+                new ArrayList<>(
+                        vehicleStatuses.stream().filter(s -> s != OrderStatus.SCRAPPED).toList());
         while (statuses.size() < qty) {
             statuses.add(OrderStatus.RECEIVED);
         }

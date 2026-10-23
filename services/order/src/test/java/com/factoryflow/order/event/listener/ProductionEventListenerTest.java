@@ -189,6 +189,24 @@ class ProductionEventListenerTest {
     }
 
     @Test
+    void scrappedVehicleIsLeftOutAndItsReplacementFitsTheItem() {
+        // 불량으로 폐기된 차 대신 production 이 대체 차를 만든다. 폐기된 차는 품목 수량에 세지 않는다 (docs/specs/defect-scrap.md)
+        insertVehicle(CAR_B, 201L, "IN_PRODUCTION");
+
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "SCRAPPED"));
+        // 대체 차가 오기 전에도 품목은 취소가 아니라 접수다
+        assertThat(itemStatus(CAR_B)).isEqualTo("RECEIVED");
+        listener.onStatusChanged(statusChanged(202L, CAR_B, "PLANNED"));
+
+        assertThat(vehicleStatus(201L)).isEqualTo("SCRAPPED");
+        assertThat(vehicleStatus(202L)).isEqualTo("RECEIVED");
+        assertThat(itemStatus(CAR_B)).isEqualTo("RECEIVED");
+        // 폐기된 차는 끝난 상태라 늦게 온 이벤트로 바뀌지 않는다
+        listener.onStatusChanged(statusChanged(201L, CAR_B, "IN_PROGRESS"));
+        assertThat(vehicleStatus(201L)).isEqualTo("SCRAPPED");
+    }
+
+    @Test
     void moreVehiclesThanItemQtyIsAnError() {
         insertVehicle(CAR_B, 201L, "RECEIVED");
 
