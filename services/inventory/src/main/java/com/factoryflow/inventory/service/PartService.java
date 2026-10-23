@@ -5,6 +5,7 @@ import com.factoryflow.inventory.domain.Part;
 import com.factoryflow.inventory.dto.request.CreatePartRequest;
 import com.factoryflow.inventory.dto.request.UpdatePartRequest;
 import com.factoryflow.inventory.dto.response.InternalPartResponse;
+import com.factoryflow.inventory.dto.response.InternalPartShortageResponse;
 import com.factoryflow.inventory.dto.response.PartShortageResponse;
 import com.factoryflow.inventory.dto.response.PartStockResponse;
 import com.factoryflow.inventory.exception.InventoryErrorCode;
@@ -45,6 +46,11 @@ public class PartService {
      */
     @Transactional(readOnly = true)
     public List<PartShortageResponse> findShortages() {
+        return shortages();
+    }
+
+    /** 기다리는 수량 > available 인 부품, shortQty 큰 순 (같으면 코드 순). */
+    private List<PartShortageResponse> shortages() {
         Map<Long, WaitingTotal> waitingByPartId =
                 sumWaitingByPart().stream()
                         .collect(Collectors.toMap(WaitingTotal::partId, Function.identity()));
@@ -56,6 +62,12 @@ public class PartService {
                                 .reversed()
                                 .thenComparing(PartShortageResponse::code))
                 .toList();
+    }
+
+    /** 부족 부품 (내부 API, purchase 의 발주 제안). 공개 조회와 같은 계산. */
+    @Transactional(readOnly = true)
+    public List<InternalPartShortageResponse> findShortagesForPurchase() {
+        return shortages().stream().map(InternalPartShortageResponse::from).toList();
     }
 
     /** 새 부품 (재고 0, LOT 없음). code 가 지운 부품을 포함해 이미 있으면 PART_CODE_DUPLICATED. */
