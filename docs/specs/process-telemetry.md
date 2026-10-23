@@ -55,7 +55,7 @@ mes: 큐 mes.equipment-step-telemetry → MongoDB step_telemetry 에 샘플마�
               "samples": [ { "measuredAt": "2026-10-20T10:00:00.200", "values": { "pressureTon": 801.2, "strokeMm": 299.8 } } ] } ],
   "truncated": false }
 ```
-- 재작업으로 같은 공정을 다시 했으면 배정 회차(dispatchSeq)별로 나눠 준다 (`runs`, 회차 순)
+- 시간 초과·설비 고장으로 같은 공정을 다시 배정했으면 배정 회차(dispatchSeq)별로 나눠 준다 (`runs`, 회차 순)
 - 샘플은 시간 순. 값이 없으면 `runs` 가 빈 목록
 - process 는 로봇 공정만 (PRESS·BODY·PAINT). 사람 공정이면 400
 

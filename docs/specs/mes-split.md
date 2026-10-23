@@ -155,7 +155,7 @@ production
 - [ ] V10 마이그레이션 (released_at, 기존 작업지시로 채움)
 mes
 - [ ] production.released → 작업지시 + 공정 5개, 같은 생산 건 두 번이면 하나
-- [ ] 첫 시작(배정·작업자)에서 mes.production-started 한 번 (불량 재작업 재시작은 안 보냄)
+- [ ] 첫 시작(배정·작업자)에서 mes.production-started 한 번 (되돌린 공정의 재시작은 안 보냄)
 - [ ] 검사 GOOD → VIN + mes.vehicle-completed
 - [ ] 취소 요청: 시작 전 취소, 시작 후 거절, 발행보다 먼저 온 취소
 - [ ] 옮긴 테스트 모두 통과 (배정, 시간 초과, 고장 재배정, 작업자 공정, Swagger)

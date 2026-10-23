@@ -50,7 +50,7 @@ inventory 는 그 차에 잡아 둔 부품을 사용 처리(CONSUMED)하고 완�
 | 상황 | 처리 |
 |---|---|
 | 검사가 아닌 공정을 GOOD 으로 끝냄 | 지금과 같음 (완료 처리 없음) |
-| 검사를 DEFECT 로 끝냄 | 지금과 같음 (실적 + PENDING, 재작업). 완료 처리 없음 |
+| 검사를 DEFECT 로 끝냄 | 차 폐기 (작업지시 SCRAPPED + mes.vehicle-scrapped, docs/specs/defect-scrap.md). 완료 처리 없음 |
 | 검사 GOOD 인데 생산 건이 IN_PROGRESS 가 아님 (정상 흐름에선 안 생김) | 작업자 API 는 409 `WORK_ORDER_CLOSED`, 설비 보고는 처리 오류 → 재시도 → DLQ |
 | production.completed 를 두 번 받음 (inventory) | 같은 eventId 는 Guard. 다른 eventId 면 finished_vehicle(production_id UNIQUE)이 이미 있으면 건너뜀 (INFO) |
 | 그 생산 건에 RESERVED 줄이 없음 (inventory) | 처리 오류 `RESERVATION_NOT_FOUND` → 재시도 → DLQ. 완료된 차는 반드시 부품이 다 잡혀 있었다 |

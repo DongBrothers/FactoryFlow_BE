@@ -20,8 +20,8 @@
                    { "partId": 1018, "lotNo": "LOT-INIT-1018" } ] }
 ```
 - 형식 (Bean Validation, 400): 목록은 없어도 되고 최대 50개. partId 1 이상, lotNo `LOT-` 로 시작하는 32자 이하(공백 없음). 같은 partId 두 번은 400 (커스텀 제약)
-- `ASSEMBLY` 가 아니거나 `result` 가 `GOOD` 이 아닌데 scannedLots 가 비어 있지 않으면 400 `SCAN_NOT_ALLOWED` (불량으로 끝낸 공정은 재작업 때 다시 찍는다)
-- 의장 양품이면 작업지시의 스캔 기록을 **이번 것으로 바꾼다** (재작업으로 두 번 끝나면 마지막 것만 남는다). 같은 트랜잭션
+- `ASSEMBLY` 가 아니거나 `result` 가 `GOOD` 이 아닌데 scannedLots 가 비어 있지 않으면 400 `SCAN_NOT_ALLOWED` (불량이면 차를 폐기한다, docs/specs/defect-scrap.md)
+- 의장 양품이면 작업지시의 스캔 기록을 남긴다 (의장 양품은 작업지시마다 한 번). 같은 트랜잭션
 - mes 는 LOT 이 실제로 있는지, 그 부품이 차의 BOM 에 있는지 모른다. 확인은 재고를 빼는 inventory 가 한다 (아래 3)
 
 ### 2. 차 완성 → 이벤트에 스캔 기록을 싣는다
@@ -50,7 +50,7 @@
 | scannedLots 를 안 보냄·빈 목록 | 지금과 같다 (모두 FIFO) |
 | ASSEMBLY 아님, 또는 DEFECT 인데 scannedLots 있음 | 400 `SCAN_NOT_ALLOWED`, 공정 그대로 |
 | 같은 partId 두 번, lotNo 형식 틀림, 51개 이상 | 400 |
-| 의장 재작업 (DEFECT → 다시 GOOD) | 마지막 양품 때 찍은 것만 남는다 |
+| 의장 불량 (DEFECT) | 찍은 것을 남기지 않고 차를 폐기한다 (docs/specs/defect-scrap.md) |
 | 스캔 LOT 이 없음·다른 부품·남은 수량 부족·차에 없는 부품 | 그 부품만 FIFO + WARN, 차 완성은 계속 |
 | 이 변경 전 이벤트(scannedLots 없음) | 빈 목록으로 본다 |
 | 같은 production.completed 를 두 번 받음 | 지금처럼 한 번만 반영 |
@@ -76,7 +76,7 @@
 - common/common-event 에 바꿀 것이 있으면 적용 (payload 는 각 서비스의 publisher/listener payload record 라 common-event 변경은 없을 것으로 본다)
 
 ## 완료 조건 (테스트로 확인할 것)
-- [ ] mes: 의장 양품 완료 + scannedLots → 스캔 기록 저장 (작업자, 시각), 재작업 뒤 다시 양품이면 마지막 것만
+- [ ] mes: 의장 양품 완료 + scannedLots → 스캔 기록 저장 (작업자, 시각)
 - [ ] mes: ASSEMBLY 아님·DEFECT 인데 scannedLots → 400 SCAN_NOT_ALLOWED, 공정·기록 그대로
 - [ ] mes: 같은 partId 두 번·lotNo 형식·51개 → 400
 - [ ] mes: 검사 양품 → mes.vehicle-completed 에 scannedLots (없으면 빈 목록)

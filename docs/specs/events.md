@@ -16,9 +16,11 @@ Exchange: factoryflow.events (topic), 라우팅 키 = 이벤트 이름
 | production.cancelled | production | inventory, order | orderId, productionId |
 | production.cancel-rejected | production | order | orderId, productionId, reason, status |
 | production.completed | production | inventory, order | orderId, productionId, productId, vin, scannedLots[{partId, lotNo}] |
+| production.scrapped | production | inventory | orderId, productionId |
 | mes.step-dispatched | mes | simulator | workOrderId, process, equipmentCode, dispatchSeq |
 | mes.production-started | mes | production | productionId, workOrderId |
 | mes.vehicle-completed | mes | production | productionId, workOrderId, vin, scannedLots[{partId, lotNo}] |
+| mes.vehicle-scrapped | mes | production | productionId, workOrderId, process, defectReason |
 | mes.work-order-cancelled | mes | production | productionId |
 | mes.work-order-cancel-rejected | mes | production | productionId, status |
 | inventory.reserved | inventory | production | productionId |

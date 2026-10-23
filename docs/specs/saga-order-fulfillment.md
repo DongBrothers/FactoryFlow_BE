@@ -58,7 +58,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
    - 로봇 공정(프레스·차체·도장): mes 의 배정 스케줄러가 비어 있는 설비에 배정 → `mes.step-dispatched` → 설비(simulator)가 `equipment.step-started`, `equipment.step-completed`(양품/불량) 보고
    - 사람 공정(의장·검사): 라인 작업자가 작업자 API 로 시작·종료와 실적 입력
    - 프레스 배정(또는 작업자의 프레스 시작) → 작업지시 IN_PROGRESS + `mes.production-started` → production 이 생산 건 IN_PROGRESS + `production.status-changed`(IN_PROGRESS)
-   - 양품이면 그 공정 DONE, 다음 공정으로. 불량이면 실적만 남기고 같은 공정을 다시 한다 (로봇 공정은 다시 배정)
+   - 양품이면 그 공정 DONE, 다음 공정으로. 불량이면 실적을 남기고 차를 폐기한다 (같은 주문으로 대체 차, docs/specs/defect-scrap.md)
 8. 검사 종료(양품) → mes 가 VIN 발행, 작업지시 COMPLETED → `mes.vehicle-completed` → production 이 생산 건 COMPLETED → `production.completed`
 9. inventory: completed 수신 → 그 생산 건 줄 CONSUMED (reserved −, stock_history CONSUME), 완성차 재고 증가(VIN),
    소모한 부품 LOT ↔ VIN 연결 (먼저 들어온 LOT 부터, 상세: docs/specs/part-lot.md)
@@ -73,7 +73,7 @@ client 호출은 서비스 간 내부 API 로 하고 gateway 에 노출하지 �
   - 공정·설비가 맞지 않거나 상태가 맞지 않는 보고는 무시한다 (INFO 로그)
 - **사람 공정** (ASSEMBLY, INSPECTION): 작업자가 시작할 때 그 공정의 설비를 지정한다. 작업자 API 는 로봇 공정에도 쓸 수 있다 (설비 연동 장애 때 수동 개입)
 - 설비가 RUNNING 일 때만 배정·시작된다 (정지·고장 중이면 작업자 API 는 409)
-- 공정 종료는 실적과 함께 한다: 양품 → DONE, 불량(사유) → 실적만 남기고 PENDING 으로 돌아가 재작업
+- 공정 종료는 실적과 함께 한다: 양품 → DONE, 불량(사유) → DONE 후 작업지시 SCRAPPED (차 폐기)
 - 시작·종료 시각과 작업자를 실적에 남긴다. 공정별 양품·불량 수는 실적에서 센다
 
 ### 3. 설비 상태 (고장·정지 시 재배정)
@@ -194,7 +194,7 @@ traceId 는 **gateway 가 맡는다** (#67). 헤더 이름은 `X-Trace-Id`.
 - [ ] inventory.reserved 를 받으면 작업지시 1건과 공정 5개가 라우팅 순서대로 생긴다
 - [ ] 공정은 순서대로만, 설비가 RUNNING 일 때만 시작된다
 - [ ] 로봇 공정은 production 이 비어 있는 설비에 배정하고 설비 보고로 진행된다. 프레스도 작업지시가 발행되자마자 배정된다
-- [ ] 공정 불량은 실적에 남고 같은 공정을 다시 한다. 이벤트는 없다
+- [ ] 공정 불량은 실적에 남고 차를 폐기한다 (mes.vehicle-scrapped → 대체 차)
 - [ ] 검사 양품 → VIN 발행, production.completed, 부품 CONSUMED, 완성차 재고 증가, 주문 COMPLETED
 - [ ] 재고 부족: WAITING, 구매 담당이 부족 부품을 보고 발주, 입고 후 먼저 대기한 순서대로 RESERVED, 작업지시 생성
 - [ ] 설비 고장·정지: 그 설비의 공정이 PENDING 으로 돌아가 다른 설비로 재배정, 생산 건·주문 상태 그대로
