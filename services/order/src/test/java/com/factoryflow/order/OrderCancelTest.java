@@ -268,6 +268,19 @@ class OrderCancelTest {
     }
 
     @Test
+    void orderDetailLeavesOutScrappedVehicles() throws Exception {
+        // 불량으로 폐기된 차 대신 대체 차가 같은 품목에 들어온다 (docs/specs/defect-scrap.md)
+        jdbc.update("UPDATE order_vehicle SET status = 'SCRAPPED' WHERE production_id = 201");
+        insertVehicle(CAR_B, 202L, "RECEIVED");
+
+        mockMvc.perform(get("/orders/{orderNo}", orderNo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[1].qty").value(1))
+                .andExpect(jsonPath("$.data.items[1].vehicles.length()").value(1))
+                .andExpect(jsonPath("$.data.items[1].vehicles[0].status").value("RECEIVED"));
+    }
+
+    @Test
     void cancelAndDetailApisAreDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
