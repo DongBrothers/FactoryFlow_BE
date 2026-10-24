@@ -9,5 +9,7 @@ public enum WorkOrderStatus {
     /** 검사 완료, VIN 발행 */
     COMPLETED,
     /** 첫 공정 시작 전에 취소됨 */
-    CANCELLED
+    CANCELLED,
+    /** 공정 불량으로 폐기됨. VIN 없이 끝난다 (docs/specs/defect-scrap.md) */
+    SCRAPPED
 }

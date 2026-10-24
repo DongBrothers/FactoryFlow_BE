@@ -11,7 +11,7 @@ public enum MesErrorCode implements ErrorCode {
     WORK_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "작업지시를 찾을 수 없습니다."),
     STEP_NOT_FOUND(HttpStatus.NOT_FOUND, "공정을 찾을 수 없습니다."),
     EQUIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "설비를 찾을 수 없습니다."),
-    WORK_ORDER_CLOSED(HttpStatus.CONFLICT, "취소된 작업지시입니다."),
+    WORK_ORDER_CLOSED(HttpStatus.CONFLICT, "취소되거나 폐기된 작업지시입니다."),
     STEP_OUT_OF_ORDER(HttpStatus.CONFLICT, "앞 공정이 끝나지 않았습니다."),
     INVALID_STEP_STATUS(HttpStatus.CONFLICT, "지금 공정 상태에서는 할 수 없는 작업입니다."),
     EQUIPMENT_PROCESS_MISMATCH(HttpStatus.CONFLICT, "이 공정의 설비가 아닙니다."),

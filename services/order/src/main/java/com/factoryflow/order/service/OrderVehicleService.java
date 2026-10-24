@@ -159,9 +159,10 @@ public class OrderVehicleService {
         return findVehicle(productionId).orElseGet(() -> addVehicle(item, productionId));
     }
 
-    /** 품목 수량보다 많은 생산 건은 받지 않는다. 정상 흐름에서는 생기지 않는다. */
+    /** 품목 수량보다 많은 생산 건은 받지 않는다 (폐기된 차는 대체 차가 대신해 세지 않는다). 정상 흐름에서는 생기지 않는다. */
     private OrderVehicle addVehicle(OrderItem item, Long productionId) {
-        if (findVehicles(item.getId()).size() >= item.getQty()) {
+        if (findVehicles(item.getId()).stream().filter(v -> !v.isScrapped()).count()
+                >= item.getQty()) {
             throw new CustomException(OrderErrorCode.ORDER_VEHICLE_OVERFLOW);
         }
         return orderVehicleRepository.save(
@@ -210,6 +211,7 @@ public class OrderVehicleService {
             case "IN_PROGRESS" -> OrderStatus.IN_PRODUCTION;
             case "COMPLETED" -> OrderStatus.COMPLETED;
             case "CANCELLED" -> OrderStatus.CANCELLED;
+            case "SCRAPPED" -> OrderStatus.SCRAPPED;
             default -> throw new CustomException(OrderErrorCode.UNKNOWN_PRODUCTION_STATUS);
         };
     }

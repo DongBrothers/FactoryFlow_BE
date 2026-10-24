@@ -14,9 +14,9 @@ public record WorkOrderStepResponse(
         @Schema(description = "공정 상태", example = "IN_PROGRESS") StepStatus status,
         @Schema(description = "진행 중인 설비 코드", example = "PRESS-01") String equipmentCode,
         @Schema(description = "시작 시각", example = "2026-10-15T09:00:00") LocalDateTime startedAt,
-        @Schema(description = "종료 시각 (양품으로 끝났을 때)", example = "2026-10-15T09:20:00")
+        @Schema(description = "종료 시각 (양품·불량으로 끝났을 때)", example = "2026-10-15T09:20:00")
                 LocalDateTime endedAt,
-        @Schema(description = "이 공정의 실적 (재작업하면 여러 줄)") List<ProductionResultResponse> results) {
+        @Schema(description = "이 공정의 실적 (양품 또는 불량 한 줄)") List<ProductionResultResponse> results) {
 
     public static WorkOrderStepResponse of(
             WorkOrderStep step, List<ProductionResultResponse> results) {

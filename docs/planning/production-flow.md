@@ -46,7 +46,7 @@ production(MES): 라우팅 기준으로 5개 공정 작업지시 자동 생성
 | 항목 | 결정 |
 |---|---|
 | 생산 단위 | 차량 1대 = 생산 건 1건 = 작업지시 1건. 주문에서 같은 차 3대면 생산 건 3건. VIN, 취소, 실패를 차량마다 판단한다 |
-| 공정 불량 | 실적에 불량으로 기록하고 작업자가 같은 공정을 다시 한다 (재작업). 부품 재예약이나 이벤트는 없다 |
+| 공정 불량 | 실적에 불량으로 기록하고 차를 폐기한다. 잡아 둔 부품은 폐기 소모되고 같은 주문으로 대체 차가 만들어진다 (docs/specs/defect-scrap.md) |
 | 설비 고장 | 그 공정을 진행 중인 차량 생산을 실패(FAILED)시키고 `production.failed` → inventory 가 예약 해제. 자동 재생산은 하지 않는다 |
 | 취소 | order 가 `order.cancel-requested` → production 이 차량마다 판단해 `production.cancelled`(승인, 예약 해제도 이것으로) 또는 `production.cancel-rejected` → order 가 승인된 품목을 취소하고 `order.cancelled` |
 | 이벤트 이름 | 앞자리는 발행 서비스로 한다 (기존 규칙). 기획서의 stock.reserved, stock.shortage, material.received, cancel.requested 는 각각 `inventory.reserved`, `inventory.shortage`, `purchase.received`, `order.cancel-requested` 로 쓴다. 설비 이벤트는 가상 설비 도메인이라 `equipment.status-changed` |

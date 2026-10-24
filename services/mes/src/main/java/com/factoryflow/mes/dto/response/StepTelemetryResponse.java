@@ -4,7 +4,7 @@ import com.factoryflow.mes.domain.ProductionProcess;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
-@Schema(description = "작업지시 한 공정의 센서값 (재작업이면 회차별로)")
+@Schema(description = "작업지시 한 공정의 센서값 (다시 배정했으면 회차별로)")
 public record StepTelemetryResponse(
         @Schema(description = "작업지시 번호", example = "12") Long workOrderId,
         @Schema(description = "공정", example = "PRESS") ProductionProcess process,

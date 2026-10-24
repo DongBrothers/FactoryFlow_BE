@@ -73,23 +73,19 @@ class PartLotScanTest {
     }
 
     @Test
-    void reworkKeepsOnlyTheScansOfTheLastGoodAssembly() throws Exception {
+    void assemblyDefectScrapsTheCarWithoutScans() throws Exception {
+        // 의장 불량이면 차를 폐기한다. 찍은 LOT 은 남기지 않고 다시 의장을 할 수도 없다 (docs/specs/defect-scrap.md)
         long workOrder = workOrderAtAssembly();
         start(workOrder, "ASSEMBLY", "ASSEMBLY-01");
+
         complete(workOrder, "ASSEMBLY", "{\"result\":\"DEFECT\",\"defectReason\":\"조립 불량\"}")
-                .andExpect(status().isOk());
-        start(workOrder, "ASSEMBLY", "ASSEMBLY-01");
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SCRAPPED"));
 
-        complete(
-                        workOrder,
-                        "ASSEMBLY",
-                        "{\"result\":\"GOOD\",\"scannedLots\":"
-                                + "[{\"partId\":1001,\"lotNo\":\"LOT-261017-000013\"}]}")
-                .andExpect(status().isOk());
-
-        assertThat(scans(workOrder))
-                .extracting(row -> row.get("lot_no"))
-                .containsExactly("LOT-261017-000013");
+        assertThat(scans(workOrder)).isEmpty();
+        start(workOrder, "ASSEMBLY", "ASSEMBLY-01")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WORK_ORDER_CLOSED"));
     }
 
     @Test

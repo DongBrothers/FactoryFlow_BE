@@ -21,4 +21,6 @@ public interface ProductionRepository
     Optional<Production> findForReleaseById(Long id);
 
     List<Production> findAllByOrderIdAndProductIdIn(Long orderId, Collection<Long> productIds);
+
+    Optional<Production> findTopByOrderIdAndProductIdOrderBySeqDesc(Long orderId, Long productId);
 }

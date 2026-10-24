@@ -56,7 +56,7 @@ public class OrderVehicle extends BaseTimeEntity {
     }
 
     /**
-     * 생산 건 상태를 차량에 반영한다. 끝난 차량(COMPLETED, SHIPPED, CANCELLED)은 그대로 두고, 취소 결과를 기다리는 차량
+     * 생산 건 상태를 차량에 반영한다. 끝난 차량(COMPLETED, SHIPPED, CANCELLED, SCRAPPED)은 그대로 두고, 취소 결과를 기다리는 차량
      * (CANCEL_REQUESTED)은 CANCELLED 만 받는다. 상태가 바뀌었으면 true.
      */
     public boolean applyProductionStatus(OrderStatus next) {
@@ -99,7 +99,7 @@ public class OrderVehicle extends BaseTimeEntity {
 
     /** 취소를 요청한다. 이미 취소된 차량은 그대로. 바뀌었으면 true. */
     public boolean requestCancel() {
-        if (status == OrderStatus.CANCELLED) {
+        if (status == OrderStatus.CANCELLED || status == OrderStatus.SCRAPPED) {
             return false;
         }
         this.status = OrderStatus.CANCEL_REQUESTED;
@@ -122,6 +122,11 @@ public class OrderVehicle extends BaseTimeEntity {
         }
         this.status = current;
         return true;
+    }
+
+    /** 공정 불량으로 폐기된 차량. 대체 차가 대신하므로 품목 수량에 세지 않는다. */
+    public boolean isScrapped() {
+        return status == OrderStatus.SCRAPPED;
     }
 
     /** since 이후에 취소됐는가 (이번 취소 요청 회차에 취소됐는가). */

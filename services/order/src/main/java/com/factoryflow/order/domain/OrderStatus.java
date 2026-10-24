@@ -19,11 +19,13 @@ public enum OrderStatus {
     /** 취소 요청. 고객이 취소를 요청했고 production 의 cancelled / cancel-rejected 를 기다린다. */
     CANCEL_REQUESTED,
     /** 취소됨. 끝난 상태라 이후 상태 변경 이벤트는 무시한다. */
-    CANCELLED;
+    CANCELLED,
+    /** 차량만 가지는 상태: 공정 불량으로 폐기됐다. 같은 품목에 대체 차가 따로 들어온다. 끝난 상태다 (docs/specs/defect-scrap.md). */
+    SCRAPPED;
 
     /** 더 바뀌지 않는 상태. 늦게 온 이벤트는 무시한다. */
     public boolean isFinished() {
-        return this == COMPLETED || this == SHIPPED || this == CANCELLED;
+        return this == COMPLETED || this == SHIPPED || this == CANCELLED || this == SCRAPPED;
     }
 
     /**

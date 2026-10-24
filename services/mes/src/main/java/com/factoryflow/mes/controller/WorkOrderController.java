@@ -133,7 +133,7 @@ public class WorkOrderController {
     @Operation(
             summary = "공정 종료 (실적 입력)",
             description =
-                    "진행 중인 공정을 끝내고 실적을 남긴다. 양품(GOOD)이면 공정이 끝나고 다음 공정을 시작할 수 있다. 불량(DEFECT, 사유 필수)이면 실적만 남기고 같은 공정을 다시 한다. 의장(ASSEMBLY) 양품이면 찍은 부품 LOT(scannedLots)을 함께 남길 수 있다. 작업자는 로그인한 직원(X-User-Id)이다.")
+                    "진행 중인 공정을 끝내고 실적을 남긴다. 양품(GOOD)이면 공정이 끝나고 다음 공정을 시작할 수 있다. 불량(DEFECT, 사유 필수)이면 차를 폐기한다 (작업지시 SCRAPPED, 같은 주문으로 대체 차가 만들어진다). 의장(ASSEMBLY) 양품이면 찍은 부품 LOT(scannedLots)을 함께 남길 수 있다. 작업자는 로그인한 직원(X-User-Id)이다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",
@@ -148,7 +148,7 @@ public class WorkOrderController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "409",
                 description =
-                        "진행 중인 공정이 아님 (INVALID_STEP_STATUS), 취소된 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (MES_CONFLICT)")
+                        "진행 중인 공정이 아님 (INVALID_STEP_STATUS), 취소·폐기된 작업지시 (WORK_ORDER_CLOSED), 다른 작업이 먼저 바꿈 (MES_CONFLICT)")
     })
     @PostMapping("/{workOrderId}/steps/{process}/complete")
     public ApiResponse<WorkOrderDetailResponse> completeStep(
@@ -179,7 +179,7 @@ public class WorkOrderController {
     @Operation(
             summary = "공정 센서값",
             description =
-                    "로봇 공정(PRESS, BODY, PAINT)을 하는 동안 설비가 잰 값을 시간 순으로 본다. 재작업했으면 배정 회차별로 나눠 준다. 항목마다 정상 범위(기준선)를 함께 준다. 값은 90일 보관한다.")
+                    "로봇 공정(PRESS, BODY, PAINT)을 하는 동안 설비가 잰 값을 시간 순으로 본다. 다시 배정했으면(시간 초과·설비 고장) 배정 회차별로 나눠 준다. 항목마다 정상 범위(기준선)를 함께 준다. 값은 90일 보관한다.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "200",

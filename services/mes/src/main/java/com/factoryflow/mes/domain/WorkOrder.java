@@ -84,9 +84,15 @@ public class WorkOrder extends BaseTimeEntity {
         return new WorkOrder(productionId, orderId, 0L, WorkOrderStatus.CANCELLED, now);
     }
 
-    /** 취소되어 더 진행하지 않는 작업지시. */
+    /** 취소되거나 폐기돼 더 진행하지 않는 작업지시. 배정·작업자 시작·설비 보고에서 빠진다. */
     public boolean isClosed() {
-        return status == WorkOrderStatus.CANCELLED;
+        return status == WorkOrderStatus.CANCELLED || status == WorkOrderStatus.SCRAPPED;
+    }
+
+    /** 공정 불량으로 차를 폐기했다. 끝난 시각을 남긴다 (VIN 없음). */
+    public void scrap(LocalDateTime now) {
+        this.status = WorkOrderStatus.SCRAPPED;
+        this.completedAt = now;
     }
 
     /** 공정이 바뀌었다 (시작, 종료). 같은 작업지시의 공정을 동시에 바꾸면 늦은 쪽이 version 충돌로 실패한다. */
@@ -113,7 +119,7 @@ public class WorkOrder extends BaseTimeEntity {
         this.completedAt = now;
     }
 
-    /** 첫 공정을 처음 시작했다. RELEASED 에서만 바뀐다 (불량 재작업으로 다시 시작할 때는 그대로). 바뀌었으면 true. */
+    /** 첫 공정을 처음 시작했다. RELEASED 에서만 바뀐다 (시간 초과로 되돌린 공정을 다시 시작할 때는 그대로). 바뀌었으면 true. */
     public boolean start(LocalDateTime now) {
         if (status != WorkOrderStatus.RELEASED) {
             return false;

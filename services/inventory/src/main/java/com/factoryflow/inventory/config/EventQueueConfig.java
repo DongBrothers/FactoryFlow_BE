@@ -24,6 +24,7 @@ public class EventQueueConfig {
     public static final String PRODUCTION_COMPLETED_QUEUE = "inventory.production-completed";
     public static final String PURCHASE_RECEIVED_QUEUE = "inventory.purchase-received";
     public static final String PRODUCTION_CANCELLED_QUEUE = "inventory.production-cancelled";
+    public static final String PRODUCTION_SCRAPPED_QUEUE = "inventory.production-scrapped";
     static final String DEAD_LETTER_EXCHANGE = "factoryflow.events.dlx";
 
     // ---- 받는 이벤트 ----
@@ -40,6 +41,11 @@ public class EventQueueConfig {
     Declarables productionCompletedQueues(TopicExchange factoryFlowEventsExchange) {
         return receive(
                 factoryFlowEventsExchange, PRODUCTION_COMPLETED_QUEUE, "production.completed");
+    }
+
+    @Bean
+    Declarables productionScrappedQueues(TopicExchange factoryFlowEventsExchange) {
+        return receive(factoryFlowEventsExchange, PRODUCTION_SCRAPPED_QUEUE, "production.scrapped");
     }
 
     @Bean

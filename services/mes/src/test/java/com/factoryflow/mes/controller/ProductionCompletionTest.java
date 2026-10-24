@@ -121,10 +121,12 @@ class ProductionCompletionTest {
         complete(other, "INSPECTION", "{\"result\":\"DEFECT\",\"defectReason\":\"누유\"}")
                 .andExpect(status().isOk());
 
-        assertThat(workOrderStatus(other)).isEqualTo("IN_PROGRESS");
+        // 검사 불량도 폐기다: VIN 없이 끝나고 완성 대신 폐기를 알린다 (docs/specs/defect-scrap.md)
+        assertThat(workOrderStatus(other)).isEqualTo("SCRAPPED");
         assertThat(productionStartedSent(other)).isTrue();
         assertThat(vinOf(other)).isNull();
         assertThat(outbox("mes.vehicle-completed")).isEmpty();
+        assertThat(outbox("mes.vehicle-scrapped")).hasSize(1);
     }
 
     @Test

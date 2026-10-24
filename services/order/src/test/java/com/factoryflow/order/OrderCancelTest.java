@@ -185,6 +185,41 @@ class OrderCancelTest {
     }
 
     @Test
+    void scrappedVehicleIsNotAskedToCancel() throws Exception {
+        // 101 은 폐기됐고 대체 차 103 이 들어왔다 (docs/specs/defect-scrap.md)
+        jdbc.update("UPDATE order_vehicle SET status = 'SCRAPPED' WHERE production_id = 101");
+        insertVehicle(CAR_A, 103L, "RECEIVED");
+
+        cancel(orderNo).andExpect(status().isOk());
+
+        assertThat(vehicle(101L)).containsEntry("status", "SCRAPPED");
+        assertThat(vehicle(103L)).containsEntry("status", "CANCEL_REQUESTED");
+    }
+
+    @Test
+    void scrappedVehicleWithoutItsReplacementYetIsNotReady() throws Exception {
+        jdbc.update("UPDATE order_vehicle SET status = 'SCRAPPED' WHERE production_id = 101");
+
+        cancel(orderNo)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_READY"));
+    }
+
+    @Test
+    void scrapAnsweredAsRejectionFinishesTheRound() {
+        // 취소 요청과 폐기가 엇갈렸다: production 은 폐기된 차를 SCRAPPED 로 거절한다
+        orderService.cancel(orderNo);
+
+        listener.onCancelRejected(cancelRejected(101L, "SCRAPPED"));
+        listener.onCancelled(cancelled(102L));
+        listener.onCancelled(cancelled(201L));
+
+        assertThat(vehicle(101L)).containsEntry("status", "SCRAPPED");
+        assertThat(cancelRequestedAt()).isNull();
+        assertThat(outbox("order.cancelled")).hasSize(1);
+    }
+
+    @Test
     void allCancelledCancelsTheOrder() {
         orderService.cancel(orderNo);
 

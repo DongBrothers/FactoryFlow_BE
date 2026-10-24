@@ -38,12 +38,12 @@
 - 앞 공정이 모두 DONE 이고, 이 공정이 PENDING 일 때만 시작한다. 한 작업지시에서 IN_PROGRESS 공정은 하나뿐이다
 - 지정한 설비는 이 공정의 설비여야 하고 RUNNING 이어야 한다. 공정에 설비를 기록한다 (고장·정지 나면 이 설비의 공정만 PENDING 으로 되돌려 다른 설비로 재배정, docs/specs/equipment-status.md)
 - 공정 → IN_PROGRESS (started_at, equipment_code)
-- 작업지시의 첫 시작이면 (보통은 프레스 배정 때, 수동 개입이면 작업자의 프레스 시작 때) 작업지시 IN_PROGRESS(started_at), 생산 건 IN_PROGRESS + `production.status-changed`(IN_PROGRESS). 시작 시각은 작업지시만 갖는다 (#123). 이 순간부터 취소할 수 없다 (기획서 "취소 기준"). 불량 재작업으로 다시 시작할 때는 다시 일어나지 않는다
+- 작업지시의 첫 시작이면 (보통은 프레스 배정 때, 수동 개입이면 작업자의 프레스 시작 때) 작업지시 IN_PROGRESS(started_at), 생산 건 IN_PROGRESS + `production.status-changed`(IN_PROGRESS). 시작 시각은 작업지시만 갖는다 (#123). 이 순간부터 취소할 수 없다 (기획서 "취소 기준"). 시간 초과·설비 고장으로 되돌린 공정을 다시 시작할 때는 다시 일어나지 않는다
 
 **종료**
 - IN_PROGRESS 공정만 종료한다. `production_result` 1줄 (result, defectReason, 작업자, 공정 시작·종료 시각)
 - GOOD → 공정 DONE (ended_at). 다음 공정을 시작할 수 있다
-- DEFECT → 실적만 남기고 공정은 PENDING 으로 돌아간다 (같은 공정 재작업). 이벤트는 없다
+- DEFECT → 공정 DONE, 작업지시 SCRAPPED + `mes.vehicle-scrapped` (차 폐기, 같은 주문으로 대체 차. docs/specs/defect-scrap.md)
 - 검사(INSPECTION) GOOD 이면 공정 DONE 에 이어 VIN 발행, 작업지시·생산 건 COMPLETED, `production.completed` 까지 같은 트랜잭션에서 한다 (docs/specs/production-completion.md)
 
 ### 3. 로봇 공정 자동 진행 (배정 스케줄러 + 설비 보고)
@@ -60,7 +60,7 @@
 |---|---|---|
 | `equipment.step-started` | 그 공정이 DISPATCHED 이고 같은 설비 | IN_PROGRESS (started_at) |
 | `equipment.step-completed` GOOD | 그 공정이 IN_PROGRESS 이고 같은 설비 | 실적 GOOD (작업자 없음, 설비 기록) + DONE |
-| `equipment.step-completed` DEFECT | 같음 | 실적 DEFECT(사유) + PENDING → 다음 주기에 다시 배정 (재작업) |
+| `equipment.step-completed` DEFECT | 같음 | 실적 DEFECT(사유) + 차 폐기 (docs/specs/defect-scrap.md) |
 | 그 밖 (상태·설비가 다름, 끝난 작업지시) | | 무시 (INFO 로그). 순서가 꼬였거나 수동 개입으로 이미 바뀐 경우다 |
 
 ## 규칙 / 예외
@@ -90,7 +90,7 @@
 | 테이블 | 컬럼 |
 |---|---|
 | `production` | `version BIGINT NOT NULL DEFAULT 0` 추가 |
-| `equipment` | id, code (UNIQUE, 예: PRESS-01), name, process, status (RUNNING, STOPPED, FAULT), occupied_step_id (지금 맡은 공정, 배정·시작 때 기록, 양품 완료·불량 재작업 때 비움), version. 공정마다 2대를 기본 데이터로 넣는다: PRESS-01·02, BODY-01·02, PAINT-01·02, ASSEMBLY-01·02, INSPECTION-01·02 (simulator 와 같은 코드) |
+| `equipment` | id, code (UNIQUE, 예: PRESS-01), name, process, status (RUNNING, STOPPED, FAULT), occupied_step_id (지금 맡은 공정, 배정·시작 때 기록, 공정이 끝나면(양품·불량) 비움), version. 공정마다 2대를 기본 데이터로 넣는다: PRESS-01·02, BODY-01·02, PAINT-01·02, ASSEMBLY-01·02, INSPECTION-01·02 (simulator 와 같은 코드) |
 | `work_order` | id, production_id (UNIQUE), order_id, product_id, status, vin (NULL, #73), released_at, started_at, completed_at, step_changed_at, version. 공정이 바뀔 때마다 step_changed_at 을 바꿔 작업지시 version 이 오르게 한다 (같은 작업지시의 공정을 동시에 바꾸면 늦은 쪽이 409) |
 | `work_order_step` | id, work_order_id, process, seq (1~5), status, equipment_code (시작 때), started_at, ended_at. UNIQUE (work_order_id, process) |
 | `production_result` | id, work_order_step_id, result (GOOD, DEFECT), defect_reason, worker_id (작업자 public_id, 설비 보고면 NULL), equipment_code, started_at, ended_at |

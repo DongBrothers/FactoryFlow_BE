@@ -66,7 +66,7 @@ public class Equipment extends BaseEntity {
         this.status = status;
     }
 
-    /** 맡은 공정이 끝났거나(양품 완료, 불량 재작업) 설비가 멈춰 공정을 되돌렸다. */
+    /** 맡은 공정이 끝났거나(양품·불량) 설비가 멈춰 공정을 되돌렸다. */
     public void release() {
         this.occupiedStepId = null;
     }

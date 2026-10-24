@@ -6,6 +6,7 @@ import com.factoryflow.inventory.config.EventQueueConfig;
 import com.factoryflow.inventory.event.listener.payload.MaterialRequested;
 import com.factoryflow.inventory.event.listener.payload.ProductionCancelled;
 import com.factoryflow.inventory.event.listener.payload.ProductionCompleted;
+import com.factoryflow.inventory.event.listener.payload.ProductionScrapped;
 import com.factoryflow.inventory.service.FinishedVehicleService;
 import com.factoryflow.inventory.service.PartReservationService;
 import lombok.RequiredArgsConstructor;
@@ -50,5 +51,14 @@ public class ProductionEventListener {
         ProductionCompleted event =
                 objectMapper.treeToValue(envelope.payload(), ProductionCompleted.class);
         processedEventGuard.runOnce(envelope, () -> finishedVehicleService.stock(event));
+    }
+
+    /** 생산 건 폐기: 그 차에 잡아 둔 부품을 폐기 소모한다 (완성차는 없다). 처리 기록과 같은 트랜잭션이다. */
+    @RabbitListener(queues = EventQueueConfig.PRODUCTION_SCRAPPED_QUEUE)
+    public void onProductionScrapped(EventEnvelope envelope) {
+        ProductionScrapped event =
+                objectMapper.treeToValue(envelope.payload(), ProductionScrapped.class);
+        processedEventGuard.runOnce(
+                envelope, () -> finishedVehicleService.scrapParts(event.productionId()));
     }
 }
