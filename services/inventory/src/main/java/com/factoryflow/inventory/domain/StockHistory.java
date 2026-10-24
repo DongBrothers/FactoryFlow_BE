@@ -86,18 +86,10 @@ public class StockHistory {
                 partId, qty, StockHistoryType.RECEIVE, StockHistoryRefType.PURCHASE, purchaseId);
     }
 
-    public static StockHistory scrapForProduction(Long partId, int qty, Long productionId) {
-        return new StockHistory(
-                partId, qty, StockHistoryType.SCRAP, StockHistoryRefType.PRODUCTION, productionId);
-    }
-
-    public static StockHistory consumeForProduction(Long partId, int qty, Long productionId) {
-        return new StockHistory(
-                partId,
-                qty,
-                StockHistoryType.CONSUME,
-                StockHistoryRefType.PRODUCTION,
-                productionId);
+    /** 생산 건이 잡아 둔 부품을 썼다: 완성(CONSUME) 또는 폐기(SCRAP). */
+    public static StockHistory useForProduction(
+            StockHistoryType type, Long partId, int qty, Long productionId) {
+        return new StockHistory(partId, qty, type, StockHistoryRefType.PRODUCTION, productionId);
     }
 
     public static StockHistory reserveForProduction(Long partId, int qty, Long productionId) {

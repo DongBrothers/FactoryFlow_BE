@@ -187,11 +187,8 @@ public class FinishedVehicleService {
             part.consume(reservation.getQty());
             reservation.consume();
             stockHistoryRepository.save(
-                    type == StockHistoryType.SCRAP
-                            ? StockHistory.scrapForProduction(
-                                    reservation.getPartId(), reservation.getQty(), productionId)
-                            : StockHistory.consumeForProduction(
-                                    reservation.getPartId(), reservation.getQty(), productionId));
+                    StockHistory.useForProduction(
+                            type, reservation.getPartId(), reservation.getQty(), productionId));
         }
     }
 
