@@ -5,5 +5,5 @@
 - 발행: order.created, order.cancel-requested, order.cancelled
 - 수신: production.status-changed, production.cancelled, production.cancel-rejected, production.completed, shipment.completed
 - API: 고객 등록 POST /orders/customers·목록 GET /orders/customers (docs/specs/customer.md, 주문은 등록된 고객만), 주문 생성 POST /orders, 주문 목록 GET /orders (최신 먼저, lastOrderNo 로 다음 페이지, docs/specs/list-apis.md), 주문 상세 GET /orders/{orderNo}, 주문 취소 요청 POST /orders/{orderNo}/cancel (docs/specs/order-cancel.md)
-- 불량 폐기: production.status-changed(SCRAPPED) → 차량 SCRAPPED (끝). 대체 차가 같은 품목에 따로 들어온다. 품목 요약·수량 초과 확인·취소 요청에서 폐기 차량은 뺀다 (docs/specs/defect-scrap.md)
+- 불량 폐기: production.status-changed(SCRAPPED) → 차량 SCRAPPED (끝). 대체 차가 같은 품목에 따로 들어온다. 품목 요약·수량 초과 확인·취소 요청·주문 상세 차량 목록에서 폐기 차량은 뺀다 (docs/specs/defect-scrap.md)
 - 보상: 주문 취소 시 차량 CANCEL_REQUESTED + order.cancel-requested. production 이 차량마다 cancelled / cancel-rejected 로 답하고, 응답이 끝나면 취소된 차량이 있을 때 order.cancelled (docs/specs/saga-order-fulfillment.md)

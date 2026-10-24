@@ -3,6 +3,8 @@ package com.factoryflow.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -190,7 +192,13 @@ class OrderCancelTest {
         jdbc.update("UPDATE order_vehicle SET status = 'SCRAPPED' WHERE production_id = 101");
         insertVehicle(CAR_A, 103L, "RECEIVED");
 
-        cancel(orderNo).andExpect(status().isOk());
+        // 응답의 차량 목록에도 폐기 차량은 없다 (A 2대: 102, 103)
+        cancel(orderNo)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].vehicles.length()").value(2))
+                .andExpect(
+                        jsonPath("$.data.items[0].vehicles[*].status")
+                                .value(everyItem(is("CANCEL_REQUESTED"))));
 
         assertThat(vehicle(101L)).containsEntry("status", "SCRAPPED");
         assertThat(vehicle(103L)).containsEntry("status", "CANCEL_REQUESTED");
@@ -265,6 +273,19 @@ class OrderCancelTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
         mockMvc.perform(get("/orders/{orderNo}", "not-a-uuid")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void orderDetailLeavesOutScrappedVehicles() throws Exception {
+        // 불량으로 폐기된 차 대신 대체 차가 같은 품목에 들어온다 (docs/specs/defect-scrap.md)
+        jdbc.update("UPDATE order_vehicle SET status = 'SCRAPPED' WHERE production_id = 201");
+        insertVehicle(CAR_B, 202L, "RECEIVED");
+
+        mockMvc.perform(get("/orders/{orderNo}", orderNo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[1].qty").value(1))
+                .andExpect(jsonPath("$.data.items[1].vehicles.length()").value(1))
+                .andExpect(jsonPath("$.data.items[1].vehicles[0].status").value("RECEIVED"));
     }
 
     @Test

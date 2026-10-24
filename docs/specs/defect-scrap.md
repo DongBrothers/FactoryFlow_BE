@@ -42,7 +42,7 @@ mes: 공정 불량 → 작업지시 SCRAPPED, 설비 비움 → mes.vehicle-scra
 - 차량 상태 **SCRAPPED** 를 더한다. production 상태 SCRAPPED → 차량 SCRAPPED
 - 품목 요약에서 SCRAPPED 차량은 빼고 계산한다. 대체 차량이 아직 안 왔으면 그 자리는 지금처럼 접수(RECEIVED)로 센다
 - 품목 수량보다 많은 차량을 받지 않는 규칙(`ORDER_VEHICLE_OVERFLOW`)에서 SCRAPPED 차량은 세지 않는다 → 대체 차량이 들어올 자리가 생긴다
-- 주문 상세에 폐기 차량도 보인다 (status SCRAPPED, vin 없음)
+- 주문 상세(와 취소 요청 응답)의 차량 목록에서 폐기 차량은 뺀다. 고객에게는 주문 수량만큼만 보인다 (DB 에는 SCRAPPED 로 남음)
 - 주문 취소 요청: 폐기 차량은 묻지 않는다(CANCEL_REQUESTED 로 바꾸지 않음). 취소할 수 있는지(차량을 다 아는지 `ORDER_NOT_READY`, 모두 취소됐는지)도 폐기 차량을 빼고 본다
 
 ### 5. simulator 불량률
@@ -66,7 +66,7 @@ mes: 공정 불량 → 작업지시 SCRAPPED, 설비 비움 → mes.vehicle-scra
 |---|---|
 | mes work_order | SCRAPPED (끝) |
 | production | SCRAPPED (끝) |
-| order 차량 | SCRAPPED (요약·수량에서 뺌) |
+| order 차량 | SCRAPPED (요약·수량·주문 상세에서 뺌) |
 | inventory stock_history | SCRAP |
 - 상태 컬럼은 모두 VARCHAR 라 마이그레이션 없음
 
@@ -85,4 +85,5 @@ mes: 공정 불량 → 작업지시 SCRAPPED, 설비 비움 → mes.vehicle-scra
 - [x] production: 제품·BOM 이 없으면 대체 생산 건 CANCELLED
 - [x] inventory: production.scrapped → RESERVED 줄 CONSUMED, reserved −, SCRAP 이력, LOT 입고 순 차감, 완성차 없음
 - [x] order: 폐기 차량 SCRAPPED, 대체 차량이 수량 초과 없이 추가, 요약에서 SCRAPPED 제외
+- [x] order: 주문 상세의 차량 목록에서 SCRAPPED 제외 (#192)
 - [ ] 수동(dev): 불량 → 폐기 → 대체 차 발행 대기 → 발행 → 완성까지 한 바퀴

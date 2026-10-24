@@ -13,7 +13,8 @@ public record OrderItemResponse(
         @Schema(description = "제품 이름 (주문 당시)", example = "아반떼") String productName,
         @Schema(description = "수량", example = "2") int qty,
         @Schema(description = "품목 상태 (차량들의 요약)", example = "IN_PRODUCTION") OrderStatus status,
-        @Schema(description = "알려진 차량 (생산 건이 생긴 것만)") List<OrderVehicleResponse> vehicles) {
+        @Schema(description = "알려진 차량 (생산 건이 생긴 것만, 불량으로 폐기된 차량은 빼고)")
+                List<OrderVehicleResponse> vehicles) {
 
     public static OrderItemResponse of(OrderItem item, List<OrderVehicle> vehicles) {
         return new OrderItemResponse(
@@ -22,6 +23,9 @@ public record OrderItemResponse(
                 item.getProductName(),
                 item.getQty(),
                 item.getStatus(),
-                vehicles.stream().map(OrderVehicleResponse::from).toList());
+                vehicles.stream()
+                        .filter(v -> !v.isScrapped())
+                        .map(OrderVehicleResponse::from)
+                        .toList());
     }
 }
