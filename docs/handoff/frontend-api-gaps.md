@@ -16,9 +16,9 @@
 
 | # | 작업 | 서비스 | 쓰는 화면 | 크기 |
 |---|---|---|---|---|
-| 3 | 설비 상태 이력 조회 | mes | 설비 현황의 이력 패널 | 작음 |
+| — | (없음) | | | |
 
-(1번 "내 정보", 2번 "직원 이름 조회" 는 끝났다 → 아래 "끝난 것". 번호는 프론트 할 일에서 가리키므로 그대로 둔다)
+(1번 "내 정보", 2번 "직원 이름 조회", 3번 "설비 상태 이력" 은 끝났다 → 아래 "끝난 것". 번호는 프론트 할 일에서 가리키므로 그대로 둔다)
 
 백엔드가 필요 없는 것 (프론트에서 처리)
 - 작업지시 목록·완성차 목록에는 `productId` 만 있다 → 프론트가 `GET /api/production/products` 로 id → 이름을 바꾼다
@@ -39,9 +39,14 @@
 3. **화면 상단 이름·역할**: `GET /api/auth/me` 의 `name`·`role` (이메일은 주지 않는다)
 4. **계정 발급의 역할 선택지**: `GET /api/auth/admin/roles` 의 `code`·`name`. 발급 `role` 에는 `code` 를 보낸다 (하드코딩하지 않는다)
 5. **실적 작업자·구매 발주자 이름**: 상세 응답의 public_id 들(mes 실적의 `workerId`, purchase 의 `orderedBy`)을 모아 `GET /api/auth/users?publicIds=a,b,c` 로 한 번에 이름을 받는다 → `[{ publicId, name }]`. 1~100개, 없는 id 는 빠지고 순서는 정해지지 않으므로 `publicId` 로 찾는다. ADMIN 은 `READ` 가 없어 403 (ADMIN 화면에는 쓸 곳이 없음)
-6. **설비 이력 패널**: 남은 작업 3번 API (3번이 끝나면 경로를 여기 적는다)
+6. **설비 이력 패널**: `GET /api/mes/equipments/{equipmentCode}/history?lastId=&size=20` → `data` 가 `CursorPage { items: [{ fromStatus, toStatus, changedAt }], count, last, nextCursor }`. 최신 먼저, 처음엔 lastId 없이, 더 보기는 `nextCursor` 를 lastId 로 넘긴다 (`last` 가 true 면 끝). 없는 설비 404 `EQUIPMENT_NOT_FOUND`
 
 ## 끝난 것
+
+### 설비 상태 이력 조회 `GET /api/mes/equipments/{equipmentCode}/history` (2026-10-24, 브랜치 `feat/equipment-history`)
+- `data` 가 `CursorPage { items: [{ fromStatus, toStatus, changedAt }], count, last, nextCursor }`. 최신 먼저(이력 id 내림차순), 다음 페이지는 `nextCursor` 를 `lastId` 로
+- 없는·삭제된 설비 404 `EQUIPMENT_NOT_FOUND`, 코드 형식·lastId 0 이하·size 1~100 밖 400. gateway 규칙 추가 없음 (GET → `READ`), 인덱스·마이그레이션 없음
+- 명세 `docs/specs/equipment-status.md` "설비 상태 이력 조회"
 
 ### 직원 이름 조회 `GET /api/auth/users?publicIds=` (2026-10-24, 브랜치 `feat/user-names`)
 - 응답 `[{ publicId, name }]`. 이메일·역할 없음. 없는 id 는 빠지고, 같은 id 는 한 번, `DISABLED` 계정도 준다. 순서는 정하지 않는다
@@ -72,12 +77,3 @@
   - 이름 검색(`?q=`)은 없다. 수정·삭제도 없다
   - 고객은 시드가 아니라 등록 API 로 넣는다 (order 에 `db/seed-dev` 없음). 화면에 고객 등록이 필요하다 (Figma v1 에는 아직 없음)
 - `docs/specs/auth-account.md` 의 낡은 "`customer` 는 auth_db 에 남아 있다" 문장은 2026-10-24 에 고쳤다
-
----
-
-## 3. 설비 상태 이력 조회
-
-- 데이터는 이미 쌓인다: `equipment_status_history` (mes V1), `services/mes/.../domain/EquipmentStatusHistory.java`, `repository/EquipmentStatusHistoryRepository.java` 가 있다. 조회 API 만 없다
-- `GET /mes/equipments/{equipmentCode}/history?lastId=&size=` (gateway `/api/mes/...`) → `CursorPage { items: [ { fromStatus, toStatus, changedAt } ] }` 최신 먼저 (목록은 커서로 나눠 준다, `docs/specs/list-apis.md`)
-- 없는 설비 404 `EQUIPMENT_NOT_FOUND`, 코드 형식 400 (`EquipmentController` 의 `EQUIPMENT_CODE` 패턴 그대로)
-- 확인한 코드: `services/mes/.../controller/EquipmentController.java` (`/mes/equipments`, 목록·센서값), `MesErrorCode.EQUIPMENT_NOT_FOUND`
